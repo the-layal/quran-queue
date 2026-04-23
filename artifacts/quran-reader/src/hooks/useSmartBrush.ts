@@ -51,12 +51,6 @@ function applyReadingClass(id: string, add: boolean) {
   document.getElementById(id)?.classList.toggle("word-selected", add);
 }
 
-export function svgSelFill(): string {
-  return document.documentElement.classList.contains("dark")
-    ? "hsl(153 50% 68%)"
-    : "hsl(153 45% 42%)";
-}
-
 function applySvgClass(nid: string, add: boolean, container: Element) {
   const [s, a, w] = nid.split(":");
   const surahPad = s.padStart(3, "0");
@@ -64,11 +58,16 @@ function applySvgClass(nid: string, add: boolean, container: Element) {
   const sel = `g[data-surah="${surahPad}"][data-aya="${ayaPad}"][data-word-index-in-ayah="${w}"]`;
   const el = container.querySelector<Element>(sel);
   if (!el) return;
-  el.classList.toggle("md-word-selected", add);
-  const fill = add ? svgSelFill() : "";
-  el.querySelectorAll<SVGPathElement>("path").forEach((p) => {
-    p.style.fill = fill;
-  });
+  // Reuse the hover class so selection looks identical to hover (guaranteed to work).
+  // The persistent selection rect is managed by MushafSvgPage's selectedWordIds effect.
+  if (add) {
+    el.classList.add("md-word-hovered");
+  } else {
+    // Only remove the class if the word doesn't have a pinned selection rect.
+    if (!el.querySelector(".md-hover-rect[data-sel]")) {
+      el.classList.remove("md-word-hovered");
+    }
+  }
 }
 
 // ── Ordered unit index builders ───────────────────────────────────────────────

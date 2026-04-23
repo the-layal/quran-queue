@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, type RefObject } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
-import { useSmartBrush, svgSelFill } from "../hooks/useSmartBrush";
+import { useSmartBrush } from "../hooks/useSmartBrush";
 
 interface MushafSvgPageProps {
   pageNumber: number;
@@ -48,8 +48,9 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   };
 
   // Sync selection visuals whenever the Zustand selection changes.
-  // Each selected word gets its own per-word background rect (.md-sel-rect) injected
-  // as the first child of the word <g> — the same "held hover" look as md-hover-rect.
+  // Selection reuses the hover look — we inject a permanent md-hover-rect (marked
+  // data-sel="true") and add md-word-hovered to each selected word group.
+  // This guarantees the visual is identical to hover (which is known-working).
   // Diff-based: only processes newly added / newly removed words per update.
   const prevSvgSelectedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
@@ -58,47 +59,55 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     const next = new Set(selectedWordIds);
     const prev = prevSvgSelectedRef.current;
 
+    // Remove visuals for words that are no longer selected.
     prev.forEach((id) => {
       if (!next.has(id)) {
         const wordEl = svgWordQuery(id, container);
         if (wordEl) {
-          wordEl.querySelector(".md-sel-rect")?.remove();
-          wordEl.classList.remove("md-word-selected");
-          wordEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = ""; });
+          wordEl.querySelector(".md-hover-rect[data-sel]")?.remove();
+          // Keep md-word-hovered if the mouse is still physically over this word.
+          if (wordEl !== hoverWordRef.current) {
+            wordEl.classList.remove("md-word-hovered");
+          }
         }
       }
     });
 
+    // Add visuals for newly selected words.
     next.forEach((id) => {
       if (!prev.has(id)) {
         const wordEl = svgWordQuery(id, container);
         if (!wordEl) return;
-        wordEl.classList.add("md-word-selected");
-        const fill = svgSelFill();
-        wordEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = fill; });
-        if (!wordEl.querySelector(".md-sel-rect")) {
+        wordEl.classList.add("md-word-hovered");
+        // Only inject a selection rect if one isn't already there.
+        if (!wordEl.querySelector(".md-hover-rect[data-sel]")) {
           try {
+            // Compute bbox BEFORE inserting the rect (child rect inflates getBBox).
             const bbox = (wordEl as SVGGElement).getBBox();
             if (bbox.width > 0 || bbox.height > 0) {
               const padX = 3, padY = 2;
               const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-              rect.classList.add("md-sel-rect");
-              rect.setAttribute("rx",     "6");
-              rect.setAttribute("x",      String(bbox.x - padX));
-              rect.setAttribute("y",      String(bbox.y - padY));
-              rect.setAttribute("width",  String(bbox.width  + padX * 2));
-              rect.setAttribute("height", String(bbox.height + padY * 2));
+              rect.classList.add("md-hover-rect");
+              rect.setAttribute("data-sel", "true");
+              rect.setAttribute("rx",    "6");
+              rect.setAttribute("x",     String(bbox.x - padX));
+              rect.setAttribute("y",     String(bbox.y - padY));
+              rect.setAttribute("width", String(bbox.width  + padX * 2));
+              rect.setAttribute("height",String(bbox.height + padY * 2));
               wordEl.insertBefore(rect, wordEl.firstChild);
             }
           } catch {
-            // getBBox can throw for hidden/detached elements — skip silently
+            // getBBox can throw for hidden/detached elements — skip silently.
           }
         }
       }
     });
 
     prevSvgSelectedRef.current = next;
-  }, [selectedWordIds]);
+  // svgText is included so the effect re-runs after the useLayoutEffect injects
+  // fresh SVG content — ensuring selection visuals are applied to the new DOM.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedWordIds, svgText]);
 
   // Keep a live ref to playbackActiveIds so the word-current effect can re-apply
   // the line/ayah gold without needing it as a React dependency.
@@ -158,16 +167,20 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     originalViewBoxRef.current = null;
   }, [pageNumber]);
 
-  // Re-apply the cropped viewBox synchronously before paint so that re-renders
-  // triggered by Zustand selection state never leave the SVG with the original
-  // (uncropped) viewBox that dangerouslySetInnerHTML may have restored.
-  // useLayoutEffect (not useEffect) ensures no one-frame flash of the wide SVG.
+  // Inject SVG text into the container manually so that React never resets it
+  // during re-renders (selectedWordIds, availH, etc.), which would wipe injected
+  // selection / hover / playback rects.  By setting innerHTML here — inside a
+  // useLayoutEffect — we own the mutation and React leaves the div's children
+  // completely untouched on every subsequent render.
   useLayoutEffect(() => {
-    const cropped = croppedViewBoxRef.current;
-    if (!cropped) return;
-    const svg = containerRef.current?.querySelector("svg");
-    if (svg) svg.setAttribute("viewBox", cropped);
-  });
+    const container = containerRef.current;
+    if (!container) return;
+    container.innerHTML = svgText ?? "";
+    // A fresh innerHTML means all previous rect injections are gone.
+    // Reset the diff tracker so the selectedWordIds effect re-injects every
+    // currently-selected word into the brand-new DOM on its next run.
+    prevSvgSelectedRef.current = new Set();
+  }, [svgText]);
 
   // ── Measure wrapper height (content-box, padding-excluded) ──────────────
   useLayoutEffect(() => {
@@ -320,7 +333,11 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
 
   const clearHoverWord = useCallback(() => {
     if (hoverWordRef.current) {
-      hoverWordRef.current.classList.remove("md-word-hovered");
+      // Don't strip md-word-hovered from a word that has a pinned selection rect —
+      // that class is what keeps the selection highlight visible.
+      if (!hoverWordRef.current.querySelector(".md-hover-rect[data-sel]")) {
+        hoverWordRef.current.classList.remove("md-word-hovered");
+      }
       hoverWordRef.current = null;
     }
   }, []);
@@ -358,6 +375,10 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       clearHoverWord();
       wordEl.classList.add("md-word-hovered");
       hoverWordRef.current = wordEl;
+
+      // If this word already has a pinned selection rect, don't inject the
+      // transient hover rect on top — the selection rect provides the same look.
+      if (wordEl.querySelector(".md-hover-rect[data-sel]")) return;
 
       // Compute bbox once, before inserting the hover rect (rect is a child
       // of the word group and would inflate getBBox on subsequent calls)
@@ -492,7 +513,6 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
             onPointerMove={brush.onPointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
-            dangerouslySetInnerHTML={{ __html: svgText }}
           />
         </div>
       )}
