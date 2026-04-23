@@ -40,6 +40,8 @@ export interface QuranAyah {
   hizb: number;
   page: number;
   words: QuranWord[];
+  endMarkerCodeV2: string;
+  endMarkerPageNumber: number;
 }
 
 export interface QuranPage {

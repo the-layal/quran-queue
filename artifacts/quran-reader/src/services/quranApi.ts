@@ -122,6 +122,8 @@ export async function fetchSurahVerses(surahNumber: number): Promise<SurahData> 
     const audioKey = `${s}:${a}`;
     const ayahAudio = audioData[audioKey];
 
+    const endWord = verse.words.find((w) => w.char_type_name === "end");
+
     const words: QuranWord[] = verse.words
       .filter((w) => w.char_type_name === "word")
       .map((w) => {
@@ -157,6 +159,8 @@ export async function fetchSurahVerses(surahNumber: number): Promise<SurahData> 
       hizb: verse.hizb_number ?? 0,
       page: verse.page_number,
       words,
+      endMarkerCodeV2: endWord?.code_v2 ?? "",
+      endMarkerPageNumber: endWord?.page_number ?? verse.page_number,
     };
   });
 

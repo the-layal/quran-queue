@@ -189,13 +189,12 @@
   user-select: none;
 }
 
-/* Ornamental ayah end marker — bare numeral, no ring */
+/* Ornamental ayah end marker — QPC V2 font glyph, inline at word size */
 .ayah-end-marker {
   display: inline;
-  font-size: 0.55em;
+  font-size: 1em;
   color: hsl(var(--primary));
-  vertical-align: 0.25em;
-  margin-inline: 0.25em;
+  margin-inline: 0.1em;
   user-select: none;
   white-space: nowrap;
 }
