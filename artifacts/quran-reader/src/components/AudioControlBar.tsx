@@ -66,6 +66,7 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
     return (
       <div
         className={`${barBase} opacity-60`}
+        style={{ pointerEvents: "none" }}
         role="status"
         aria-label="Audio control bar"
       >
@@ -81,6 +82,7 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
     return (
       <div
         className={`${barBase} opacity-60`}
+        style={{ pointerEvents: "none" }}
         role="status"
         aria-label="Audio control bar"
       >
@@ -95,11 +97,13 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
   return (
     <div
       className={barBase}
+      style={{ pointerEvents: "none" }}
       role="region"
       aria-label="Audio playback controls"
     >
       <button
         onClick={handlePlayPause}
+        style={{ pointerEvents: "auto" }}
         className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-colors flex-shrink-0"
         aria-label={isPlaying ? "Pause" : "Play"}
       >
@@ -126,6 +130,7 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
 
       <button
         onClick={toggleLoop}
+        style={{ pointerEvents: "auto" }}
         className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 border ${
           isLooping
             ? "bg-primary/15 border-primary text-primary"
