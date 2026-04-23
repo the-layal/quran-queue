@@ -130,7 +130,7 @@
 
 .quran-text {
   font-family: var(--app-font-quran);
-  line-height: 2.6;
+  line-height: 2.35;
   text-align: right;
   direction: rtl;
   unicode-bidi: isolate;
@@ -226,7 +226,7 @@
 
 @media (max-width: 640px) {
   .quran-text {
-    line-height: 2.8;
+    line-height: 2.5;
   }
 }
 
