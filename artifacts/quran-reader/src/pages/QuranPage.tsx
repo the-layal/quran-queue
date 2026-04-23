@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { Link } from "wouter";
 import {
   ChevronLeft,
@@ -11,103 +11,271 @@ import {
   AlertCircle,
   BookOpen,
   AlignLeft,
+  ChevronDown,
+  Search,
+  X,
 } from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
-import { fetchQuranPage, fetchMushafPage, TOTAL_PAGES } from "../services/quranApi";
-import type { QuranAyah, QuranPage as QuranPageData } from "../types/quran";
+import {
+  fetchSurahVerses,
+  fetchMushafPage,
+  loadChapters,
+  TOTAL_PAGES,
+  TOTAL_SURAHS,
+} from "../services/quranApi";
+import type { QuranAyah, ChapterMap, ChapterInfo } from "../types/quran";
 import SurahHeader from "../components/SurahHeader";
 import MushafPage from "../components/MushafPage";
 
-// ── Reading mode sub-components ───────────────────────────────────────────────
+// ── Surah picker modal ────────────────────────────────────────────────────────
 
-function AyahNumber({ n }: { n: number }) {
-  return (
-    <span
-      className="ayah-end-marker select-none"
-      aria-label={`Ayah ${n}`}
-    >
-      {n}
-    </span>
-  );
-}
-
-function AyahBlock({ ayah }: { ayah: QuranAyah }) {
-  return (
-    <span className="ayah-block">
-      {ayah.words.map((word) => (
-        <span
-          key={word.spanId}
-          id={word.spanId}
-          className="quran-word font-quran cursor-default transition-colors duration-150 rounded px-0.5 hover:bg-primary/10"
-          data-surah={word.surahNumber}
-          data-ayah={word.ayahNumber}
-          data-word={word.wordIndex}
-        >
-          {word.text}
-          {" "}
-        </span>
-      ))}
-      <AyahNumber n={ayah.numberInSurah} />
-    </span>
-  );
-}
-
-function PageContent({
-  pageData,
-  fontSize,
+function SurahPickerModal({
+  open,
+  onClose,
+  chapters,
+  currentSurah,
+  onSelect,
 }: {
-  pageData: QuranPageData;
-  fontSize: number;
+  open: boolean;
+  onClose: () => void;
+  chapters: ChapterMap;
+  currentSurah: number;
+  onSelect: (n: number) => void;
 }) {
-  const ayahsBySurah = groupAyahsBySurah(pageData.ayahs);
+  const [query, setQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setQuery("");
+      setTimeout(() => inputRef.current?.focus(), 80);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const q = query.trim().toLowerCase();
+  const allChapters = Object.values(chapters).sort((a, b) => a.id - b.id);
+  const filtered = q
+    ? allChapters.filter(
+        (ch) =>
+          String(ch.id).startsWith(q) ||
+          ch.nameSimple.toLowerCase().includes(q) ||
+          ch.nameTranslation.toLowerCase().includes(q) ||
+          ch.nameArabic.includes(query)
+      )
+    : allChapters;
 
   return (
-    <div className="quran-page-content px-5 sm:px-10 py-6 max-w-4xl mx-auto w-full">
-      {ayahsBySurah.map(({ surah, ayahs, isFirstSurahOnPage }) => (
-        <div key={surah.number} className="surah-block">
-          {isFirstSurahOnPage && <SurahHeader surah={surah} />}
-          <div
-            className="quran-text text-right"
-            dir="rtl"
-            lang="ar"
-            style={{ fontSize: `${fontSize}px` }}
+    <>
+      <div
+        className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="fixed inset-x-0 bottom-0 z-50 flex flex-col bg-card rounded-t-2xl border-t border-border shadow-2xl max-h-[85vh]">
+        {/* Handle */}
+        <div className="w-10 h-1 bg-muted-foreground/25 rounded-full mx-auto mt-3 mb-2 flex-shrink-0" />
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pb-3 flex-shrink-0">
+          <h2 className="text-base font-semibold">Select Surah</h2>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"
+            aria-label="Close"
           >
-            {ayahs.map((ayah) => (
-              <AyahBlock
-                key={`${ayah.surah.number}:${ayah.numberInSurah}`}
-                ayah={ayah}
-              />
-            ))}
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="px-4 pb-3 flex-shrink-0">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="Search surah name or number…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 rounded-xl bg-muted text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
           </div>
         </div>
-      ))}
-      <div className="reading-page-number" aria-label={`Page ${pageData.pageNumber}`}>
-        {pageData.pageNumber}
+
+        {/* List */}
+        <div className="overflow-y-auto flex-1 pb-6">
+          {filtered.map((ch) => (
+            <button
+              key={ch.id}
+              onClick={() => {
+                onSelect(ch.id);
+                onClose();
+              }}
+              className={`w-full flex items-center gap-3 px-5 py-3 hover:bg-muted/60 transition-colors text-left ${
+                ch.id === currentSurah ? "bg-accent/40" : ""
+              }`}
+            >
+              <div className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-xs font-medium text-muted-foreground flex-shrink-0">
+                {ch.id}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium leading-tight">{ch.nameSimple}</div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {ch.nameTranslation} · {ch.versesCount} verses
+                </div>
+              </div>
+              <div
+                className="font-quran text-base text-foreground/70 flex-shrink-0"
+                dir="rtl"
+                lang="ar"
+              >
+                {ch.nameArabic}
+              </div>
+            </button>
+          ))}
+          {filtered.length === 0 && (
+            <p className="text-center text-muted-foreground text-sm py-8">
+              No surahs found
+            </p>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Surah selector button (reading mode header) ───────────────────────────────
+
+function SurahSelectorButton({
+  chapter,
+  onClick,
+}: {
+  chapter: ChapterInfo | undefined;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-1.5 hover:bg-muted rounded-lg px-2 py-1 transition-colors"
+      aria-label="Select surah"
+    >
+      <span className="text-sm text-muted-foreground tabular-nums font-medium">
+        {chapter?.id ?? "…"}.
+      </span>
+      <span
+        className="font-quran text-base text-foreground leading-none"
+        dir="rtl"
+        lang="ar"
+      >
+        {chapter?.nameArabic ?? ""}
+      </span>
+      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+    </button>
+  );
+}
+
+// ── Individual verse block ────────────────────────────────────────────────────
+
+function VerseBlock({
+  ayah,
+  fontSize,
+}: {
+  ayah: QuranAyah;
+  fontSize: number;
+}) {
+  return (
+    <div className="verse-block">
+      <div
+        className="quran-text text-right"
+        dir="rtl"
+        lang="ar"
+        style={{ fontSize: `${fontSize}px` }}
+      >
+        {ayah.words.map((word) => (
+          <span
+            key={word.spanId}
+            id={word.spanId}
+            className="quran-word font-quran"
+            data-surah={word.surahNumber}
+            data-ayah={word.ayahNumber}
+            data-word={word.wordIndex}
+          >
+            {word.text}
+            {" "}
+          </span>
+        ))}
+        <span
+          className="ayah-end-marker select-none"
+          aria-label={`Ayah ${ayah.numberInSurah}`}
+        >
+          {ayah.numberInSurah}
+        </span>
       </div>
     </div>
   );
 }
 
-interface SurahGroup {
-  surah: QuranAyah["surah"];
+// ── Surah reading view ────────────────────────────────────────────────────────
+
+function SurahReadingView({
+  surahNumber,
+  ayahs,
+  chapter,
+  fontSize,
+}: {
+  surahNumber: number;
   ayahs: QuranAyah[];
-  isFirstSurahOnPage: boolean;
-}
+  chapter: ChapterInfo | undefined;
+  fontSize: number;
+}) {
+  const firstAyah = ayahs[0];
 
-function groupAyahsBySurah(ayahs: QuranAyah[]): SurahGroup[] {
-  const groups: SurahGroup[] = [];
-  let currentSurahNumber = -1;
+  const surahInfo = chapter
+    ? {
+        number: chapter.id,
+        name: chapter.nameArabic,
+        englishName: chapter.nameSimple,
+        englishNameTranslation: chapter.nameTranslation,
+        revelationType:
+          chapter.revelationPlace === "madinah" ? "Medinan" : "Meccan",
+      }
+    : undefined;
 
-  for (const ayah of ayahs) {
-    if (ayah.surah.number !== currentSurahNumber) {
-      groups.push({ surah: ayah.surah, ayahs: [ayah], isFirstSurahOnPage: true });
-      currentSurahNumber = ayah.surah.number;
-    } else {
-      groups[groups.length - 1].ayahs.push(ayah);
-    }
-  }
+  return (
+    <div className="surah-reading-view max-w-2xl mx-auto w-full px-5 sm:px-10 py-4">
+      {surahInfo && <SurahHeader surah={surahInfo} />}
 
-  return groups;
+      {firstAyah && (
+        <div className="text-center text-xs text-muted-foreground mb-6 tracking-wide">
+          Page {firstAyah.page} · Juz {firstAyah.juz}
+        </div>
+      )}
+
+      <div className="surah-verses">
+        {ayahs.map((ayah) => (
+          <VerseBlock
+            key={`${surahNumber}:${ayah.numberInSurah}`}
+            ayah={ayah}
+            fontSize={fontSize}
+          />
+        ))}
+      </div>
+
+      <div className="text-center text-xs text-muted-foreground mt-10 pb-4 tracking-widest">
+        ﴾ {surahInfo?.englishName ?? ""} ﴿
+      </div>
+    </div>
+  );
 }
 
 // ── Settings panel ────────────────────────────────────────────────────────────
@@ -148,8 +316,8 @@ function SettingsPanel({
               </div>
               <input
                 type="range"
-                min={18}
-                max={44}
+                min={20}
+                max={48}
                 step={2}
                 value={fontSize}
                 onChange={(e) => setFontSize(Number(e.target.value))}
@@ -200,7 +368,7 @@ function SettingsPanel({
   );
 }
 
-// ── Page number input ─────────────────────────────────────────────────────────
+// ── Page number input (mushaf mode only) ──────────────────────────────────────
 
 function PageInput({
   currentPage,
@@ -265,16 +433,18 @@ function PageInput({
 
 export default function QuranPage() {
   const {
+    currentSurah,
     currentPage,
     viewMode,
-    pageCache,
+    surahCache,
     mushafPageCache,
     settings,
     isLoading,
     error,
+    setCurrentSurah,
     setCurrentPage,
     setViewMode,
-    setPageData,
+    setSurahData,
     setMushafPageData,
     setLoading,
     setError,
@@ -285,30 +455,40 @@ export default function QuranPage() {
     document.documentElement.classList.contains("dark")
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [surahPickerOpen, setSurahPickerOpen] = useState(false);
+  const [chapters, setChapters] = useState<ChapterMap>({});
 
   const isMushaf = viewMode === "mushaf";
-  const pageData = pageCache.get(currentPage);
+  const surahData = surahCache.get(currentSurah);
   const mushafPageData = mushafPageCache.get(currentPage);
+  const chapter = chapters[currentSurah];
 
-  // ── Load current page in reading mode ──────────────────────────────────────
-  const loadReadingPage = useCallback(
-    async (page: number) => {
-      if (pageCache.has(page)) return;
+  // Load chapters list on mount (for surah picker + SurahHeader)
+  useEffect(() => {
+    loadChapters()
+      .then(setChapters)
+      .catch(() => {});
+  }, []);
+
+  // ── Load surah in reading mode ────────────────────────────────────────────
+  const loadSurah = useCallback(
+    async (surah: number) => {
+      if (surahCache.has(surah)) return;
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchQuranPage(page);
-        setPageData(page, data);
+        const data = await fetchSurahVerses(surah);
+        setSurahData(surah, data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load page");
+        setError(err instanceof Error ? err.message : "Failed to load surah");
       } finally {
         setLoading(false);
       }
     },
-    [pageCache, setLoading, setError, setPageData]
+    [surahCache, setLoading, setError, setSurahData]
   );
 
-  // ── Load current page in mushaf mode ───────────────────────────────────────
+  // ── Load page in mushaf mode ──────────────────────────────────────────────
   const loadMushafPage = useCallback(
     async (page: number) => {
       if (mushafPageCache.has(page)) return;
@@ -326,46 +506,78 @@ export default function QuranPage() {
     [mushafPageCache, setLoading, setError, setMushafPageData]
   );
 
-  // Load on page/mode change
+  // Trigger fetch on surah/page/mode change
   useEffect(() => {
     if (isMushaf) {
       loadMushafPage(currentPage);
     } else {
-      loadReadingPage(currentPage);
+      loadSurah(currentSurah);
     }
-  }, [currentPage, isMushaf, loadMushafPage, loadReadingPage]);
+  }, [currentSurah, currentPage, isMushaf, loadSurah, loadMushafPage]);
 
-  // Prefetch adjacent pages
+  // Prefetch adjacent surahs / mushaf pages
   useEffect(() => {
-    const next = currentPage + 1;
-    const prev = currentPage - 1;
     if (isMushaf) {
+      const next = currentPage + 1;
+      const prev = currentPage - 1;
       if (next <= TOTAL_PAGES && !mushafPageCache.has(next))
         fetchMushafPage(next).then((d) => setMushafPageData(next, d)).catch(() => {});
       if (prev >= 1 && !mushafPageCache.has(prev))
         fetchMushafPage(prev).then((d) => setMushafPageData(prev, d)).catch(() => {});
     } else {
-      if (next <= TOTAL_PAGES && !pageCache.has(next))
-        fetchQuranPage(next).then((d) => setPageData(next, d)).catch(() => {});
-      if (prev >= 1 && !pageCache.has(prev))
-        fetchQuranPage(prev).then((d) => setPageData(prev, d)).catch(() => {});
+      const next = currentSurah + 1;
+      const prev = currentSurah - 1;
+      if (next <= TOTAL_SURAHS && !surahCache.has(next))
+        fetchSurahVerses(next).then((d) => setSurahData(next, d)).catch(() => {});
+      if (prev >= 1 && !surahCache.has(prev))
+        fetchSurahVerses(prev).then((d) => setSurahData(prev, d)).catch(() => {});
     }
-  }, [currentPage, isMushaf, pageCache, mushafPageCache, setPageData, setMushafPageData]);
+  }, [currentSurah, currentPage, isMushaf, surahCache, mushafPageCache, setSurahData, setMushafPageData]);
 
-  const goNext = () => {
+  // Sync mushaf page when switching from reading mode
+  const handleModeSwitch = () => {
+    if (!isMushaf) {
+      // Switching reading → mushaf: jump to the mushaf start page of current surah
+      const startPage = chapters[currentSurah]?.mushafStartPage;
+      if (startPage) setCurrentPage(startPage);
+    }
+    setViewMode(isMushaf ? "reading" : "mushaf");
+  };
+
+  const goNextSurah = () => {
+    if (currentSurah < TOTAL_SURAHS) {
+      setCurrentSurah(currentSurah + 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+  const goPrevSurah = () => {
+    if (currentSurah > 1) {
+      setCurrentSurah(currentSurah - 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  const goNextPage = () => {
     if (currentPage < TOTAL_PAGES) setCurrentPage(currentPage + 1);
   };
-  const goPrev = () => {
+  const goPrevPage = () => {
     if (currentPage > 1) setCurrentPage(currentPage - 1);
   };
 
+  // Keyboard navigation
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight") goPrev();
-      if (e.key === "ArrowLeft") goNext();
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement) return;
+      if (isMushaf) {
+        if (e.key === "ArrowRight") goPrevPage();
+        if (e.key === "ArrowLeft") goNextPage();
+      } else {
+        if (e.key === "ArrowRight") goPrevSurah();
+        if (e.key === "ArrowLeft") goNextSurah();
+      }
     };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   });
 
   const toggleDark = () => {
@@ -374,7 +586,7 @@ export default function QuranPage() {
     document.documentElement.classList.toggle("dark", isDark);
   };
 
-  const currentData = isMushaf ? mushafPageData : pageData;
+  const currentData = isMushaf ? mushafPageData : surahData;
   const isFirstLoad = isLoading && !currentData;
 
   return (
@@ -382,7 +594,7 @@ export default function QuranPage() {
       className="flex flex-col min-h-screen bg-background text-foreground"
       style={isMushaf ? { height: "100dvh", overflow: "hidden" } : undefined}
     >
-      {/* ── Header ───────────────────────────────────────────────────────── */}
+      {/* ── Header ─────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 bg-background/90 backdrop-blur-sm border-b border-border flex items-center justify-between px-4 py-2.5">
         <Link href="/analytics">
           <button
@@ -393,12 +605,22 @@ export default function QuranPage() {
           </button>
         </Link>
 
-        <PageInput currentPage={currentPage} totalPages={TOTAL_PAGES} onGo={setCurrentPage} />
+        {isMushaf ? (
+          <PageInput
+            currentPage={currentPage}
+            totalPages={TOTAL_PAGES}
+            onGo={setCurrentPage}
+          />
+        ) : (
+          <SurahSelectorButton
+            chapter={chapter}
+            onClick={() => setSurahPickerOpen(true)}
+          />
+        )}
 
         <div className="flex items-center gap-1">
-          {/* View mode toggle */}
           <button
-            onClick={() => setViewMode(isMushaf ? "reading" : "mushaf")}
+            onClick={handleModeSwitch}
             className={`p-2 rounded-lg hover:bg-muted transition-colors ${isMushaf ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
             aria-label={isMushaf ? "Switch to Reading mode" : "Switch to Mushaf mode"}
             title={isMushaf ? "Reading mode" : "Mushaf mode"}
@@ -417,6 +639,7 @@ export default function QuranPage() {
           >
             {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
+
           <button
             onClick={() => setSettingsOpen(true)}
             className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
@@ -427,12 +650,18 @@ export default function QuranPage() {
         </div>
       </header>
 
-      {/* ── Main content ──────────────────────────────────────────────────── */}
-      <main className={`flex-1 ${isMushaf ? "flex flex-col overflow-hidden" : "overflow-auto"}`}>
+      {/* ── Main content ────────────────────────────────────────────────── */}
+      <main
+        className={`flex-1 ${isMushaf ? "flex flex-col overflow-hidden" : "overflow-auto"}`}
+      >
         {isFirstLoad && (
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Loading page {currentPage}…</p>
+            <p className="text-sm text-muted-foreground">
+              {isMushaf
+                ? `Loading page ${currentPage}…`
+                : `Loading ${chapter?.nameSimple ?? `Surah ${currentSurah}`}…`}
+            </p>
           </div>
         )}
 
@@ -444,7 +673,7 @@ export default function QuranPage() {
               onClick={() => {
                 setError(null);
                 if (isMushaf) loadMushafPage(currentPage);
-                else loadReadingPage(currentPage);
+                else loadSurah(currentSurah);
               }}
               className="text-sm text-primary underline"
             >
@@ -457,55 +686,103 @@ export default function QuranPage() {
           <MushafPage pageData={mushafPageData} />
         )}
 
-        {!error && !isFirstLoad && !isMushaf && pageData && (
-          <PageContent pageData={pageData} fontSize={settings.fontSize} />
+        {!error && !isFirstLoad && !isMushaf && surahData && (
+          <SurahReadingView
+            surahNumber={currentSurah}
+            ayahs={surahData.ayahs}
+            chapter={chapter}
+            fontSize={settings.fontSize}
+          />
         )}
       </main>
 
-      {/* ── Footer navigation ─────────────────────────────────────────────── */}
+      {/* ── Footer navigation ───────────────────────────────────────────── */}
       <footer className="sticky bottom-0 z-30 bg-background/90 backdrop-blur-sm border-t border-border">
-        <div className="flex items-center justify-between px-6 py-3 max-w-lg mx-auto">
-          <button
-            onClick={goPrev}
-            disabled={currentPage <= 1}
-            aria-label="Previous page"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
-          >
-            <ChevronRight className="w-4 h-4" />
-            Prev
-          </button>
+        {isMushaf ? (
+          <div className="flex items-center justify-between px-6 py-3 max-w-lg mx-auto">
+            <button
+              onClick={goPrevPage}
+              disabled={currentPage <= 1}
+              aria-label="Previous page"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+            >
+              <ChevronRight className="w-4 h-4" />
+              Prev
+            </button>
 
-          <div className="flex gap-1">
-            {[-2, -1, 0, 1, 2].map((offset) => {
-              const p = currentPage + offset;
-              if (p < 1 || p > TOTAL_PAGES) return null;
-              return (
-                <button
-                  key={p}
-                  onClick={() => setCurrentPage(p)}
-                  className={`w-8 h-8 rounded-lg text-xs font-medium transition-colors ${
-                    p === currentPage
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {p}
-                </button>
-              );
-            })}
+            <div className="flex gap-1">
+              {[-2, -1, 0, 1, 2].map((offset) => {
+                const p = currentPage + offset;
+                if (p < 1 || p > TOTAL_PAGES) return null;
+                return (
+                  <button
+                    key={p}
+                    onClick={() => setCurrentPage(p)}
+                    className={`w-8 h-8 rounded-lg text-xs font-medium transition-colors ${
+                      p === currentPage
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={goNextPage}
+              disabled={currentPage >= TOTAL_PAGES}
+              aria-label="Next page"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+            >
+              Next
+              <ChevronLeft className="w-4 h-4" />
+            </button>
           </div>
+        ) : (
+          <div className="flex items-center justify-between px-6 py-3 max-w-lg mx-auto">
+            <button
+              onClick={goPrevSurah}
+              disabled={currentSurah <= 1}
+              aria-label="Previous surah"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+            >
+              <ChevronRight className="w-4 h-4" />
+              Prev
+            </button>
 
-          <button
-            onClick={goNext}
-            disabled={currentPage >= TOTAL_PAGES}
-            aria-label="Next page"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
-          >
-            Next
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-        </div>
+            <button
+              onClick={() => setSurahPickerOpen(true)}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors tabular-nums"
+            >
+              {currentSurah} / {TOTAL_SURAHS}
+            </button>
+
+            <button
+              onClick={goNextSurah}
+              disabled={currentSurah >= TOTAL_SURAHS}
+              aria-label="Next surah"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+            >
+              Next
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </footer>
+
+      {/* ── Modals ──────────────────────────────────────────────────────── */}
+      <SurahPickerModal
+        open={surahPickerOpen}
+        onClose={() => setSurahPickerOpen(false)}
+        chapters={chapters}
+        currentSurah={currentSurah}
+        onSelect={(n) => {
+          setCurrentSurah(n);
+          window.scrollTo({ top: 0 });
+        }}
+      />
 
       <SettingsPanel
         open={settingsOpen}

@@ -1,9 +1,8 @@
 import type {
-  AlQuranPageResponse,
-  QuranPage,
   AudioDataMap,
   QuranAyah,
   QuranWord,
+  SurahData,
   MushafApiResponse,
   MushafApiVerse,
   MushafWord,
@@ -12,7 +11,6 @@ import type {
   ChapterMap,
 } from "../types/quran";
 
-const ALQURAN_BASE = "https://api.alquran.cloud/v1";
 const QURANCOM_BASE = "https://api.quran.com/api/v4";
 const BISMILLAH = "بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ";
 
@@ -41,72 +39,124 @@ export async function loadChapters(): Promise<ChapterMap> {
   const data = await res.json();
   const map: ChapterMap = {};
   for (const ch of data.chapters) {
+    const pages = ch.pages;
+    const mushafStartPage = Array.isArray(pages) ? pages[0] : (pages?.first ?? 1);
     map[ch.id] = {
       id: ch.id,
       nameArabic: ch.name_arabic,
       nameSimple: ch.name_simple,
       nameTranslation: ch.translated_name?.name ?? "",
       versesCount: ch.verses_count,
+      revelationPlace: ch.revelation_place ?? "makkah",
+      mushafStartPage,
     };
   }
   chaptersCache = map;
   return map;
 }
 
-// ── Reading mode (AlQuran.cloud) ────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────────────────
 
-function splitAyahIntoWords(
-  text: string,
-  surahNumber: number,
-  ayahNumber: number,
-  audioData: AudioDataMap
-): QuranWord[] {
-  const key = `${surahNumber}:${ayahNumber}`;
-  const ayahAudio = audioData[key];
-  const rawWords = text.split(" ").filter((w) => w.trim().length > 0);
-
-  return rawWords.map((wordText, index) => {
-    const wordIndex = index + 1;
-    const spanId = `${surahNumber}:${ayahNumber}:${wordIndex}`;
-    const hasAudio = !!(
-      ayahAudio && ayahAudio.segments.some((seg) => seg[0] === wordIndex)
-    );
-    return { text: wordText, wordIndex, surahNumber, ayahNumber, spanId, hasAudio };
-  });
+function parseLocation(location: string): [number, number, number] {
+  const parts = location.split(":").map(Number);
+  return [parts[0], parts[1], parts[2]];
 }
 
-export async function fetchQuranPage(pageNumber: number): Promise<QuranPage> {
-  const [apiRes, audioData] = await Promise.all([
-    fetch(`${ALQURAN_BASE}/page/${pageNumber}/quran-uthmani`).then(
-      (r) => r.json() as Promise<AlQuranPageResponse>
-    ),
-    loadAudioData(),
-  ]);
+// ── Surah reading mode (Quran.com verses by chapter) ────────────────────────────
 
-  if (apiRes.code !== 200) {
-    throw new Error(`AlQuran.cloud API error: ${apiRes.status}`);
+interface QuranComSurahWord {
+  id: number;
+  position: number;
+  char_type_name: "word" | "end";
+  text_uthmani: string;
+  location: string;
+  page_number?: number;
+}
+
+interface QuranComSurahVerse {
+  id: number;
+  verse_number: number;
+  verse_key: string;
+  page_number: number;
+  juz_number: number;
+  hizb_number?: number;
+  words: QuranComSurahWord[];
+}
+
+interface QuranComSurahResponse {
+  verses: QuranComSurahVerse[];
+  pagination: {
+    per_page: number;
+    current_page: number;
+    next_page: number | null;
+    total_pages: number;
+    total_records: number;
+  };
+}
+
+export async function fetchSurahVerses(surahNumber: number): Promise<SurahData> {
+  const [audioData, chapters] = await Promise.all([loadAudioData(), loadChapters()]);
+
+  const allVerses: QuranComSurahVerse[] = [];
+  let apiPage = 1;
+
+  while (true) {
+    const url =
+      `${QURANCOM_BASE}/verses/by_chapter/${surahNumber}` +
+      `?words=true&word_fields=text_uthmani,location,page_number&per_page=50&page=${apiPage}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Quran.com API error: ${res.status}`);
+    const data: QuranComSurahResponse = await res.json();
+    allVerses.push(...data.verses);
+    if (data.pagination.next_page === null) break;
+    apiPage++;
   }
 
-  const ayahs: QuranAyah[] = apiRes.data.ayahs.map((a) => {
-    const words = splitAyahIntoWords(a.text, a.surah.number, a.numberInSurah, audioData);
+  const chapter = chapters[surahNumber];
+  const revelationType =
+    chapter?.revelationPlace === "madinah" ? "Medinan" : "Meccan";
+
+  const ayahs: QuranAyah[] = allVerses.map((verse) => {
+    const [s, a] = verse.verse_key.split(":").map(Number);
+    const audioKey = `${s}:${a}`;
+    const ayahAudio = audioData[audioKey];
+
+    const words: QuranWord[] = verse.words
+      .filter((w) => w.char_type_name === "word")
+      .map((w) => {
+        const [, , wordIndex] = parseLocation(w.location);
+        const spanId = `${s}:${a}:${wordIndex}`;
+        const hasAudio = !!(
+          ayahAudio && ayahAudio.segments.some((seg) => seg[0] === wordIndex)
+        );
+        return {
+          text: w.text_uthmani,
+          wordIndex,
+          surahNumber: s,
+          ayahNumber: a,
+          spanId,
+          hasAudio,
+        };
+      });
+
     return {
-      number: a.number,
-      numberInSurah: a.numberInSurah,
-      text: a.text,
+      number: verse.id,
+      numberInSurah: verse.verse_number,
+      text: words.map((w) => w.text).join(" "),
       surah: {
-        number: a.surah.number,
-        name: a.surah.name,
-        englishName: a.surah.englishName,
-        englishNameTranslation: a.surah.englishNameTranslation,
-        revelationType: a.surah.revelationType,
+        number: surahNumber,
+        name: chapter?.nameArabic ?? "",
+        englishName: chapter?.nameSimple ?? "",
+        englishNameTranslation: chapter?.nameTranslation ?? "",
+        revelationType,
       },
-      juz: a.juz,
-      page: a.page,
+      juz: verse.juz_number,
+      page: verse.page_number,
       words,
     };
   });
 
-  return { pageNumber, ayahs };
+  return { surahNumber, ayahs };
 }
 
 // ── Mushaf mode (Quran.com) ─────────────────────────────────────────────────────
@@ -136,18 +186,12 @@ function parseSurahAyah(verseKey: string): [number, number] {
   return [s, a];
 }
 
-function parseLocation(location: string): [number, number, number] {
-  const parts = location.split(":").map(Number);
-  return [parts[0], parts[1], parts[2]];
-}
-
 export async function fetchMushafPage(pageNumber: number): Promise<MushafPageData> {
   const [verses, chapters] = await Promise.all([
     fetchMushafVerses(pageNumber),
     loadChapters(),
   ]);
 
-  // Map words into a line → words structure
   const lineMap = new Map<number, MushafWord[]>();
 
   for (const verse of verses) {
@@ -167,18 +211,15 @@ export async function fetchMushafPage(pageNumber: number): Promise<MushafPageDat
     }
   }
 
-  // Determine the first line number that has actual content
   const usedLineNumbers = Array.from(lineMap.keys()).sort((a, b) => a - b);
   const firstContentLine = usedLineNumbers[0] ?? 1;
 
-  // Determine if this page starts a new surah (empty header lines before content)
   const firstVerse = verses[0];
   const [firstSurahNum, firstVerseNum] = firstVerse
     ? parseSurahAyah(firstVerse.verse_key)
     : [1, 1];
 
   const emptyHeaderLineCount = firstContentLine - 1;
-  // Show surah header only when there are empty leading lines AND the page starts a surah
   const hasSurahHeader = emptyHeaderLineCount > 0 && firstVerseNum <= 2;
 
   const chapter = chapters[firstSurahNum];
@@ -186,14 +227,11 @@ export async function fetchMushafPage(pageNumber: number): Promise<MushafPageDat
   const surahEnglishName = chapter?.nameSimple ?? "";
   const showBismillah = firstSurahNum !== 9 && firstSurahNum !== 1;
 
-  // Build the 15 lines
   const lines: MushafLine[] = [];
 
   for (let ln = 1; ln <= 15; ln++) {
     if (hasSurahHeader && ln <= emptyHeaderLineCount) {
-      // Distribute header content across empty lines
       if (emptyHeaderLineCount === 1) {
-        // Single header line: surah name only
         lines.push({
           lineNumber: ln,
           words: [],
@@ -202,7 +240,6 @@ export async function fetchMushafPage(pageNumber: number): Promise<MushafPageDat
           surahEnglishName,
         });
       } else {
-        // Multiple header lines: name on first line(s), bismillah on last
         if (ln < emptyHeaderLineCount) {
           lines.push({
             lineNumber: ln,
@@ -233,3 +270,4 @@ export async function fetchMushafPage(pageNumber: number): Promise<MushafPageDat
 }
 
 export const TOTAL_PAGES = 604;
+export const TOTAL_SURAHS = 114;

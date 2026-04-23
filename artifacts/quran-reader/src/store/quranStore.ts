@@ -1,19 +1,21 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { QuranPage, MushafPageData, Settings, ViewMode } from "../types/quran";
+import type { SurahData, MushafPageData, Settings, ViewMode } from "../types/quran";
 
 interface QuranStore {
+  currentSurah: number;
   currentPage: number;
   viewMode: ViewMode;
-  pageCache: Map<number, QuranPage>;
+  surahCache: Map<number, SurahData>;
   mushafPageCache: Map<number, MushafPageData>;
   settings: Settings;
   isLoading: boolean;
   error: string | null;
 
+  setCurrentSurah: (surah: number) => void;
   setCurrentPage: (page: number) => void;
   setViewMode: (mode: ViewMode) => void;
-  setPageData: (page: number, data: QuranPage) => void;
+  setSurahData: (surah: number, data: SurahData) => void;
   setMushafPageData: (page: number, data: MushafPageData) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
@@ -23,31 +25,31 @@ interface QuranStore {
 export const useQuranStore = create<QuranStore>()(
   persist(
     (set) => ({
+      currentSurah: 1,
       currentPage: 1,
       viewMode: "reading",
-      pageCache: new Map(),
+      surahCache: new Map(),
       mushafPageCache: new Map(),
       settings: {
-        fontSize: 26,
+        fontSize: 28,
         showTranslation: false,
       },
       isLoading: false,
       error: null,
 
+      setCurrentSurah: (surah) =>
+        set({ currentSurah: Math.max(1, Math.min(114, surah)) }),
+
       setCurrentPage: (page) =>
-        set((state) => ({
-          currentPage: Math.max(1, Math.min(604, page)),
-          pageCache: state.pageCache,
-          mushafPageCache: state.mushafPageCache,
-        })),
+        set({ currentPage: Math.max(1, Math.min(604, page)) }),
 
       setViewMode: (viewMode) => set({ viewMode }),
 
-      setPageData: (page, data) =>
+      setSurahData: (surah, data) =>
         set((state) => {
-          const newCache = new Map(state.pageCache);
-          newCache.set(page, data);
-          return { pageCache: newCache };
+          const newCache = new Map(state.surahCache);
+          newCache.set(surah, data);
+          return { surahCache: newCache };
         }),
 
       setMushafPageData: (page, data) =>
@@ -68,6 +70,7 @@ export const useQuranStore = create<QuranStore>()(
     {
       name: "quran-reader-store",
       partialize: (state) => ({
+        currentSurah: state.currentSurah,
         currentPage: state.currentPage,
         viewMode: state.viewMode,
         settings: state.settings,

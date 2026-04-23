@@ -224,9 +224,30 @@
   min-height: calc(100vh - 120px);
 }
 
+/* ── Surah-based reading view ────────────────────────────────────────────── */
+
+.verse-block {
+  padding-top: 1.6rem;
+  padding-bottom: 1.6rem;
+  border-bottom: 1px solid hsl(var(--border) / 0.35);
+}
+
+.verse-block:last-child {
+  border-bottom: none;
+}
+
+.surah-verses {
+  /* Contain the verse blocks */
+}
+
 @media (max-width: 640px) {
   .quran-text {
     line-height: 2.5;
+  }
+
+  .verse-block {
+    padding-top: 1.25rem;
+    padding-bottom: 1.25rem;
   }
 }
 

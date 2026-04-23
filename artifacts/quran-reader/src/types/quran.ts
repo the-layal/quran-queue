@@ -44,6 +44,11 @@ export interface QuranPage {
   ayahs: QuranAyah[];
 }
 
+export interface SurahData {
+  surahNumber: number;
+  ayahs: QuranAyah[];
+}
+
 export interface AlQuranApiAyah {
   number: number;
   text: string;
@@ -86,7 +91,19 @@ export interface Settings {
   showTranslation: boolean;
 }
 
-// ── Mushaf Mode types ──────────────────────────────────────────────────────────
+export interface ChapterInfo {
+  id: number;
+  nameArabic: string;
+  nameSimple: string;
+  nameTranslation: string;
+  versesCount: number;
+  revelationPlace: string;
+  mushafStartPage: number;
+}
+
+export type ChapterMap = Record<number, ChapterInfo>;
+
+export type ViewMode = "reading" | "mushaf";
 
 export interface MushafApiWord {
   id: number;
@@ -142,15 +159,3 @@ export interface MushafPageData {
   pageNumber: number;
   lines: MushafLine[];
 }
-
-export interface ChapterInfo {
-  id: number;
-  nameArabic: string;
-  nameSimple: string;
-  nameTranslation: string;
-  versesCount: number;
-}
-
-export type ChapterMap = Record<number, ChapterInfo>;
-
-export type ViewMode = "reading" | "mushaf";
