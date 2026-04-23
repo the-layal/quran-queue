@@ -95,17 +95,19 @@ function MushafLineRow({
   }
 
   const hasWords = line.words.length > 0;
+  const realWordCount = line.words.filter((w) => w.charType === "word").length;
+  const justifyContent = realWordCount >= 4 ? "space-between" : "center";
 
   return (
     <div
-      className={`mushaf-line flex-1 flex items-center justify-center ${hasWords ? "px-3" : ""}`}
+      className={`mushaf-line flex-1 flex items-center ${hasWords ? "px-3" : "justify-center"}`}
       dir="rtl"
       lang="ar"
     >
       {hasWords && (
         <div
-          className="mushaf-line-words w-full flex flex-row-reverse flex-wrap justify-center items-baseline gap-x-[0.2em]"
-          style={{ fontSize: `${fontSize}px`, lineHeight: 1 }}
+          className="mushaf-line-words w-full flex flex-row-reverse items-baseline overflow-hidden"
+          style={{ fontSize: `${fontSize}px`, lineHeight: 1, justifyContent, gap: "0 0.15em" }}
         >
           {line.words.map((word) => (
             <WordSpan key={`${word.spanId}-${word.lineNumber}`} word={word} />

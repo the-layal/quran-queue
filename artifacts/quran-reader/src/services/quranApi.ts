@@ -113,11 +113,22 @@ export async function fetchQuranPage(pageNumber: number): Promise<QuranPage> {
 
 async function fetchMushafVerses(pageNumber: number): Promise<MushafApiVerse[]> {
   const fields = "text_uthmani,line_number,page_number,location,char_type_name";
-  const url = `${QURANCOM_BASE}/verses/by_page/${pageNumber}?words=true&word_fields=${fields}&per_page=50`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Quran.com API error: ${res.status}`);
-  const data: MushafApiResponse = await res.json();
-  return data.verses;
+  const allVerses: MushafApiVerse[] = [];
+  let page = 1;
+
+  while (true) {
+    const url =
+      `${QURANCOM_BASE}/verses/by_page/${pageNumber}` +
+      `?words=true&word_fields=${fields}&per_page=50&page=${page}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Quran.com API error: ${res.status}`);
+    const data: MushafApiResponse = await res.json();
+    allVerses.push(...data.verses);
+    if (data.pagination.next_page === null) break;
+    page++;
+  }
+
+  return allVerses;
 }
 
 function parseSurahAyah(verseKey: string): [number, number] {
