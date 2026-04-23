@@ -145,8 +145,6 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       // that have no data-word-index-in-ayah attribute.
       let minX = Infinity;
       let maxX = -Infinity;
-      let minY = Infinity;
-      let maxY = -Infinity;
 
       const wordGroups = container.querySelectorAll<SVGGElement>("g[data-word-index-in-ayah]");
       wordGroups.forEach((wordEl) => {
@@ -155,8 +153,6 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
           if (bbox.width === 0 && bbox.height === 0) return;
           if (bbox.x < minX) minX = bbox.x;
           if (bbox.x + bbox.width > maxX) maxX = bbox.x + bbox.width;
-          if (bbox.y < minY) minY = bbox.y;
-          if (bbox.y + bbox.height > maxY) maxY = bbox.y + bbox.height;
         } catch {
           // getBBox can throw for hidden/detached elements — skip silently
         }
@@ -164,21 +160,35 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
 
       // Crop the SVG viewBox horizontally to the text column with equal padding
       // on both sides so pages with wide margin annotations stay visually centered.
-      // For pages 1 and 2, also crop vertically to remove extra whitespace at
-      // the top and bottom, matching the aspect ratio of all other pages.
+      // For pages 1 and 2, also crop vertically to remove equal whitespace from
+      // the top and bottom so those pages share the same aspect ratio as a normal
+      // full-text page (naturalAspect = original H / original W).
       if (minX !== Infinity && maxX !== -Infinity) {
         const vb = svg.viewBox.baseVal;
         if (vb && vb.width > 0) {
           const padX = 30;
-          const padY = 110;
           if (!originalViewBoxRef.current) {
             originalViewBoxRef.current = svg.getAttribute("viewBox") ??
               `${vb.x} ${vb.y} ${vb.width} ${vb.height}`;
           }
-          const cropY = pageNumber <= 2 && minY !== Infinity && maxY !== -Infinity;
-          const newY = cropY ? minY - padY : vb.y;
-          const newHeight = cropY ? maxY - minY + padY * 2 : vb.height;
-          const cropped = `${minX - padX} ${newY} ${maxX - minX + padX * 2} ${newHeight}`;
+
+          const croppedW  = maxX - minX + padX * 2;
+          let newY        = vb.y;
+          let newHeight   = vb.height;
+
+          if (pageNumber <= 2) {
+            // Target height = croppedWidth × natural page aspect ratio (H÷W).
+            // This is purely geometric — no content detection needed — so the
+            // surah name and borders are untouched; we just trim equal amounts
+            // from the top and bottom of the original viewBox.
+            const naturalAspect = vb.height / vb.width;
+            const targetH       = croppedW * naturalAspect;
+            const trim          = (vb.height - targetH) / 2;
+            newY      = vb.y + trim;
+            newHeight = targetH;
+          }
+
+          const cropped = `${minX - padX} ${newY} ${croppedW} ${newHeight}`;
           svg.setAttribute("viewBox", cropped);
           croppedViewBoxRef.current = cropped;
         }
