@@ -193,8 +193,15 @@ function toEasternArabic(n: number): string {
 
 const loadedQpcPages = new Set<number>();
 
-function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number) {
+function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number): boolean {
+  const [fontsReady, setFontsReady] = useState(false);
+
   useEffect(() => {
+    if (ayahs.length === 0) {
+      setFontsReady(true);
+      return;
+    }
+
     const pages = new Set<number>();
     // Always load page 1 — the standalone Bismillah header uses 1:1 glyphs
     pages.add(1);
@@ -204,6 +211,14 @@ function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number) {
       }
       if (ayah.endMarkerPageNumber) pages.add(ayah.endMarkerPageNumber);
     }
+
+    if (pages.size === 0) {
+      setFontsReady(true);
+      return;
+    }
+
+    const pending: Promise<void>[] = [];
+
     pages.forEach((pageNum) => {
       if (loadedQpcPages.has(pageNum)) return;
       loadedQpcPages.add(pageNum);
@@ -214,13 +229,34 @@ function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number) {
         style: "normal",
         weight: "normal",
       });
-      face.load().then((loaded) => {
-        document.fonts.add(loaded);
-      }).catch(() => {
-        loadedQpcPages.delete(pageNum);
-      });
+      const p = face
+        .load()
+        .then((loaded) => {
+          document.fonts.add(loaded);
+        })
+        .catch(() => {
+          loadedQpcPages.delete(pageNum);
+        });
+      pending.push(p);
     });
+
+    if (pending.length === 0) {
+      setFontsReady(true);
+      return;
+    }
+
+    setFontsReady(false);
+    let cancelled = false;
+    Promise.all(pending).then(() => {
+      if (!cancelled) setFontsReady(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [ayahs]);
+
+  return fontsReady;
 }
 
 function VerseBlock({
@@ -298,7 +334,7 @@ function SurahReadingView({
 }) {
   const firstAyah = ayahs[0];
 
-  useQpcFonts(ayahs);
+  const fontsReady = useQpcFonts(ayahs);
 
   const surahInfo = chapter
     ? {
@@ -310,6 +346,17 @@ function SurahReadingView({
           chapter.revelationPlace === "madinah" ? "Medinan" : "Meccan",
       }
     : undefined;
+
+  if (!fontsReady) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">
+          Loading {chapter?.nameSimple ?? `Surah ${surahNumber}`}…
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="surah-reading-view max-w-2xl mx-auto w-full px-5 sm:px-10 py-4">
