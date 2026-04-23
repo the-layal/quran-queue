@@ -12,6 +12,14 @@ export interface AyahAudioData {
   audio_url: string;
   duration: number | null;
   segments: [number, number, number][];
+  timestamp_from: number;
+  timestamp_to: number;
+}
+
+export interface SurahAudioEntry {
+  surah_number: number;
+  audio_url: string;
+  duration: number;
 }
 
 export type AudioDataMap = Record<string, AyahAudioData>;

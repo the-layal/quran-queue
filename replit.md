@@ -51,17 +51,27 @@ pnpm workspace monorepo using TypeScript. Contains a Quran web reader app modele
 
 ## Audio Data Format
 
-The `quran-audio-data.json` file is keyed by `"{surah}:{ayah}"` strings. Each entry has:
+Two public JSON files power audio playback (both in `artifacts/quran-reader/public/`):
+
+**`quran-surah-audio.json`** — keyed by surah number string:
+```json
+{ "1": { "surah_number": 1, "audio_url": "https://audio-cdn.tarteel.ai/.../001.mp3", "duration": 46 } }
+```
+
+**`quran-segments-data.json`** — keyed by `"{surah}:{ayah}"`:
 ```json
 {
-  "surah_number": 1,
-  "ayah_number": 1,
-  "audio_url": "https://audio-cdn.tarteel.ai/quran/alafasy/001001.mp3",
-  "duration": null,
-  "segments": [[1, 0, 560], [2, 760, 1200], ...]
+  "1:1": {
+    "segments": [[1, 0, 750], [2, 800, 1550], ...],
+    "duration_ms": 5735,
+    "timestamp_from": 0,
+    "timestamp_to": 5735
+  }
 }
 ```
-Segment format: `[word_index, start_ms, end_ms]` (word_index starts at 1).
+All timestamps (word segments AND `timestamp_from`/`timestamp_to`) are **absolute offsets within the surah-level MP3**, not relative to the ayah. The `AudioDataMap` in `quranApi.ts` merges both files at load time.
+
+`quran-audio-data-legacy.json` — the old per-ayah MP3 data (kept for reference, unused).
 
 ## Word Span DOM Convention
 

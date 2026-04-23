@@ -168,25 +168,16 @@ export function useSelectionAudio(): SelectionAudioState {
         source.buffer = buffer;
         source.connect(ctx.destination);
 
-        if (region.playFullAyah) {
-          source.start(scheduleTime, 0);
-          const durSec = buffer.duration;
-          sources.push(source);
-          resolvedRegions.push({ ...region, durationMs: durSec * 1000 });
-          scheduleTime += durSec;
-          totalDuration += durSec;
-        } else {
-          const startSec = region.startMs / 1000;
-          const durSec = region.durationMs / 1000;
+        const startSec = region.startMs / 1000;
+        const durSec = region.durationMs / 1000;
 
-          if (durSec <= 0) continue;
+        if (durSec <= 0) continue;
 
-          source.start(scheduleTime, startSec, durSec);
-          sources.push(source);
-          resolvedRegions.push(region);
-          scheduleTime += durSec;
-          totalDuration += durSec;
-        }
+        source.start(scheduleTime, startSec, durSec);
+        sources.push(source);
+        resolvedRegions.push(region);
+        scheduleTime += durSec;
+        totalDuration += durSec;
       }
 
       schedulerRef.current = {

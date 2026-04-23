@@ -1,5 +1,6 @@
 import type {
   AudioDataMap,
+  SurahAudioEntry,
   QuranAyah,
   QuranWord,
   SurahData,
@@ -18,14 +19,46 @@ const BISMILLAH = "بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلر
 
 let audioDataCache: AudioDataMap | null = null;
 
+interface SegmentEntry {
+  segments: [number, number, number][];
+  duration_sec: number;
+  duration_ms: number;
+  timestamp_from: number;
+  timestamp_to: number;
+}
+
 export async function loadAudioData(): Promise<AudioDataMap> {
   if (audioDataCache) return audioDataCache;
   const base = import.meta.env.BASE_URL;
-  const url = `${base}quran-audio-data.json`.replace(/\/\//g, "/");
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Failed to load audio data");
-  audioDataCache = await res.json();
-  return audioDataCache!;
+  const fix = (path: string) => `${base}${path}`.replace(/\/\//g, "/");
+
+  const [segRes, surahRes] = await Promise.all([
+    fetch(fix("quran-segments-data.json")),
+    fetch(fix("quran-surah-audio.json")),
+  ]);
+  if (!segRes.ok) throw new Error("Failed to load audio segments data");
+  if (!surahRes.ok) throw new Error("Failed to load surah audio data");
+
+  const segments: Record<string, SegmentEntry> = await segRes.json();
+  const surahAudio: Record<string, SurahAudioEntry> = await surahRes.json();
+
+  const map: AudioDataMap = {};
+  for (const [key, seg] of Object.entries(segments)) {
+    const [surahStr, ayahStr] = key.split(":");
+    const surahEntry = surahAudio[surahStr];
+    map[key] = {
+      surah_number: Number(surahStr),
+      ayah_number: Number(ayahStr),
+      audio_url: surahEntry?.audio_url ?? "",
+      duration: seg.duration_ms,
+      segments: seg.segments,
+      timestamp_from: seg.timestamp_from,
+      timestamp_to: seg.timestamp_to,
+    };
+  }
+
+  audioDataCache = map;
+  return map;
 }
 
 // ── Chapters cache ──────────────────────────────────────────────────────────────

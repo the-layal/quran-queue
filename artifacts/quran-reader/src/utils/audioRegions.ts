@@ -8,7 +8,6 @@ export interface PlaybackRegion {
   surahNumber: number;
   ayahNumber: number;
   durationMs: number;
-  playFullAyah?: boolean;
 }
 
 export function computePlaybackRegions(
@@ -44,6 +43,11 @@ export function computePlaybackRegions(
 
   const regions: PlaybackRegion[] = [];
 
+  // "ayah" fineness plays the full ayah span; "word" and "line" play the
+  // selected word segments.  In the new surah-level data, all timestamps
+  // (both word-segment and ayah timestamp_from/to) are absolute offsets
+  // within the surah MP3, so the same non-branching playback path handles
+  // every case.
   const fullAyahMode = brushFineness !== "word" && brushFineness !== "line";
 
   for (const [ayahKey, { surah, ayah, wordIndices }] of sortedEntries) {
@@ -51,19 +55,22 @@ export function computePlaybackRegions(
     if (!ayahAudio) continue;
 
     if (fullAyahMode) {
+      const startMs = ayahAudio.timestamp_from;
+      const endMs = ayahAudio.timestamp_to;
       regions.push({
         audioUrl: ayahAudio.audio_url,
-        startMs: 0,
-        endMs: 0,
+        startMs,
+        endMs,
         ayahKey,
         surahNumber: surah,
         ayahNumber: ayah,
-        durationMs: 0,
-        playFullAyah: true,
+        durationMs: Math.max(0, endMs - startMs),
       });
       continue;
     }
 
+    // Word / line mode: use the word-level segment timestamps.
+    // Segments are [wordIndex, startMs, endMs] — absolute within surah MP3.
     const matched = wordIndices
       .map((wi) => ayahAudio.segments.find((seg) => seg[0] === wi))
       .filter(Boolean) as [number, number, number][];
