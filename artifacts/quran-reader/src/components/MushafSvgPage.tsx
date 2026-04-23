@@ -100,12 +100,25 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       const hitLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
       hitLayer.id = "md-hit-layer";
 
+      // Track the union bbox of all word groups so we can crop the viewBox to
+      // the main text column, excluding margin annotations (Hizb markers, etc.)
+      // that have no data-word-index-in-ayah attribute.
+      let minX = Infinity;
+      let maxX = -Infinity;
+
       const wordGroups = container.querySelectorAll<SVGGElement>("g[data-word-index-in-ayah]");
       wordGroups.forEach((wordEl) => {
-        if (!wordEl.id) return;
         try {
           const bbox = wordEl.getBBox();
           if (bbox.width === 0 && bbox.height === 0) return;
+
+          // Accumulate text-column extents for ALL word groups (even those
+          // without an id) so the viewBox crop covers the full text column.
+          if (bbox.x < minX) minX = bbox.x;
+          if (bbox.x + bbox.width > maxX) maxX = bbox.x + bbox.width;
+
+          // Hit-rects require an id to resolve back to the word group on click.
+          if (!wordEl.id) return;
           const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
           rect.setAttribute("x",      String(bbox.x));
           rect.setAttribute("y",      String(bbox.y));
@@ -119,12 +132,26 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
         }
       });
 
+      // Crop the SVG viewBox horizontally to the text column with equal padding
+      // on both sides so pages with wide margin annotations stay visually centered.
+      // Hit-rect coordinates are in SVG user units and are unaffected by viewBox changes.
+      if (minX !== Infinity && maxX !== -Infinity) {
+        const vb = svg.viewBox.baseVal;
+        if (vb && vb.width > 0) {
+          const pad = 30; // SVG units — symmetric left/right gutter
+          svg.setAttribute(
+            "viewBox",
+            `${minX - pad} ${vb.y} ${maxX - minX + pad * 2} ${vb.height}`
+          );
+        }
+      }
+
       // Append last so hit-layer is always on top of all SVG content
       svg.appendChild(hitLayer);
     });
 
     return () => cancelAnimationFrame(rafId);
-  }, [svgText]);
+  }, [svgText, scale]);
 
   // ── Word-state helpers ──────────────────────────────────────────────────
   const clearActiveWord = useCallback(() => {
