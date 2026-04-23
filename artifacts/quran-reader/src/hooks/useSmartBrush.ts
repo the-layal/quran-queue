@@ -67,17 +67,22 @@ function extractSvgInfo(el: Element): SvgInfo | null {
   return { normalizedId: `${s}:${a}:${w}`, rawSurah: surah, rawAya: aya, lineNumber: line };
 }
 
-function getSvgInfo(el: Element, container: Element): SvgInfo | null {
-  if (el.classList.contains("md-hit-rect")) {
-    const wid = el.getAttribute("data-target-word");
-    if (!wid) return null;
-    const wordGroup = container.querySelector(`#${wid}`);
-    return wordGroup ? extractSvgInfo(wordGroup) : null;
-  }
-  let cur: Element | null = el;
-  while (cur && cur !== container) {
-    if (cur.hasAttribute("data-word-index-in-ayah")) return extractSvgInfo(cur);
-    cur = cur.parentElement;
+// Bounding-box scan over hit-rects — more reliable than elementFromPoint
+// during pointer capture because SVG hit-testing rules differ from DOM
+// hit-testing and browsers may behave inconsistently mid-drag.
+function findSvgInfoAtPoint(clientX: number, clientY: number, container: Element): SvgInfo | null {
+  const hitRects = container.querySelectorAll<Element>(".md-hit-rect");
+  for (const rect of hitRects) {
+    const bbox = rect.getBoundingClientRect();
+    if (
+      clientX >= bbox.left && clientX <= bbox.right &&
+      clientY >= bbox.top  && clientY <= bbox.bottom
+    ) {
+      const wid = rect.getAttribute("data-target-word");
+      if (!wid) continue;
+      const wordGroup = container.querySelector(`#${wid}`);
+      if (wordGroup) return extractSvgInfo(wordGroup);
+    }
   }
   return null;
 }
@@ -146,18 +151,20 @@ export function useSmartBrush(
 
   const resolveIds = useCallback(
     (clientX: number, clientY: number): string[] => {
-      const el = document.elementFromPoint(clientX, clientY);
-      if (!el) return [];
       const fineness = finenessRef.current;
 
       if (mode === "reading") {
+        const el = document.elementFromPoint(clientX, clientY);
+        if (!el) return [];
         const wordEl = getReadingWordEl(el);
         if (!wordEl) return [];
         return readingExpand(wordEl, fineness);
       } else {
+        // SVG mode: bounding-box scan is reliable across all browsers during
+        // pointer capture — elementFromPoint is not used here at all.
         const container = containerRef.current;
         if (!container) return [];
-        const info = getSvgInfo(el, container);
+        const info = findSvgInfoAtPoint(clientX, clientY, container);
         if (!info) return [];
         return svgExpand(info, fineness, container);
       }
