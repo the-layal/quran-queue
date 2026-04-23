@@ -209,7 +209,7 @@ export function useSelectionAudio(): SelectionAudioState {
     clearActiveHighlight();
   }
 
-  const playRegion = useCallback((regionIndex: number) => {
+  const playRegion = useCallback((regionIndex: number, gapless = false) => {
     const allRegions = regionsRef.current;
 
     if (regionIndex >= allRegions.length) {
@@ -302,11 +302,32 @@ export function useSelectionAudio(): SelectionAudioState {
           setPlaybackCurrentWordId(newCurrentWordId);
         }
 
-        if (ct >= endSec - 0.08 || audio.ended) {
-          audio.pause();
-          audio.onended = null;
+        // Pre-compute gapless eligibility so we can set the boundary threshold
+        // correctly: gapless transitions need no seek, so a tight boundary is
+        // fine; pause/seek transitions need an 80 ms lookahead to avoid stutters.
+        const nextIndex = regionIndex + 1;
+        const nextRegion = allRegions[nextIndex];
+        const gaplessOk =
+          !audio.ended &&
+          nextRegion != null &&
+          nextRegion.audioUrl === region.audioUrl &&
+          nextRegion.surahNumber === region.surahNumber &&
+          nextRegion.ayahNumber === region.ayahNumber + 1;
+        // For gapless: fire at the true boundary (10 ms slack for float jitter).
+        // For pause/seek: keep the original 80 ms lookahead.
+        const endThreshold = gaplessOk ? endSec - 0.01 : endSec - 0.08;
+
+        if (ct >= endThreshold || audio.ended) {
           elapsedBeforeSecRef.current = elapsedBefore + regionDurSec;
-          playRegion(regionIndex + 1);
+
+          if (gaplessOk) {
+            // Same adjacent surah region: audio keeps playing uninterrupted.
+            playRegion(nextIndex, true);
+          } else {
+            audio.pause();
+            audio.onended = null;
+            playRegion(nextIndex, false);
+          }
           return;
         }
 
@@ -316,7 +337,13 @@ export function useSelectionAudio(): SelectionAudioState {
     };
 
     const doSeekAndPlay = () => {
-      audio.currentTime = startSec;
+      // Seek slightly before the desired start to avoid MP3 frame-alignment
+      // cut-offs (the decoder snaps to the nearest keyframe, which can be
+      // ~26 ms after the requested point). The RAF loop discards the pre-roll
+      // via Math.max(0, ct - startSec), so highlights and progress are
+      // unaffected. 100 ms is typically inter-word silence in recitation.
+      const PREROLL_SEC = 0.1;
+      audio.currentTime = Math.max(0, startSec - PREROLL_SEC);
       const p = audio.play();
       if (p) {
         p.then(startTicking).catch(() => {
@@ -331,6 +358,10 @@ export function useSelectionAudio(): SelectionAudioState {
       audio.src = region.audioUrl;
       audio.load();
       audio.addEventListener("canplay", doSeekAndPlay, { once: true });
+    } else if (gapless) {
+      // Same URL, audio is already playing — skip the seek and start tracking
+      // the new region immediately.
+      startTicking();
     } else {
       doSeekAndPlay();
     }
