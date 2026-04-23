@@ -450,13 +450,6 @@ input[type="number"]::-webkit-outer-spin-button {
   opacity: 0.9;
 }
 
-/* Transparent hit-rect covering the full word bounding box (pointer events only) */
-.mushaf-svg-container .md-hit-rect {
-  fill: transparent;
-  pointer-events: all;
-  cursor: pointer;
-}
-
 /* Hover highlight rect injected via JS (visual only, no pointer events) */
 .mushaf-svg-container .md-hover-rect {
   fill: hsl(var(--accent) / 0.45);

@@ -45,14 +45,15 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     if (!container) return;
     const next = new Set(selectedWordIds);
     const prev = prevSvgSelectedRef.current;
+    console.log("[svg-fx] useEffect selectedWordIds changed: prev", [...prev], "next", [...next]);
 
     const setClass = (nid: string, add: boolean) => {
       const [s, a, w] = nid.split(":");
-      container
-        .querySelector<Element>(
-          `g[data-surah="${s.padStart(3, "0")}"][data-aya="${a.padStart(3, "0")}"][data-word-index-in-ayah="${w}"]`
-        )
-        ?.classList.toggle("md-word-selected", add);
+      const el = container.querySelector<Element>(
+        `g[data-surah="${s.padStart(3, "0")}"][data-aya="${a.padStart(3, "0")}"][data-word-index-in-ayah="${w}"]`
+      );
+      console.log("[svg-fx] setClass", nid, add, "el:", el?.id ?? "NOT_FOUND");
+      el?.classList.toggle("md-word-selected", add);
     };
 
     prev.forEach((id) => { if (!next.has(id)) setClass(id, false); });
@@ -121,18 +122,16 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     if (prev >= 1  && !SVG_CACHE.has(prev))  fetchSvgPage(prev).catch(() => {});
   }, [pageNumber]);
 
-  // ── Inject transparent hit-rects into a top-level SVG layer ────────────
-  //
-  // WHY a separate top-level layer?
-  //   - Appending rects inside each word group puts them below later
-  //     sibling line-groups in SVG z-order, so those groups intercept
-  //     events first.  A <g> appended as the LAST child of the <svg>
-  //     is always on top of all page content.
+  // ── Crop the SVG viewBox to the text column ─────────────────────────────
   //
   // WHY requestAnimationFrame?
   //   - useLayoutEffect fires before the browser has finished computing
-  //     SVG layout, so getBBox() returns zeros and rects are never created.
+  //     SVG layout, so getBBox() returns zeros.
   //     rAF defers to after the first paint when layout is complete.
+  //
+  // Word selection no longer needs hit-rects — we use document.elementFromPoint
+  // with CSS pointer-events: bounding-box on each word group, which is the same
+  // approach used by reading mode and is always accurate.
   useEffect(() => {
     if (!svgText) return;
     let rafId: number;
@@ -142,12 +141,6 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       if (!container) return;
       const svg = container.querySelector("svg");
       if (!svg) return;
-
-      // Remove any stale hit-layer from a previous page
-      svg.querySelector("#md-hit-layer")?.remove();
-
-      const hitLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      hitLayer.id = "md-hit-layer";
 
       // Track the union bbox of all word groups so we can crop the viewBox to
       // the main text column, excluding margin annotations (Hizb markers, etc.)
@@ -160,22 +153,8 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
         try {
           const bbox = wordEl.getBBox();
           if (bbox.width === 0 && bbox.height === 0) return;
-
-          // Accumulate text-column extents for ALL word groups (even those
-          // without an id) so the viewBox crop covers the full text column.
           if (bbox.x < minX) minX = bbox.x;
           if (bbox.x + bbox.width > maxX) maxX = bbox.x + bbox.width;
-
-          // Hit-rects require an id to resolve back to the word group on click.
-          if (!wordEl.id) return;
-          const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-          rect.setAttribute("x",      String(bbox.x));
-          rect.setAttribute("y",      String(bbox.y));
-          rect.setAttribute("width",  String(bbox.width));
-          rect.setAttribute("height", String(bbox.height));
-          rect.setAttribute("data-target-word", wordEl.id);
-          rect.classList.add("md-hit-rect");
-          hitLayer.appendChild(rect);
         } catch {
           // getBBox can throw for hidden/detached elements — skip silently
         }
@@ -183,25 +162,19 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
 
       // Crop the SVG viewBox horizontally to the text column with equal padding
       // on both sides so pages with wide margin annotations stay visually centered.
-      // Hit-rect coordinates are in SVG user units and are unaffected by viewBox changes.
       if (minX !== Infinity && maxX !== -Infinity) {
         const vb = svg.viewBox.baseVal;
         if (vb && vb.width > 0) {
           const pad = 30; // SVG units — symmetric left/right gutter
-          // Preserve the original viewBox before we mutate it (useful for debug/reset).
           if (!originalViewBoxRef.current) {
             originalViewBoxRef.current = svg.getAttribute("viewBox") ??
               `${vb.x} ${vb.y} ${vb.width} ${vb.height}`;
           }
           const cropped = `${minX - pad} ${vb.y} ${maxX - minX + pad * 2} ${vb.height}`;
           svg.setAttribute("viewBox", cropped);
-          // Persist so re-renders triggered by selection state can re-apply the crop
           croppedViewBoxRef.current = cropped;
         }
       }
-
-      // Append last so hit-layer is always on top of all SVG content
-      svg.appendChild(hitLayer);
     });
 
     return () => cancelAnimationFrame(rafId);
@@ -231,17 +204,10 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
 
   // ── Resolve target element → word group ────────────────────────────────
   //
-  // Hit rects live in #md-hit-layer (not inside the word group), so the
-  // normal DOM-walk would never find data-word-index-in-ayah.  Instead we
-  // read data-target-word and look the group up by ID.
+  // Walk up from the event target until we find an element with
+  // data-word-index-in-ayah (the word group), or reach the container.
   const getWordGroup = useCallback(
     (target: Element, currentTarget: Element): Element | null => {
-      // Hit-rect path: resolve via data-target-word attribute
-      if (target.classList.contains("md-hit-rect")) {
-        const wordId = target.getAttribute("data-target-word");
-        return wordId ? currentTarget.querySelector(`#${wordId}`) : null;
-      }
-      // Normal path: walk up from the event target
       let el: Element | null = target;
       while (el && el !== currentTarget) {
         if (el.hasAttribute("data-word-index-in-ayah")) return el;
@@ -303,28 +269,16 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     [getWordGroup, clearHoverWord, removeHoverRect]
   );
 
-  // Active-word toggle via direct hit-rect scan at a given screen position.
+  // Active-word toggle using the browser's native hit-tester.
   // Called from handlePointerUp when the pointer didn't move (single tap).
   // We can't use onClick because preventDefault() in onPointerDown suppresses it.
   const handleTap = useCallback(
     (clientX: number, clientY: number) => {
-      const container = containerRef.current;
-      if (!container) return;
-      let wordGroup: Element | null = null;
-      const hitRects = container.querySelectorAll<Element>(".md-hit-rect");
-      for (const rect of hitRects) {
-        const bbox = rect.getBoundingClientRect();
-        if (
-          clientX >= bbox.left && clientX <= bbox.right &&
-          clientY >= bbox.top  && clientY <= bbox.bottom
-        ) {
-          const wid = rect.getAttribute("data-target-word");
-          if (wid) wordGroup = container.querySelector(`#${wid}`);
-          break;
-        }
-      }
+      const el = document.elementFromPoint(clientX, clientY);
+      if (!el) return;
+      const wordGroup = el.closest("[data-word-index-in-ayah]");
       if (!wordGroup) return;
-      const wordId = wordGroup.id;
+      const wordId = (wordGroup as HTMLElement).id;
       if (activeWordIdRef.current === wordId) {
         wordGroup.classList.remove("md-word-active");
         activeWordIdRef.current = null;

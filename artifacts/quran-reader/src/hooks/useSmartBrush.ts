@@ -24,24 +24,18 @@ function extractSvgInfo(el: Element): SvgInfo | null {
   return { normalizedId: `${s}:${a}:${w}`, rawSurah: surah, rawAya: aya, lineNumber: line };
 }
 
-// Bounding-box scan over hit-rects — more reliable than elementFromPoint
-// during pointer capture because SVG hit-testing rules differ from DOM
-// hit-testing and browsers may behave inconsistently mid-drag.
-function findSvgInfoAtPoint(clientX: number, clientY: number, container: Element): SvgInfo | null {
-  const hitRects = container.querySelectorAll<Element>(".md-hit-rect");
-  for (const rect of hitRects) {
-    const bbox = rect.getBoundingClientRect();
-    if (
-      clientX >= bbox.left && clientX <= bbox.right &&
-      clientY >= bbox.top  && clientY <= bbox.bottom
-    ) {
-      const wid = rect.getAttribute("data-target-word");
-      if (!wid) continue;
-      const wordGroup = container.querySelector(`#${wid}`);
-      if (wordGroup) return extractSvgInfo(wordGroup);
-    }
-  }
-  return null;
+// Use the browser's native hit-tester to find the SVG word group at a point.
+// document.elementFromPoint returns the topmost element at the given screen
+// coordinate; .closest() then walks up to the nearest word group ancestor.
+// This is the same approach used by reading mode and is always accurate —
+// it works whether the click lands on a letter stroke, in the gap between
+// strokes, or during a pointer-captured drag.
+function findSvgWordAtPoint(clientX: number, clientY: number): SvgInfo | null {
+  const el = document.elementFromPoint(clientX, clientY);
+  if (!el) return null;
+  const wordGroup = el.closest("[data-word-index-in-ayah]");
+  if (!wordGroup) return null;
+  return extractSvgInfo(wordGroup);
 }
 
 // ── Imperative DOM class helpers ──────────────────────────────────────────────
@@ -54,11 +48,13 @@ function applySvgClass(nid: string, add: boolean, container: Element) {
   const [s, a, w] = nid.split(":");
   const surahPad = s.padStart(3, "0");
   const ayaPad = a.padStart(3, "0");
-  container
-    .querySelector<Element>(
-      `g[data-surah="${surahPad}"][data-aya="${ayaPad}"][data-word-index-in-ayah="${w}"]`
-    )
-    ?.classList.toggle("md-word-selected", add);
+  const sel = `g[data-surah="${surahPad}"][data-aya="${ayaPad}"][data-word-index-in-ayah="${w}"]`;
+  const el = container.querySelector<Element>(sel);
+  console.log("[brush] applySvgClass", nid, add, "container:", container?.tagName, "el:", el?.id ?? "NOT_FOUND");
+  if (el) {
+    el.classList.toggle("md-word-selected", add);
+    console.log("[brush] after toggle, has class:", el.classList.contains("md-word-selected"), "all classes:", el.className);
+  }
 }
 
 // ── Ordered unit index builders ───────────────────────────────────────────────
@@ -235,13 +231,14 @@ export function useSmartBrush(
         const wordEl = (el as HTMLElement).closest?.(".quran-word") as HTMLElement | null;
         return wordEl?.id ?? null;
       } else {
-        const container = containerRef.current;
-        if (!container) return null;
-        const info = findSvgInfoAtPoint(clientX, clientY, container);
+        const el = document.elementFromPoint(clientX, clientY);
+        console.log("[brush] anchorPoint elementFromPoint:", el?.tagName, el?.id, el?.getAttribute?.("data-word-index-in-ayah"));
+        const info = findSvgWordAtPoint(clientX, clientY);
+        console.log("[brush] anchorWordId:", info?.normalizedId ?? null);
         return info ? info.normalizedId : null;
       }
     },
-    [mode, containerRef]
+    [mode]
   );
 
   // Resolve the unit index under the pointer using the already-built ordered list.
@@ -257,14 +254,14 @@ export function useSmartBrush(
         if (!wordEl?.id) return -1;
         return findUnitIndex(units, wordEl.id);
       } else {
-        const container = containerRef.current;
-        if (!container) return -1;
-        const info = findSvgInfoAtPoint(clientX, clientY, container);
+        const el = document.elementFromPoint(clientX, clientY);
+        const info = findSvgWordAtPoint(clientX, clientY);
+        console.log("[brush] resolveCurrentUnitIndex el:", el?.tagName, el?.id, "info:", info?.normalizedId, "unitIdx:", info ? findUnitIndex(units, info.normalizedId) : -1, "anchor:", anchorIndexRef.current);
         if (!info) return -1;
         return findUnitIndex(units, info.normalizedId);
       }
     },
-    [mode, containerRef]
+    [mode]
   );
 
   // Apply a contiguous range of units as the current gesture's contribution,
@@ -285,10 +282,12 @@ export function useSmartBrush(
       }
 
       const prevRangeIds = activeRangeIdsRef.current;
+      console.log("[brush] applyRange", fromIdx, toIdx, "lo", lo, "hi", hi, "newRange", [...newRangeIds], "prevRange", [...prevRangeIds], "base", [...base]);
 
       // Remove IDs that left the gesture range and are not in the base selection
       for (const id of prevRangeIds) {
         if (!newRangeIds.has(id) && !base.has(id)) {
+          console.log("[brush] REMOVING id:", id);
           if (mode === "reading") applyReadingClass(id, false);
           else if (container) applySvgClass(id, false, container);
         }
@@ -297,6 +296,7 @@ export function useSmartBrush(
       // Add IDs that entered the gesture range and are not already shown via base
       for (const id of newRangeIds) {
         if (!prevRangeIds.has(id) && !base.has(id)) {
+          console.log("[brush] ADDING id:", id);
           if (mode === "reading") applyReadingClass(id, true);
           else if (container) applySvgClass(id, true, container);
         }
@@ -311,7 +311,9 @@ export function useSmartBrush(
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
+      console.log("[brush] onPointerDown at", e.clientX, e.clientY);
       const anchorWordId = resolveAnchorWordId(e.clientX, e.clientY);
+      console.log("[brush] anchorWordId resolved:", anchorWordId);
       if (!anchorWordId) return; // Not on a word — preserve existing selection
 
       const snap = selectedSetRef.current;
@@ -378,9 +380,11 @@ export function useSmartBrush(
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
       if (!isDragging.current) return;
+      console.log("[brush] onPointerMove at", e.clientX, e.clientY, "isDragging:", isDragging.current);
       e.preventDefault();
 
       if (isDeselecting.current) {
+        console.log("[brush] onPointerMove DESELECT MODE, snap:", [...initialSelectedRef.current]);
         // Deselect mode: remove any newly touched peers using the cached unit list
         const container = containerRef.current;
         const snap = initialSelectedRef.current;
@@ -392,11 +396,8 @@ export function useSmartBrush(
             ? ((el as HTMLElement).closest?.(".quran-word") as HTMLElement | null)?.id ?? null
             : null;
         } else {
-          const c = containerRef.current;
-          if (c) {
-            const info = findSvgInfoAtPoint(e.clientX, e.clientY, c);
-            wordId = info ? info.normalizedId : null;
-          }
+          const info = findSvgWordAtPoint(e.clientX, e.clientY);
+          wordId = info ? info.normalizedId : null;
         }
 
         if (!wordId) return;
