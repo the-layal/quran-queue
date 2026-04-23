@@ -455,6 +455,14 @@ input[type="number"]::-webkit-outer-spin-button {
   box-shadow: 0 0 0 1px hsl(38 90% 52% / 0.45);
 }
 
+/* Per-word accent during recitation — reading mode */
+.quran-word.word-current {
+  background-color: hsl(38 95% 64% / 0.65);
+  border-radius: 3px;
+  box-shadow: 0 0 0 1.5px hsl(38 90% 44%);
+  color: hsl(38 60% 22%);
+}
+
 /* Playback follow-along highlight — SVG Mushaf mode */
 .mushaf-svg-container g[data-word-index-in-ayah].md-word-playing path {
   fill: hsl(38 75% 38%);

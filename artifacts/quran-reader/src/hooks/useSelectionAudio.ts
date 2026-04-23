@@ -11,6 +11,7 @@ export interface SelectionAudioState {
   currentAyahKey: string | null;
   hasSelection: boolean;
   hasAudio: boolean;
+  regions: PlaybackRegion[];
   play: () => void;
   pause: () => void;
   toggleLoop: () => void;
@@ -173,18 +174,15 @@ export function useSelectionAudio(): SelectionAudioState {
     prevCurrentWordIdRef.current = null;
   }, [playbackHighlightMode]);
 
-  // When word highlighting is disabled, clear the current-word highlight immediately.
-  // Also reset prevActiveIdsRef so the very next RAF tick unconditionally re-fires
-  // setPlaybackActiveIds — this re-stamps the group (line/ayah) highlight classes
-  // on the DOM, which can otherwise go missing when the current-word effect clears
-  // its own classes and skips the "re-assert playing" branch.
+  // When word highlighting is disabled, clear both highlights immediately.
   useEffect(() => {
     if (!playbackHighlightEnabled) {
       prevCurrentWordIdRef.current = null;
       prevActiveIdsRef.current = [];
+      setPlaybackActiveIds([]);
       setPlaybackCurrentWordId(null);
     }
-  }, [playbackHighlightEnabled, setPlaybackCurrentWordId]);
+  }, [playbackHighlightEnabled, setPlaybackActiveIds, setPlaybackCurrentWordId]);
 
   useEffect(() => {
     loadAudioData()
@@ -291,23 +289,24 @@ export function useSelectionAudio(): SelectionAudioState {
           ? regionElapsed * 1000
           : region.startMs + regionElapsed * 1000;
 
-        // Line/ayah group highlight always runs regardless of the word-highlight toggle.
-        let newActiveIds: string[];
+        let newActiveIds: string[] = [];
         let currentWordIndex: number | null = null;
 
-        if (mode === "ayah") {
-          newActiveIds = getAllAyahWordIds(activeKey);
-          currentWordIndex = aData
-            ? computeCurrentWordIndex(audioRelativeMs, aData, activeKey)
-            : null;
-        } else {
-          currentWordIndex = aData
-            ? computeCurrentWordIndex(audioRelativeMs, aData, activeKey)
-            : null;
-          if (currentWordIndex !== null) {
-            newActiveIds = getAllLineWordIds(activeKey, currentWordIndex);
-          } else {
+        if (highlightEnabled) {
+          if (mode === "ayah") {
             newActiveIds = getAllAyahWordIds(activeKey);
+            currentWordIndex = aData
+              ? computeCurrentWordIndex(audioRelativeMs, aData, activeKey)
+              : null;
+          } else {
+            currentWordIndex = aData
+              ? computeCurrentWordIndex(audioRelativeMs, aData, activeKey)
+              : null;
+            if (currentWordIndex !== null) {
+              newActiveIds = getAllLineWordIds(activeKey, currentWordIndex);
+            } else {
+              newActiveIds = getAllAyahWordIds(activeKey);
+            }
           }
         }
 
@@ -527,6 +526,7 @@ export function useSelectionAudio(): SelectionAudioState {
     currentAyahKey,
     hasSelection,
     hasAudio,
+    regions,
     play,
     pause,
     toggleLoop,

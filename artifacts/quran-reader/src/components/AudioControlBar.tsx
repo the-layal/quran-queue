@@ -1,9 +1,15 @@
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, useMemo } from "react";
 import { Play, Pause, Repeat, Music2, Highlighter } from "lucide-react";
 import type { ChapterMap } from "../types/quran";
 import { useSelectionAudio } from "../hooks/useSelectionAudio";
 import { useQuranStore } from "../store/quranStore";
 import type { PlaybackHighlightMode } from "../store/quranStore";
+
+function fmtTime(sec: number): string {
+  const s = Math.floor(sec);
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, "0")}`;
+}
 
 interface AudioControlBarProps {
   chapters: ChapterMap;
@@ -17,11 +23,32 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
     currentAyahKey,
     hasSelection,
     hasAudio,
+    regions,
     play,
     pause,
     toggleLoop,
     seekTo,
   } = useSelectionAudio();
+
+  const totalDurationSec = useMemo(
+    () => regions.reduce((sum, r) => sum + r.durationMs, 0) / 1000,
+    [regions]
+  );
+
+  const elapsedSec = progress * totalDurationSec;
+
+  // Fractional positions (0–1) of each inter-ayah boundary on the progress bar.
+  // One tick per boundary between consecutive regions.
+  const boundaryFractions = useMemo(() => {
+    if (regions.length <= 1 || totalDurationSec <= 0) return [];
+    const fracs: number[] = [];
+    let cum = 0;
+    for (let i = 0; i < regions.length - 1; i++) {
+      cum += regions[i].durationMs / 1000;
+      fracs.push(cum / totalDurationSec);
+    }
+    return fracs;
+  }, [regions, totalDurationSec]);
 
   const progressBarRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
@@ -201,11 +228,23 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
               style={{ width: `${Math.round(progress * 100)}%` }}
             />
           </div>
+          {boundaryFractions.map((frac) => (
+            <div
+              key={frac}
+              className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-background/70 pointer-events-none"
+              style={{ left: `${frac * 100}%` }}
+            />
+          ))}
           <div
-            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-primary shadow-sm transition-opacity"
+            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-primary shadow-sm"
             style={{ left: `${Math.round(progress * 100)}%` }}
           />
         </div>
+        {totalDurationSec > 0 && (
+          <span className="text-[10px] tabular-nums text-muted-foreground leading-none">
+            {fmtTime(elapsedSec)} / {fmtTime(totalDurationSec)}
+          </span>
+        )}
       </div>
 
       <button

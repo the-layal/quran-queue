@@ -340,6 +340,7 @@ function SurahReadingView({
   const fontsReady = useQpcFonts(ayahs);
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
   const playbackActiveIds = useQuranStore((s) => s.playbackActiveIds);
+  const playbackCurrentWordId = useQuranStore((s) => s.playbackCurrentWordId);
 
   // Brush pointer handlers — must be called before any early return
   const brush = useSmartBrush("reading", containerRef as RefObject<HTMLElement | null>);
@@ -378,6 +379,18 @@ function SurahReadingView({
       }
     }
   }, [playbackActiveIds]);
+
+  // Reactive DOM sync: apply .word-current to the single word currently spoken.
+  const prevCurrentWordRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevCurrentWordRef.current) {
+      document.getElementById(prevCurrentWordRef.current)?.classList.remove("word-current");
+    }
+    if (playbackCurrentWordId) {
+      document.getElementById(playbackCurrentWordId)?.classList.add("word-current");
+    }
+    prevCurrentWordRef.current = playbackCurrentWordId;
+  }, [playbackCurrentWordId]);
 
   const surahInfo = chapter
     ? {

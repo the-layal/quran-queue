@@ -8,6 +8,7 @@ export interface PlaybackRegion {
   surahNumber: number;
   ayahNumber: number;
   durationMs: number;
+  playFullAyah?: boolean;
 }
 
 export function computePlaybackRegions(
