@@ -16,9 +16,115 @@ export interface SelectionAudioState {
   toggleLoop: () => void;
 }
 
+function getWordElement(wordId: string): Element | null {
+  const el = document.getElementById(wordId);
+  if (el) return el;
+  const [s, a, w] = wordId.split(":");
+  return document.querySelector(
+    `g[data-surah="${s.padStart(3, "0")}"][data-aya="${a.padStart(3, "0")}"][data-word-index-in-ayah="${w}"]`
+  );
+}
+
+function getAllAyahWordIds(ayahKey: string): string[] {
+  const [surahStr, ayahStr] = ayahKey.split(":");
+  const surah = parseInt(surahStr, 10);
+  const ayah = parseInt(ayahStr, 10);
+  const ids: string[] = [];
+
+  const htmlWords = document.querySelectorAll<HTMLElement>(
+    `.quran-word[data-surah="${surah}"][data-ayah="${ayah}"]`
+  );
+  htmlWords.forEach((el) => {
+    if (el.id) ids.push(el.id);
+  });
+
+  const svgWords = document.querySelectorAll<Element>(
+    `g[data-surah="${String(surah).padStart(3, "0")}"][data-aya="${String(ayah).padStart(3, "0")}"][data-word-index-in-ayah]`
+  );
+  svgWords.forEach((el) => {
+    const wi = el.getAttribute("data-word-index-in-ayah");
+    if (wi) ids.push(`${surah}:${ayah}:${wi}`);
+  });
+
+  return ids;
+}
+
+function getAllLineWordIds(activeKey: string, currentWordIndex: number): string[] {
+  const [surahStr, ayahStr] = activeKey.split(":");
+  const surah = parseInt(surahStr, 10);
+  const ayah = parseInt(ayahStr, 10);
+  const currentWordId = `${surah}:${ayah}:${currentWordIndex}`;
+  const currentEl = getWordElement(currentWordId);
+
+  if (!currentEl) {
+    return getAllAyahWordIds(activeKey);
+  }
+
+  const lineNumber = currentEl.getAttribute("data-line-number");
+  if (lineNumber) {
+    const ids: string[] = [];
+    const lineWords = document.querySelectorAll<Element>(
+      `g[data-line-number="${lineNumber}"][data-word-index-in-ayah]`
+    );
+    lineWords.forEach((el) => {
+      const s = el.getAttribute("data-surah");
+      const a = el.getAttribute("data-aya");
+      const w = el.getAttribute("data-word-index-in-ayah");
+      if (s && a && w) {
+        ids.push(`${parseInt(s, 10)}:${parseInt(a, 10)}:${w}`);
+      }
+    });
+    return ids;
+  }
+
+  const currentRect = currentEl.getBoundingClientRect();
+  const targetY = currentRect.top + currentRect.height / 2;
+  const tolerance = Math.max(currentRect.height * 0.55, 8);
+  const ids: string[] = [];
+  const allReadingWords = document.querySelectorAll<HTMLElement>(".quran-word[id]");
+  allReadingWords.forEach((el) => {
+    const rect = el.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    if (Math.abs(midY - targetY) <= tolerance && el.id) {
+      ids.push(el.id);
+    }
+  });
+  return ids;
+}
+
+function computeCurrentWordIndex(
+  audioRelativeMs: number,
+  audioData: AudioDataMap,
+  activeKey: string
+): number | null {
+  const ayahAudio = audioData[activeKey];
+  if (!ayahAudio || ayahAudio.segments.length === 0) return null;
+
+  const segments = ayahAudio.segments;
+  let bestStart = -Infinity;
+  let currentWordIndex: number | null = null;
+
+  for (const [wi, segStart, segEnd] of segments) {
+    if (audioRelativeMs >= segStart && audioRelativeMs < segEnd) {
+      return wi;
+    }
+    if (audioRelativeMs >= segStart && segStart > bestStart) {
+      bestStart = segStart;
+      currentWordIndex = wi;
+    }
+  }
+
+  if (currentWordIndex === null) {
+    currentWordIndex = segments[0][0];
+  }
+  return currentWordIndex;
+}
+
 export function useSelectionAudio(): SelectionAudioState {
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
   const brushFineness = useQuranStore((s) => s.brushFineness);
+  const playbackHighlightMode = useQuranStore((s) => s.playbackHighlightMode);
+  const setPlaybackActiveIds = useQuranStore((s) => s.setPlaybackActiveIds);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLooping, setIsLooping] = useState(false);
@@ -34,9 +140,23 @@ export function useSelectionAudio(): SelectionAudioState {
   const regionIndexRef = useRef(0);
   const totalDurSecRef = useRef(0);
   const elapsedBeforeSecRef = useRef(0);
+  const prevActiveIdsRef = useRef<string[]>([]);
+
+  const playbackHighlightModeRef = useRef(playbackHighlightMode);
+  playbackHighlightModeRef.current = playbackHighlightMode;
+
+  const audioDataRef = useRef(audioData);
+  audioDataRef.current = audioData;
 
   isLoopingRef.current = isLooping;
   regionsRef.current = regions;
+
+  // When the highlight mode changes, invalidate the cached IDs so the very next
+  // RAF tick always pushes a fresh update — even if the new mode happens to
+  // produce the same word list as the old mode (e.g. a single-line short ayah).
+  useEffect(() => {
+    prevActiveIdsRef.current = [];
+  }, [playbackHighlightMode]);
 
   useEffect(() => {
     loadAudioData()
@@ -60,6 +180,11 @@ export function useSelectionAudio(): SelectionAudioState {
     return audioRef.current;
   }
 
+  function clearActiveHighlight() {
+    prevActiveIdsRef.current = [];
+    setPlaybackActiveIds([]);
+  }
+
   function cancelRaf() {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
@@ -76,6 +201,7 @@ export function useSelectionAudio(): SelectionAudioState {
     regionIndexRef.current = 0;
     elapsedBeforeSecRef.current = 0;
     setIsPlaying(false);
+    clearActiveHighlight();
   }
 
   const playRegion = useCallback((regionIndex: number) => {
@@ -89,6 +215,8 @@ export function useSelectionAudio(): SelectionAudioState {
         cancelRaf();
         setIsPlaying(false);
         setProgress(1);
+        prevActiveIdsRef.current = [];
+        setPlaybackActiveIds([]);
       }
       return;
     }
@@ -117,6 +245,37 @@ export function useSelectionAudio(): SelectionAudioState {
             ? Math.min((elapsedBefore + regionElapsed) / totalDur, 1)
             : 0;
         setProgress(prog);
+
+        // Highlight tracking: compute which words are active and push to store
+        const mode = playbackHighlightModeRef.current;
+        const aData = audioDataRef.current;
+        const activeKey = region.ayahKey;
+        const audioRelativeMs = region.playFullAyah
+          ? regionElapsed * 1000
+          : region.startMs + regionElapsed * 1000;
+
+        let newActiveIds: string[];
+        if (mode === "ayah") {
+          newActiveIds = getAllAyahWordIds(activeKey);
+        } else {
+          const currentWordIndex = aData
+            ? computeCurrentWordIndex(audioRelativeMs, aData, activeKey)
+            : null;
+          if (currentWordIndex !== null) {
+            newActiveIds = getAllLineWordIds(activeKey, currentWordIndex);
+          } else {
+            newActiveIds = getAllAyahWordIds(activeKey);
+          }
+        }
+
+        const prev = prevActiveIdsRef.current;
+        const changed =
+          newActiveIds.length !== prev.length ||
+          newActiveIds.some((id, i) => id !== prev[i]);
+        if (changed) {
+          prevActiveIdsRef.current = newActiveIds;
+          setPlaybackActiveIds(newActiveIds);
+        }
 
         if (ct >= endSec - 0.08 || audio.ended) {
           audio.pause();

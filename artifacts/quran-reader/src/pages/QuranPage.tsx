@@ -339,6 +339,7 @@ function SurahReadingView({
   const containerRef = useRef<HTMLDivElement>(null);
   const fontsReady = useQpcFonts(ayahs);
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
+  const playbackActiveIds = useQuranStore((s) => s.playbackActiveIds);
 
   // Brush pointer handlers — must be called before any early return
   const brush = useSmartBrush("reading", containerRef as RefObject<HTMLElement | null>);
@@ -358,6 +359,25 @@ function SurahReadingView({
     });
     prevSelectedRef.current = next;
   }, [selectedWordIds]);
+
+  // Reactive DOM sync: keep .word-playing classes in step with playbackActiveIds.
+  // Query the DOM directly each time so the update is always idempotent —
+  // no ref bookkeeping means no stale-state bugs when modes toggle rapidly.
+  useEffect(() => {
+    document
+      .querySelectorAll<HTMLElement>(".quran-word.word-playing")
+      .forEach((el) => el.classList.remove("word-playing"));
+    playbackActiveIds.forEach((id) => {
+      document.getElementById(id)?.classList.add("word-playing");
+    });
+
+    if (playbackActiveIds.length > 0) {
+      const firstEl = document.getElementById(playbackActiveIds[0]);
+      if (firstEl) {
+        firstEl.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      }
+    }
+  }, [playbackActiveIds]);
 
   const surahInfo = chapter
     ? {

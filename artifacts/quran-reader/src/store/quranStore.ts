@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { SurahData, MushafPageData, Settings, ViewMode, BrushFineness } from "../types/quran";
 
+export type PlaybackHighlightMode = "line" | "ayah";
+
 interface QuranStore {
   currentSurah: number;
   currentPage: number;
@@ -15,6 +17,9 @@ interface QuranStore {
   selectedWordIds: string[];
   brushFineness: BrushFineness;
 
+  playbackHighlightMode: PlaybackHighlightMode;
+  playbackActiveIds: string[];
+
   setCurrentSurah: (surah: number) => void;
   setCurrentPage: (page: number) => void;
   setViewMode: (mode: ViewMode) => void;
@@ -27,6 +32,8 @@ interface QuranStore {
   setBrushFineness: (fineness: BrushFineness) => void;
   clearSelection: () => void;
   confirmSelection: () => void;
+  setPlaybackHighlightMode: (mode: PlaybackHighlightMode) => void;
+  setPlaybackActiveIds: (ids: string[]) => void;
 }
 
 export const useQuranStore = create<QuranStore>()(
@@ -47,6 +54,9 @@ export const useQuranStore = create<QuranStore>()(
 
       selectedWordIds: [],
       brushFineness: "word",
+
+      playbackHighlightMode: "ayah",
+      playbackActiveIds: [],
 
       setCurrentSurah: (surah) =>
         set({ currentSurah: Math.max(1, Math.min(114, surah)) }),
@@ -82,10 +92,11 @@ export const useQuranStore = create<QuranStore>()(
       setBrushFineness: (brushFineness) => set({ brushFineness }),
       clearSelection: () => set({ selectedWordIds: [] }),
       confirmSelection: () => {
-        // Stub — future task will persist the selection (bookmark / copy etc.)
-        // For now just clear so the UI returns to neutral.
         set({ selectedWordIds: [] });
       },
+
+      setPlaybackHighlightMode: (playbackHighlightMode) => set({ playbackHighlightMode }),
+      setPlaybackActiveIds: (playbackActiveIds) => set({ playbackActiveIds }),
     }),
     {
       name: "quran-reader-store",
@@ -95,6 +106,7 @@ export const useQuranStore = create<QuranStore>()(
         viewMode: state.viewMode,
         settings: state.settings,
         brushFineness: state.brushFineness,
+        playbackHighlightMode: state.playbackHighlightMode,
       }),
     }
   )

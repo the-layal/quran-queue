@@ -2,6 +2,8 @@ import { useEffect, useCallback } from "react";
 import { Play, Pause, Repeat, Music2 } from "lucide-react";
 import type { ChapterMap } from "../types/quran";
 import { useSelectionAudio } from "../hooks/useSelectionAudio";
+import { useQuranStore } from "../store/quranStore";
+import type { PlaybackHighlightMode } from "../store/quranStore";
 
 interface AudioControlBarProps {
   chapters: ChapterMap;
@@ -19,6 +21,9 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
     pause,
     toggleLoop,
   } = useSelectionAudio();
+
+  const playbackHighlightMode = useQuranStore((s) => s.playbackHighlightMode);
+  const setPlaybackHighlightMode = useQuranStore((s) => s.setPlaybackHighlightMode);
 
   const handlePlayPause = useCallback(() => {
     if (isPlaying) {
@@ -90,6 +95,11 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
     );
   }
 
+  const modeOptions: { value: PlaybackHighlightMode; label: string }[] = [
+    { value: "line", label: "Line" },
+    { value: "ayah", label: "Ayah" },
+  ];
+
   return (
     <div
       className={barBase}
@@ -122,6 +132,29 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
             style={{ width: `${Math.round(progress * 100)}%` }}
           />
         </div>
+      </div>
+
+      <div
+        className="flex items-center rounded-lg border border-border overflow-hidden flex-shrink-0"
+        style={{ pointerEvents: "auto" }}
+        role="group"
+        aria-label="Highlight mode"
+      >
+        {modeOptions.map(({ value, label }) => (
+          <button
+            key={value}
+            onClick={() => setPlaybackHighlightMode(value)}
+            className={`px-2 py-1 text-xs font-medium transition-colors ${
+              playbackHighlightMode === value
+                ? "bg-primary/15 text-primary"
+                : "text-muted-foreground hover:bg-muted"
+            }`}
+            aria-pressed={playbackHighlightMode === value}
+            title={`Highlight by ${label.toLowerCase()}`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <button

@@ -35,7 +35,15 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
 
   // ── Smart Brush ─────────────────────────────────────────────────────────
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
+  const playbackActiveIds = useQuranStore((s) => s.playbackActiveIds);
   const brush = useSmartBrush("mushaf", containerRef as RefObject<HTMLElement | null>);
+
+  const svgWordQuery = (nid: string, container: Element) => {
+    const [s, a, w] = nid.split(":");
+    return container.querySelector<Element>(
+      `g[data-surah="${s.padStart(3, "0")}"][data-aya="${a.padStart(3, "0")}"][data-word-index-in-ayah="${w}"]`
+    );
+  };
 
   // Sync .md-word-selected classes whenever the Zustand selection changes
   // (covers both drag updates and external clear/reset).
@@ -46,18 +54,36 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     const next = new Set(selectedWordIds);
     const prev = prevSvgSelectedRef.current;
 
-    const setClass = (nid: string, add: boolean) => {
-      const [s, a, w] = nid.split(":");
-      const el = container.querySelector<Element>(
-        `g[data-surah="${s.padStart(3, "0")}"][data-aya="${a.padStart(3, "0")}"][data-word-index-in-ayah="${w}"]`
-      );
-      el?.classList.toggle("md-word-selected", add);
-    };
-
-    prev.forEach((id) => { if (!next.has(id)) setClass(id, false); });
-    next.forEach((id) => { if (!prev.has(id)) setClass(id, true); });
+    prev.forEach((id) => {
+      if (!next.has(id)) svgWordQuery(id, container)?.classList.toggle("md-word-selected", false);
+    });
+    next.forEach((id) => {
+      if (!prev.has(id)) svgWordQuery(id, container)?.classList.toggle("md-word-selected", true);
+    });
     prevSvgSelectedRef.current = next;
   }, [selectedWordIds]);
+
+  // Sync .md-word-playing classes whenever playbackActiveIds changes.
+  // Query the container directly each time so the update is always idempotent —
+  // no ref bookkeeping means no stale-state bugs when modes toggle rapidly.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    container
+      .querySelectorAll<Element>(".md-word-playing")
+      .forEach((el) => el.classList.remove("md-word-playing"));
+    playbackActiveIds.forEach((id) => {
+      svgWordQuery(id, container)?.classList.add("md-word-playing");
+    });
+
+    if (playbackActiveIds.length > 0) {
+      const firstEl = svgWordQuery(playbackActiveIds[0], container);
+      if (firstEl) {
+        firstEl.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      }
+    }
+  }, [playbackActiveIds]);
 
   // Clear SVG classes and cached viewBox when page changes
   useEffect(() => {

@@ -450,6 +450,22 @@ input[type="number"]::-webkit-outer-spin-button {
   opacity: 0.9;
 }
 
+/* Playback follow-along highlight — reading mode */
+.quran-word.word-playing {
+  background-color: hsl(38 95% 64% / 0.32);
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px hsl(38 90% 52% / 0.45);
+}
+
+/* Playback follow-along highlight — SVG Mushaf mode */
+.mushaf-svg-container g[data-word-index-in-ayah].md-word-playing path {
+  fill: hsl(38 75% 38%);
+}
+
+.dark .mushaf-svg-container g[data-word-index-in-ayah].md-word-playing path {
+  fill: hsl(38 85% 68%);
+}
+
 /* Hover highlight rect injected via JS (visual only, no pointer events) */
 .mushaf-svg-container .md-hover-rect {
   fill: hsl(var(--accent) / 0.45);
