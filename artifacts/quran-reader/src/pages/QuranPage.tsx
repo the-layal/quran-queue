@@ -167,11 +167,11 @@ function SurahSelectorButton({
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-1.5 hover:bg-muted rounded-lg px-2 py-1 transition-colors max-w-[60vw]"
+      className="flex items-baseline justify-center gap-1.5 hover:bg-muted rounded-lg px-2 py-1 transition-colors w-full"
       aria-label="Select surah"
     >
       <span
-        className="font-quran text-base text-foreground leading-none truncate"
+        className="font-quran text-base text-foreground leading-none whitespace-nowrap"
         dir="rtl"
         lang="ar"
       >
@@ -180,7 +180,7 @@ function SurahSelectorButton({
       <span className="text-xs text-muted-foreground tabular-nums font-medium whitespace-nowrap flex-shrink-0">
         {surahNumber} / {TOTAL_SURAHS}
       </span>
-      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 self-center" />
     </button>
   );
 }
@@ -595,7 +595,7 @@ export default function QuranPage() {
       style={isMushaf ? { height: "100dvh", overflow: "hidden" } : undefined}
     >
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-30 bg-background/90 backdrop-blur-sm border-b border-border flex items-center justify-between px-4 py-2.5">
+      <header className="sticky top-0 z-30 bg-background/90 backdrop-blur-sm border-b border-border grid grid-cols-[auto_1fr_auto] items-center px-4 py-2.5">
         <Link href="/analytics">
           <button
             className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
