@@ -140,7 +140,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const handleMouseLeave = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const related = e.relatedTarget as Element | null;
-      if (related && e.currentTarget.contains(related)) {
+      if (related instanceof Node && e.currentTarget.contains(related)) {
         const wordEl = getWordGroup(related, e.currentTarget);
         if (wordEl) return;
       }
