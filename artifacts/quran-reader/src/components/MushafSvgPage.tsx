@@ -13,7 +13,14 @@ const SVG_CACHE = new Map<number, string>();
 // Inline fill applied to SVG path elements for selected words.
 // Mirrors the .md-word-hovered path CSS rule; inline style ensures visibility
 // regardless of CSS cascade on dynamically-injected SVG content.
-const SVG_SEL_FILL = "hsl(153 35% 30%)";
+// Colour is theme-aware so contrast is correct in both light and dark mode.
+const SVG_SEL_FILL_LIGHT = "hsl(153 35% 30%)";
+const SVG_SEL_FILL_DARK  = "hsl(153 50% 68%)";
+function getSvgSelFill(): string {
+  return document.documentElement.classList.contains("dark")
+    ? SVG_SEL_FILL_DARK
+    : SVG_SEL_FILL_LIGHT;
+}
 
 async function fetchSvgPage(pageNum: number): Promise<string> {
   if (SVG_CACHE.has(pageNum)) return SVG_CACHE.get(pageNum)!;
@@ -88,7 +95,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
         wordEl.classList.add("md-word-hovered");
         // Set inline fill on every path so the colour is guaranteed to appear
         // regardless of CSS cascade on dynamically-injected SVG content.
-        wordEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = SVG_SEL_FILL; });
+        wordEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = getSvgSelFill(); });
         // Only inject a selection rect if one isn't already there.
         if (!wordEl.querySelector(".md-hover-rect[data-sel]")) {
           try {

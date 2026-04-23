@@ -55,7 +55,14 @@ function applyReadingClass(id: string, add: boolean) {
 // Matches the CSS rule for .md-word-hovered path so inline style and class
 // always agree; using inline style guarantees visibility regardless of CSS
 // cascade issues on dynamically-injected SVG content.
-const SVG_SEL_FILL = "hsl(153 35% 30%)";
+// Theme-aware so contrast is correct in both light and dark mode.
+const SVG_SEL_FILL_LIGHT = "hsl(153 35% 30%)";
+const SVG_SEL_FILL_DARK  = "hsl(153 50% 68%)";
+function getSvgSelFill(): string {
+  return document.documentElement.classList.contains("dark")
+    ? SVG_SEL_FILL_DARK
+    : SVG_SEL_FILL_LIGHT;
+}
 
 function applySvgClass(nid: string, add: boolean, container: Element) {
   const [s, a, w] = nid.split(":");
@@ -66,7 +73,7 @@ function applySvgClass(nid: string, add: boolean, container: Element) {
   if (!el) return;
   if (add) {
     el.classList.add("md-word-hovered");
-    el.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = SVG_SEL_FILL; });
+    el.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = getSvgSelFill(); });
   } else {
     // Only remove if there is no pinned selection rect — the word may still be
     // in the committed Zustand selection even as the brush moves away.
