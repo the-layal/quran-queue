@@ -1,5 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, type RefObject } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
+import { useQuranStore } from "../store/quranStore";
+import { useSmartBrush } from "../hooks/useSmartBrush";
 
 interface MushafSvgPageProps {
   pageNumber: number;
@@ -28,6 +30,38 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const hoverRectRef   = useRef<SVGRectElement | null>(null);
   const hoverWordRef   = useRef<Element | null>(null);
   const [availH, setAvailH] = useState(0);
+
+  // ── Smart Brush ─────────────────────────────────────────────────────────
+  const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
+  const brush = useSmartBrush("mushaf", containerRef as RefObject<HTMLElement | null>);
+
+  // Sync .md-word-selected classes whenever the Zustand selection changes
+  // (covers both drag updates and external clear/reset).
+  const prevSvgSelectedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const next = new Set(selectedWordIds);
+    const prev = prevSvgSelectedRef.current;
+
+    const setClass = (nid: string, add: boolean) => {
+      const [s, a, w] = nid.split(":");
+      container
+        .querySelector<Element>(
+          `g[data-surah="${s.padStart(3, "0")}"][data-aya="${a.padStart(3, "0")}"][data-word-index-in-ayah="${w}"]`
+        )
+        ?.classList.toggle("md-word-selected", add);
+    };
+
+    prev.forEach((id) => { if (!next.has(id)) setClass(id, false); });
+    next.forEach((id) => { if (!prev.has(id)) setClass(id, true); });
+    prevSvgSelectedRef.current = next;
+  }, [selectedWordIds]);
+
+  // Clear SVG classes when page changes
+  useEffect(() => {
+    prevSvgSelectedRef.current = new Set();
+  }, [pageNumber]);
 
   // ── Measure wrapper height (content-box, padding-excluded) ──────────────
   useLayoutEffect(() => {
@@ -305,6 +339,10 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
             onClick={handleClick}
             onMouseOver={handleMouseOver}
             onMouseLeave={handleMouseLeave}
+            onPointerDown={brush.onPointerDown}
+            onPointerMove={brush.onPointerMove}
+            onPointerUp={brush.onPointerUp}
+            onPointerCancel={brush.onPointerCancel}
             dangerouslySetInnerHTML={{ __html: svgText }}
           />
         </div>

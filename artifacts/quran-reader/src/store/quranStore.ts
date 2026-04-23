@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { SurahData, MushafPageData, Settings, ViewMode } from "../types/quran";
+import type { SurahData, MushafPageData, Settings, ViewMode, BrushFineness } from "../types/quran";
 
 interface QuranStore {
   currentSurah: number;
@@ -12,6 +12,9 @@ interface QuranStore {
   isLoading: boolean;
   error: string | null;
 
+  selectedWordIds: string[];
+  brushFineness: BrushFineness;
+
   setCurrentSurah: (surah: number) => void;
   setCurrentPage: (page: number) => void;
   setViewMode: (mode: ViewMode) => void;
@@ -20,6 +23,9 @@ interface QuranStore {
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   updateSettings: (settings: Partial<Settings>) => void;
+  setSelectedWordIds: (ids: string[]) => void;
+  setBrushFineness: (fineness: BrushFineness) => void;
+  clearSelection: () => void;
 }
 
 export const useQuranStore = create<QuranStore>()(
@@ -37,6 +43,9 @@ export const useQuranStore = create<QuranStore>()(
       },
       isLoading: false,
       error: null,
+
+      selectedWordIds: [],
+      brushFineness: "word",
 
       setCurrentSurah: (surah) =>
         set({ currentSurah: Math.max(1, Math.min(114, surah)) }),
@@ -67,6 +76,10 @@ export const useQuranStore = create<QuranStore>()(
         set((state) => ({
           settings: { ...state.settings, ...settings },
         })),
+
+      setSelectedWordIds: (ids) => set({ selectedWordIds: ids }),
+      setBrushFineness: (brushFineness) => set({ brushFineness }),
+      clearSelection: () => set({ selectedWordIds: [] }),
     }),
     {
       name: "quran-reader-store",
@@ -75,6 +88,7 @@ export const useQuranStore = create<QuranStore>()(
         currentPage: state.currentPage,
         viewMode: state.viewMode,
         settings: state.settings,
+        brushFineness: state.brushFineness,
       }),
     }
   )

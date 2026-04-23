@@ -158,11 +158,22 @@
   line-height: inherit;
   cursor: pointer;
   border-radius: 3px;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.1s ease;
+  /* Prevent touch scroll from starting on a word — swipe on a word = brush */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .quran-word:hover {
   background-color: hsl(var(--accent));
+}
+
+/* Smart Brush — highlighted word in reading mode */
+.quran-word.word-selected {
+  background-color: hsl(var(--primary) / 0.18);
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.25);
 }
 
 .quran-word.highlighted {
@@ -419,6 +430,12 @@ input[type="number"]::-webkit-outer-spin-button {
   fill: hsl(153 38% 32%);
 }
 
+/* Smart Brush — selected word(s) in mushaf SVG mode */
+.mushaf-svg-container g[data-word-index-in-ayah].md-word-selected path {
+  fill: hsl(153 45% 42%);
+  opacity: 0.85;
+}
+
 /* ── Dark mode SVG text — flip fills to light so text is legible on dark parchment */
 .dark .mushaf-svg-container path {
   fill: hsl(40 15% 88%);
@@ -426,6 +443,11 @@ input[type="number"]::-webkit-outer-spin-button {
 
 .dark .mushaf-svg-container g[data-word-index-in-ayah].md-word-active path {
   fill: hsl(153 45% 62%);
+}
+
+.dark .mushaf-svg-container g[data-word-index-in-ayah].md-word-selected path {
+  fill: hsl(153 50% 68%);
+  opacity: 0.9;
 }
 
 /* Transparent hit-rect covering the full word bounding box (pointer events only) */

@@ -1,3 +1,5 @@
+export type BrushFineness = "word" | "line" | "ayah";
+
 export interface AudioSegment {
   wordIndex: number;
   startMs: number;

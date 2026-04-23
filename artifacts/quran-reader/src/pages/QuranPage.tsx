@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState, useRef } from "react";
+import { useEffect, useCallback, useState, useRef, type RefObject } from "react";
 import { Link } from "wouter";
 import {
   ChevronLeft,
@@ -25,6 +25,8 @@ import {
 import type { QuranAyah, ChapterMap, ChapterInfo } from "../types/quran";
 import SurahHeader from "../components/SurahHeader";
 import MushafSvgPage from "../components/MushafSvgPage";
+import BrushFinenessToggle from "../components/BrushFinenessToggle";
+import { useSmartBrush } from "../hooks/useSmartBrush";
 
 // ── Surah picker modal ────────────────────────────────────────────────────────
 
@@ -333,8 +335,28 @@ function SurahReadingView({
   fontSize: number;
 }) {
   const firstAyah = ayahs[0];
-
+  const containerRef = useRef<HTMLDivElement>(null);
   const fontsReady = useQpcFonts(ayahs);
+  const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
+
+  // Brush pointer handlers — must be called before any early return
+  const brush = useSmartBrush("reading", containerRef as RefObject<HTMLElement | null>);
+
+  // Reactive DOM sync: keep .word-selected classes in step with the Zustand store.
+  // This handles external changes (e.g. the "Clear" button) after the drag hook
+  // has already applied imperative classes during the gesture itself.
+  const prevSelectedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const next = new Set(selectedWordIds);
+    const prev = prevSelectedRef.current;
+    prev.forEach((id) => {
+      if (!next.has(id)) document.getElementById(id)?.classList.remove("word-selected");
+    });
+    next.forEach((id) => {
+      if (!prev.has(id)) document.getElementById(id)?.classList.add("word-selected");
+    });
+    prevSelectedRef.current = next;
+  }, [selectedWordIds]);
 
   const surahInfo = chapter
     ? {
@@ -359,7 +381,14 @@ function SurahReadingView({
   }
 
   return (
-    <div className="surah-reading-view max-w-2xl mx-auto w-full px-5 sm:px-10 py-4">
+    <div
+      ref={containerRef}
+      className="surah-reading-view max-w-2xl mx-auto w-full px-5 sm:px-10 py-4"
+      onPointerDown={brush.onPointerDown}
+      onPointerMove={brush.onPointerMove}
+      onPointerUp={brush.onPointerUp}
+      onPointerCancel={brush.onPointerCancel}
+    >
       {surahInfo && <SurahHeader surah={surahInfo} />}
 
       {firstAyah && (
@@ -555,6 +584,7 @@ export default function QuranPage() {
     setLoading,
     setError,
     updateSettings,
+    clearSelection,
   } = useQuranStore();
 
   const [darkMode, setDarkMode] = useState(() =>
@@ -634,22 +664,24 @@ export default function QuranPage() {
 
   const goNextSurah = () => {
     if (currentSurah < TOTAL_SURAHS) {
+      clearSelection();
       setCurrentSurah(currentSurah + 1);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
   const goPrevSurah = () => {
     if (currentSurah > 1) {
+      clearSelection();
       setCurrentSurah(currentSurah - 1);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
   const goNextPage = () => {
-    if (currentPage < TOTAL_PAGES) setCurrentPage(currentPage + 1);
+    if (currentPage < TOTAL_PAGES) { clearSelection(); setCurrentPage(currentPage + 1); }
   };
   const goPrevPage = () => {
-    if (currentPage > 1) setCurrentPage(currentPage - 1);
+    if (currentPage > 1) { clearSelection(); setCurrentPage(currentPage - 1); }
   };
 
   const zoomIn = () => {
@@ -784,6 +816,11 @@ export default function QuranPage() {
 
       {/* ── Footer navigation ───────────────────────────────────────────── */}
       <footer className="sticky bottom-0 z-30 bg-background/90 backdrop-blur-sm border-t border-border">
+        {/* ── Brush fineness toggle — shown in both modes ── */}
+        <div className="flex items-center justify-center py-1.5 border-b border-border/40">
+          <BrushFinenessToggle />
+        </div>
+
         {isMushaf ? (
           <div className="max-w-lg mx-auto">
             {/* ── Zoom row ── */}
