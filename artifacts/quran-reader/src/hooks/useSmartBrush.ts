@@ -2,50 +2,7 @@ import { useCallback, useRef, type RefObject } from "react";
 import { useQuranStore } from "../store/quranStore";
 import type { BrushFineness } from "../types/quran";
 
-// ── Reading-mode helpers ──────────────────────────────────────────────────────
-
-function getReadingWordEl(el: Element): HTMLElement | null {
-  return (el as HTMLElement).closest?.(".quran-word") as HTMLElement | null;
-}
-
-function readingExpand(wordEl: HTMLElement, fineness: BrushFineness): string[] {
-  const id = wordEl.id;
-  if (!id) return [];
-
-  if (fineness === "word") return [id];
-
-  if (fineness === "line") {
-    const container = wordEl.closest(".quran-text");
-    if (!container) return [id];
-    const r = wordEl.getBoundingClientRect();
-    const midY = r.top + r.height / 2;
-    const tol = Math.max(r.height * 0.55, 6);
-    const ids: string[] = [];
-    container.querySelectorAll<HTMLElement>(".quran-word[id]").forEach((w) => {
-      const wr = w.getBoundingClientRect();
-      if (Math.abs(wr.top + wr.height / 2 - midY) <= tol && w.id) {
-        ids.push(w.id);
-      }
-    });
-    return ids.length > 0 ? ids : [id];
-  }
-
-  // ayah
-  const s = wordEl.dataset.surah;
-  const a = wordEl.dataset.ayah;
-  if (!s || !a) return [id];
-  const ids: string[] = [];
-  document
-    .querySelectorAll<HTMLElement>(
-      `.quran-word[data-surah="${s}"][data-ayah="${a}"][id]`
-    )
-    .forEach((w) => {
-      if (w.id) ids.push(w.id);
-    });
-  return ids.length > 0 ? ids : [id];
-}
-
-// ── SVG-mode helpers ──────────────────────────────────────────────────────────
+// ── SVG helper types & utilities ─────────────────────────────────────────────
 
 interface SvgInfo {
   normalizedId: string;
@@ -87,36 +44,7 @@ function findSvgInfoAtPoint(clientX: number, clientY: number, container: Element
   return null;
 }
 
-function svgExpand(info: SvgInfo, fineness: BrushFineness, container: Element): string[] {
-  if (fineness === "word") return [info.normalizedId];
-
-  if (fineness === "line") {
-    const ids: string[] = [];
-    container
-      .querySelectorAll<Element>(
-        `g[data-line-number="${info.lineNumber}"][data-word-index-in-ayah]`
-      )
-      .forEach((g) => {
-        const i = extractSvgInfo(g);
-        if (i) ids.push(i.normalizedId);
-      });
-    return ids.length > 0 ? ids : [info.normalizedId];
-  }
-
-  // ayah
-  const ids: string[] = [];
-  container
-    .querySelectorAll<Element>(
-      `g[data-surah="${info.rawSurah}"][data-aya="${info.rawAya}"][data-word-index-in-ayah]`
-    )
-    .forEach((g) => {
-      const i = extractSvgInfo(g);
-      if (i) ids.push(i.normalizedId);
-    });
-  return ids.length > 0 ? ids : [info.normalizedId];
-}
-
-// ── Imperative DOM class helpers (used inside the hook for zero-latency feel) ─
+// ── Imperative DOM class helpers ──────────────────────────────────────────────
 
 function applyReadingClass(id: string, add: boolean) {
   document.getElementById(id)?.classList.toggle("word-selected", add);
@@ -133,6 +61,134 @@ function applySvgClass(nid: string, add: boolean, container: Element) {
     ?.classList.toggle("md-word-selected", add);
 }
 
+// ── Ordered unit index builders ───────────────────────────────────────────────
+// A "unit" is the group of word IDs selected atomically together.
+// For word fineness: one unit = one word.
+// For line fineness: one unit = all words on that visual line.
+// For ayah fineness: one unit = all words in that ayah.
+
+type Unit = string[];
+
+function buildReadingUnits(container: Element, fineness: BrushFineness): Unit[] {
+  const allWords = Array.from(
+    container.querySelectorAll<HTMLElement>(".quran-word[id]")
+  ).filter((w) => !!w.id);
+
+  if (fineness === "word") {
+    return allWords.map((w) => [w.id]);
+  }
+
+  if (fineness === "line") {
+    // Group by visual line using y-midpoint proximity
+    const lineKeys: number[] = [];
+    const lineMap = new Map<number, string[]>();
+
+    allWords.forEach((w) => {
+      const r = w.getBoundingClientRect();
+      const midY = r.top + r.height / 2;
+      const tol = Math.max(r.height * 0.55, 6);
+
+      let found = -1;
+      for (const key of lineKeys) {
+        if (Math.abs(key - midY) <= tol) {
+          found = key;
+          break;
+        }
+      }
+      if (found === -1) {
+        lineKeys.push(midY);
+        lineMap.set(midY, [w.id]);
+      } else {
+        lineMap.get(found)!.push(w.id);
+      }
+    });
+
+    return lineKeys.map((k) => lineMap.get(k)!);
+  }
+
+  // ayah fineness — group by surah:ayah (DOM order is already ayah-ordered)
+  const ayahKeys: string[] = [];
+  const ayahMap = new Map<string, string[]>();
+
+  allWords.forEach((w) => {
+    const s = w.dataset.surah;
+    const a = w.dataset.ayah;
+    if (!s || !a) return;
+    const key = `${s}:${a}`;
+    if (!ayahMap.has(key)) {
+      ayahMap.set(key, []);
+      ayahKeys.push(key);
+    }
+    ayahMap.get(key)!.push(w.id);
+  });
+
+  return ayahKeys.map((k) => ayahMap.get(k)!);
+}
+
+function buildSvgUnits(container: Element, fineness: BrushFineness): Unit[] {
+  const allGroups = Array.from(
+    container.querySelectorAll<Element>(
+      "g[data-surah][data-aya][data-word-index-in-ayah]"
+    )
+  );
+
+  const parsed = allGroups
+    .map((g) => {
+      const info = extractSvgInfo(g);
+      return info ? { info } : null;
+    })
+    .filter(Boolean) as { info: SvgInfo }[];
+
+  // Stable numeric sort: surah → aya → wordIndex
+  parsed.sort((a, b) => {
+    const [as_, aa, aw] = a.info.normalizedId.split(":").map(Number);
+    const [bs, ba, bw] = b.info.normalizedId.split(":").map(Number);
+    if (as_ !== bs) return as_ - bs;
+    if (aa !== ba) return aa - ba;
+    return aw - bw;
+  });
+
+  if (fineness === "word") {
+    return parsed.map((p) => [p.info.normalizedId]);
+  }
+
+  if (fineness === "line") {
+    const lineKeys: string[] = [];
+    const lineMap = new Map<string, string[]>();
+    parsed.forEach(({ info }) => {
+      const key = info.lineNumber;
+      if (!lineMap.has(key)) {
+        lineMap.set(key, []);
+        lineKeys.push(key);
+      }
+      lineMap.get(key)!.push(info.normalizedId);
+    });
+    return lineKeys.map((k) => lineMap.get(k)!);
+  }
+
+  // ayah fineness
+  const ayahKeys: string[] = [];
+  const ayahMap = new Map<string, string[]>();
+  parsed.forEach(({ info }) => {
+    const [s, a] = info.normalizedId.split(":");
+    const key = `${s}:${a}`;
+    if (!ayahMap.has(key)) {
+      ayahMap.set(key, []);
+      ayahKeys.push(key);
+    }
+    ayahMap.get(key)!.push(info.normalizedId);
+  });
+  return ayahKeys.map((k) => ayahMap.get(k)!);
+}
+
+// Find which unit index contains a given word ID
+function findUnitIndex(units: Unit[], wordId: string): number {
+  for (let i = 0; i < units.length; i++) {
+    if (units[i].includes(wordId)) return i;
+  }
+  return -1;
+}
+
 // ── Main hook ─────────────────────────────────────────────────────────────────
 
 export function useSmartBrush(
@@ -144,10 +200,6 @@ export function useSmartBrush(
   const setSelectedWordIds = useQuranStore((s) => s.setSelectedWordIds);
 
   const isDragging = useRef(false);
-  // Words touched in the current drag gesture
-  const dragSet = useRef<Set<string>>(new Set());
-  // Snapshot of selection at the moment the drag started
-  const initialSelectedRef = useRef<Set<string>>(new Set());
   // True when the drag gesture should remove words (pointer started on a selected word)
   const isDeselecting = useRef(false);
   // Keep fineness in a ref so pointermove callbacks see the latest value without re-creating
@@ -157,14 +209,30 @@ export function useSmartBrush(
   const selectedSetRef = useRef<Set<string>>(new Set());
   selectedSetRef.current = new Set(selectedWordIds);
 
-  // Returns the single word-ID directly under the pointer, WITHOUT fineness expansion.
-  // Used to determine add-vs-deselect mode before we expand by line/ayah.
-  const resolveAnchorId = useCallback(
+  // ── Contiguous-selection state (add mode) ──────────────────────────────────
+  // Ordered units built once per gesture
+  const orderedUnitsRef = useRef<Unit[]>([]);
+  // Index of the anchor unit (where the gesture started)
+  const anchorIndexRef = useRef<number>(-1);
+  // Words contributed by the CURRENT gesture's range (excludes base)
+  const activeRangeIdsRef = useRef<Set<string>>(new Set());
+  // Pre-existing selection at gesture start — preserved across the gesture
+  const baseIdsRef = useRef<Set<string>>(new Set());
+
+  // ── Deselect-mode state ────────────────────────────────────────────────────
+  // Snapshot of selection at gesture start (for deselect mode)
+  const initialSelectedRef = useRef<Set<string>>(new Set());
+  // Words removed so far in this deselect gesture
+  const deselectedSetRef = useRef<Set<string>>(new Set());
+
+  // Resolve the single word ID directly under the pointer (no fineness expansion).
+  // Used to decide add-vs-deselect mode.
+  const resolveAnchorWordId = useCallback(
     (clientX: number, clientY: number): string | null => {
       if (mode === "reading") {
         const el = document.elementFromPoint(clientX, clientY);
         if (!el) return null;
-        const wordEl = getReadingWordEl(el);
+        const wordEl = (el as HTMLElement).closest?.(".quran-word") as HTMLElement | null;
         return wordEl?.id ?? null;
       } else {
         const container = containerRef.current;
@@ -176,107 +244,195 @@ export function useSmartBrush(
     [mode, containerRef]
   );
 
-  const resolveIds = useCallback(
-    (clientX: number, clientY: number): string[] => {
-      const fineness = finenessRef.current;
+  // Resolve the unit index under the pointer using the already-built ordered list.
+  const resolveCurrentUnitIndex = useCallback(
+    (clientX: number, clientY: number): number => {
+      const units = orderedUnitsRef.current;
+      if (units.length === 0) return -1;
 
       if (mode === "reading") {
         const el = document.elementFromPoint(clientX, clientY);
-        if (!el) return [];
-        const wordEl = getReadingWordEl(el);
-        if (!wordEl) return [];
-        return readingExpand(wordEl, fineness);
+        if (!el) return -1;
+        const wordEl = (el as HTMLElement).closest?.(".quran-word") as HTMLElement | null;
+        if (!wordEl?.id) return -1;
+        return findUnitIndex(units, wordEl.id);
       } else {
-        // SVG mode: bounding-box scan is reliable across all browsers during
-        // pointer capture — elementFromPoint is not used here at all.
         const container = containerRef.current;
-        if (!container) return [];
+        if (!container) return -1;
         const info = findSvgInfoAtPoint(clientX, clientY, container);
-        if (!info) return [];
-        return svgExpand(info, fineness, container);
+        if (!info) return -1;
+        return findUnitIndex(units, info.normalizedId);
       }
     },
     [mode, containerRef]
   );
 
-  const commitIds = useCallback(
-    (ids: string[]) => {
+  // Apply a contiguous range of units as the current gesture's contribution,
+  // preserving the base (pre-gesture) selection. Diffs only the gesture portion
+  // to toggle DOM classes for changed elements only.
+  const applyRange = useCallback(
+    (fromIdx: number, toIdx: number) => {
+      const units = orderedUnitsRef.current;
       const container = containerRef.current;
-      let changed = false;
+      const base = baseIdsRef.current;
+      const lo = Math.min(fromIdx, toIdx);
+      const hi = Math.max(fromIdx, toIdx);
 
-      if (isDeselecting.current) {
-        // DESELECT mode: remove words that were selected when the drag started
-        ids.forEach((id) => {
-          if (!dragSet.current.has(id) && initialSelectedRef.current.has(id)) {
-            dragSet.current.add(id);
-            changed = true;
-            if (mode === "reading") applyReadingClass(id, false);
-            else if (container) applySvgClass(id, false, container);
-          }
-        });
-        if (changed) {
-          setSelectedWordIds(
-            [...initialSelectedRef.current].filter((id) => !dragSet.current.has(id))
-          );
-        }
-      } else {
-        // ADD mode: accumulate words into the ongoing selection
-        ids.forEach((id) => {
-          if (!dragSet.current.has(id)) {
-            dragSet.current.add(id);
-            changed = true;
-            // Only apply DOM class for words not already highlighted
-            if (!initialSelectedRef.current.has(id)) {
-              if (mode === "reading") applyReadingClass(id, true);
-              else if (container) applySvgClass(id, true, container);
-            }
-          }
-        });
-        if (changed) setSelectedWordIds([...dragSet.current]);
+      // Build the new range for this gesture
+      const newRangeIds = new Set<string>();
+      for (let i = lo; i <= hi; i++) {
+        for (const id of units[i]) newRangeIds.add(id);
       }
+
+      const prevRangeIds = activeRangeIdsRef.current;
+
+      // Remove IDs that left the gesture range and are not in the base selection
+      for (const id of prevRangeIds) {
+        if (!newRangeIds.has(id) && !base.has(id)) {
+          if (mode === "reading") applyReadingClass(id, false);
+          else if (container) applySvgClass(id, false, container);
+        }
+      }
+
+      // Add IDs that entered the gesture range and are not already shown via base
+      for (const id of newRangeIds) {
+        if (!prevRangeIds.has(id) && !base.has(id)) {
+          if (mode === "reading") applyReadingClass(id, true);
+          else if (container) applySvgClass(id, true, container);
+        }
+      }
+
+      activeRangeIdsRef.current = newRangeIds;
+      // Publish the union of base + current gesture range
+      setSelectedWordIds([...new Set([...base, ...newRangeIds])]);
     },
     [mode, containerRef, setSelectedWordIds]
   );
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
-      // Resolve the single anchor word first (no fineness expansion) to correctly
-      // decide add vs. deselect mode: only the directly-tapped word counts.
-      const anchorId = resolveAnchorId(e.clientX, e.clientY);
-      if (!anchorId) return; // Not on a word — no-op, preserves existing selection
+      const anchorWordId = resolveAnchorWordId(e.clientX, e.clientY);
+      if (!anchorWordId) return; // Not on a word — preserve existing selection
 
-      const ids = resolveIds(e.clientX, e.clientY);
-      if (ids.length === 0) return;
-
-      // Snapshot the current selection; decide add vs. deselect mode
       const snap = selectedSetRef.current;
       initialSelectedRef.current = new Set(snap);
-      // Use the anchor word — not the expanded set — to decide the gesture mode.
-      // This prevents line/ayah expansion from accidentally entering deselect mode
-      // when an adjacent word happens to be selected but the tapped word is not.
-      isDeselecting.current = snap.has(anchorId);
+      isDeselecting.current = snap.has(anchorWordId);
 
-      // Prevent text-selection (reading) and touch-scroll (SVG) for both modes.
-      // In SVG mode, click events won't fire after this — the MushafSvgPage
-      // wrapper handles single-tap (active-word toggle) via onPointerUp detection.
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
       isDragging.current = true;
-      // In add mode, start from the existing selection so the drag accumulates
-      dragSet.current = isDeselecting.current ? new Set() : new Set(snap);
-      commitIds(ids);
+
+      if (isDeselecting.current) {
+        // Deselect mode: brush removes words from the existing selection.
+        deselectedSetRef.current = new Set();
+        activeRangeIdsRef.current = new Set();
+        baseIdsRef.current = new Set();
+
+        // Build and cache units once so pointermove doesn't need to rebuild
+        const container = containerRef.current;
+        const fineness = finenessRef.current;
+        const units =
+          mode === "reading"
+            ? container ? buildReadingUnits(container, fineness) : []
+            : container ? buildSvgUnits(container, fineness) : [];
+        orderedUnitsRef.current = units;
+        anchorIndexRef.current = -1;
+
+        const aidx = findUnitIndex(units, anchorWordId);
+        const peers = aidx >= 0 ? units[aidx] : [anchorWordId];
+
+        peers.forEach((id) => {
+          if (snap.has(id)) {
+            deselectedSetRef.current.add(id);
+            if (mode === "reading") applyReadingClass(id, false);
+            else if (container) applySvgClass(id, false, container);
+          }
+        });
+
+        setSelectedWordIds([...snap].filter((id) => !deselectedSetRef.current.has(id)));
+        return;
+      }
+
+      // Add mode: build ordered units and record anchor.
+      // The pre-existing selection is preserved as base; the gesture contributes
+      // a contiguous range on top.
+      const fineness = finenessRef.current;
+      const container = containerRef.current;
+
+      const units =
+        mode === "reading"
+          ? container ? buildReadingUnits(container, fineness) : []
+          : container ? buildSvgUnits(container, fineness) : [];
+
+      orderedUnitsRef.current = units;
+      baseIdsRef.current = new Set(snap);
+      activeRangeIdsRef.current = new Set();
+
+      const aidx = findUnitIndex(units, anchorWordId);
+      if (aidx === -1) return;
+      anchorIndexRef.current = aidx;
+
+      applyRange(aidx, aidx);
     },
-    [resolveAnchorId, resolveIds, commitIds]
+    [mode, containerRef, resolveAnchorWordId, applyRange, setSelectedWordIds]
   );
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
       if (!isDragging.current) return;
       e.preventDefault();
-      const ids = resolveIds(e.clientX, e.clientY);
-      if (ids.length > 0) commitIds(ids);
+
+      if (isDeselecting.current) {
+        // Deselect mode: remove any newly touched peers using the cached unit list
+        const container = containerRef.current;
+        const snap = initialSelectedRef.current;
+
+        let wordId: string | null = null;
+        if (mode === "reading") {
+          const el = document.elementFromPoint(e.clientX, e.clientY);
+          wordId = el
+            ? ((el as HTMLElement).closest?.(".quran-word") as HTMLElement | null)?.id ?? null
+            : null;
+        } else {
+          const c = containerRef.current;
+          if (c) {
+            const info = findSvgInfoAtPoint(e.clientX, e.clientY, c);
+            wordId = info ? info.normalizedId : null;
+          }
+        }
+
+        if (!wordId) return;
+
+        // Reuse cached units built in onPointerDown; avoids per-move DOM query
+        const units = orderedUnitsRef.current;
+        const uidx = findUnitIndex(units, wordId);
+        const peers = uidx >= 0 ? units[uidx] : [wordId];
+
+        let changed = false;
+        peers.forEach((id) => {
+          if (snap.has(id) && !deselectedSetRef.current.has(id)) {
+            deselectedSetRef.current.add(id);
+            changed = true;
+            if (mode === "reading") applyReadingClass(id, false);
+            else if (container) applySvgClass(id, false, container);
+          }
+        });
+
+        if (changed) {
+          setSelectedWordIds([...snap].filter((id) => !deselectedSetRef.current.has(id)));
+        }
+        return;
+      }
+
+      // Add mode: compute contiguous range from anchor to current unit
+      const currentIdx = resolveCurrentUnitIndex(e.clientX, e.clientY);
+      if (currentIdx === -1) return;
+      const anchor = anchorIndexRef.current;
+      if (anchor === -1) return;
+
+      applyRange(anchor, currentIdx);
     },
-    [resolveIds, commitIds]
+    [mode, containerRef, resolveCurrentUnitIndex, applyRange, setSelectedWordIds]
   );
 
   const onPointerUp = useCallback(() => {
