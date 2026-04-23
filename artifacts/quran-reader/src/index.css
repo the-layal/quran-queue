@@ -398,7 +398,7 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 /* ── Dark mode SVG text — flip fills to light so text is legible on dark parchment */
-.dark .mushaf-svg-container path[data-type="text"] {
+.dark .mushaf-svg-container path {
   fill: hsl(40 15% 88%);
 }
 
