@@ -392,12 +392,22 @@ input[type="number"]::-webkit-outer-spin-button {
   cursor: pointer;
 }
 
-/* Hover highlight — amber tint on letter paths */
-.mushaf-svg-container g[data-word-index-in-ayah]:hover path[data-type="text"] {
-  fill: hsl(42 85% 35%);
-}
-
 /* Active (clicked) word highlight */
 .mushaf-svg-container g[data-word-index-in-ayah].md-word-active path[data-type="text"] {
   fill: hsl(42 90% 40%);
+}
+
+/* ── Dark mode SVG text — flip fills to light so text is legible on dark parchment */
+.dark .mushaf-svg-container path[data-type="text"] {
+  fill: hsl(40 15% 88%);
+}
+
+.dark .mushaf-svg-container g[data-word-index-in-ayah].md-word-active path[data-type="text"] {
+  fill: hsl(38 90% 68%);
+}
+
+/* Hover highlight rect injected via JS */
+.mushaf-svg-container .md-hover-rect {
+  fill: hsl(var(--accent) / 0.55);
+  pointer-events: none;
 }

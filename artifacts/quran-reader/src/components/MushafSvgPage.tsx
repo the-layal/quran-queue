@@ -25,6 +25,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const activeWordIdRef = useRef<string | null>(null);
+  const hoverRectRef = useRef<SVGRectElement | null>(null);
   const [availH, setAvailH] = useState(0);
 
   useLayoutEffect(() => {
@@ -45,6 +46,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     setLoading(true);
     setError(null);
     activeWordIdRef.current = null;
+    hoverRectRef.current = null;
 
     fetchSvgPage(pageNumber)
       .then((text) => {
@@ -82,26 +84,87 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     clearActiveWord();
   }, [pageNumber, clearActiveWord]);
 
+  const removeHoverRect = useCallback(() => {
+    if (hoverRectRef.current) {
+      hoverRectRef.current.remove();
+      hoverRectRef.current = null;
+    }
+  }, []);
+
+  const getWordGroup = useCallback((target: Element, currentTarget: Element): Element | null => {
+    let el: Element | null = target;
+    while (el && el !== currentTarget) {
+      if (el.hasAttribute("data-word-index-in-ayah")) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }, []);
+
+  const handleMouseOver = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const wordEl = getWordGroup(e.target as Element, e.currentTarget);
+      if (!wordEl) {
+        removeHoverRect();
+        return;
+      }
+
+      let svgBBox: SVGRect;
+      try {
+        svgBBox = (wordEl as SVGGElement).getBBox();
+      } catch {
+        return;
+      }
+
+      if (svgBBox.width === 0 && svgBBox.height === 0) return;
+
+      const padX = 3;
+      const padY = 2;
+
+      let rect = hoverRectRef.current;
+      if (!rect) {
+        rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        rect.setAttribute("rx", "6");
+        rect.classList.add("md-hover-rect");
+        hoverRectRef.current = rect;
+      }
+
+      wordEl.insertBefore(rect, wordEl.firstChild);
+      rect.setAttribute("x", String(svgBBox.x - padX));
+      rect.setAttribute("y", String(svgBBox.y - padY));
+      rect.setAttribute("width", String(svgBBox.width + padX * 2));
+      rect.setAttribute("height", String(svgBBox.height + padY * 2));
+    },
+    [getWordGroup, removeHoverRect]
+  );
+
+  const handleMouseLeave = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const related = e.relatedTarget as Element | null;
+      if (related && e.currentTarget.contains(related)) {
+        const wordEl = getWordGroup(related, e.currentTarget);
+        if (wordEl) return;
+      }
+      removeHoverRect();
+    },
+    [getWordGroup, removeHoverRect]
+  );
+
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      let el: Element | null = e.target as Element;
-      while (el && el !== e.currentTarget) {
-        if (el.hasAttribute("data-word-index-in-ayah")) break;
-        el = el.parentElement;
-      }
-      if (!el || el === e.currentTarget) return;
-      const wordId = el.id;
+      const wordEl = getWordGroup(e.target as Element, e.currentTarget);
+      if (!wordEl) return;
+      const wordId = wordEl.id;
       if (!wordId) return;
       if (activeWordIdRef.current === wordId) {
-        el.classList.remove("md-word-active");
+        wordEl.classList.remove("md-word-active");
         activeWordIdRef.current = null;
         return;
       }
       clearActiveWord();
-      el.classList.add("md-word-active");
+      wordEl.classList.add("md-word-active");
       activeWordIdRef.current = wordId;
     },
-    [clearActiveWord]
+    [getWordGroup, clearActiveWord]
   );
 
   return (
@@ -140,6 +203,8 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
             className="mushaf-svg-container"
             style={{ height: `${containerHeight}px` }}
             onClick={handleClick}
+            onMouseOver={handleMouseOver}
+            onMouseLeave={handleMouseLeave}
             dangerouslySetInnerHTML={{ __html: svgText }}
           />
         </div>

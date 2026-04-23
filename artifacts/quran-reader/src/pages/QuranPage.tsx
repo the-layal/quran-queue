@@ -605,19 +605,11 @@ export default function QuranPage() {
           </button>
         </Link>
 
-        {isMushaf ? (
-          <PageInput
-            currentPage={currentPage}
-            totalPages={TOTAL_PAGES}
-            onGo={setCurrentPage}
-          />
-        ) : (
-          <SurahSelectorButton
-            chapter={chapter}
-            surahNumber={currentSurah}
-            onClick={() => setSurahPickerOpen(true)}
-          />
-        )}
+        <SurahSelectorButton
+          chapter={chapter}
+          surahNumber={currentSurah}
+          onClick={() => setSurahPickerOpen(true)}
+        />
 
         <div className="flex items-center gap-1">
           <button
@@ -804,6 +796,10 @@ export default function QuranPage() {
         currentSurah={currentSurah}
         onSelect={(n) => {
           setCurrentSurah(n);
+          if (isMushaf) {
+            const startPage = chapters[n]?.mushafStartPage;
+            if (startPage) setCurrentPage(startPage);
+          }
           window.scrollTo({ top: 0 });
         }}
       />
