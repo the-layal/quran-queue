@@ -26,9 +26,11 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const [svgText, setSvgText] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const activeWordIdRef = useRef<string | null>(null);
-  const hoverRectRef   = useRef<SVGRectElement | null>(null);
-  const hoverWordRef   = useRef<Element | null>(null);
+  const activeWordIdRef   = useRef<string | null>(null);
+  const hoverRectRef      = useRef<SVGRectElement | null>(null);
+  const hoverWordRef      = useRef<Element | null>(null);
+  const croppedViewBoxRef  = useRef<string | null>(null);
+  const originalViewBoxRef = useRef<string | null>(null);
   const [availH, setAvailH] = useState(0);
 
   // ── Smart Brush ─────────────────────────────────────────────────────────
@@ -58,10 +60,23 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     prevSvgSelectedRef.current = next;
   }, [selectedWordIds]);
 
-  // Clear SVG classes when page changes
+  // Clear SVG classes and cached viewBox when page changes
   useEffect(() => {
     prevSvgSelectedRef.current = new Set();
+    croppedViewBoxRef.current  = null;
+    originalViewBoxRef.current = null;
   }, [pageNumber]);
+
+  // Re-apply the cropped viewBox synchronously before paint so that re-renders
+  // triggered by Zustand selection state never leave the SVG with the original
+  // (uncropped) viewBox that dangerouslySetInnerHTML may have restored.
+  // useLayoutEffect (not useEffect) ensures no one-frame flash of the wide SVG.
+  useLayoutEffect(() => {
+    const cropped = croppedViewBoxRef.current;
+    if (!cropped) return;
+    const svg = containerRef.current?.querySelector("svg");
+    if (svg) svg.setAttribute("viewBox", cropped);
+  });
 
   // ── Measure wrapper height (content-box, padding-excluded) ──────────────
   useLayoutEffect(() => {
@@ -173,10 +188,15 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
         const vb = svg.viewBox.baseVal;
         if (vb && vb.width > 0) {
           const pad = 30; // SVG units — symmetric left/right gutter
-          svg.setAttribute(
-            "viewBox",
-            `${minX - pad} ${vb.y} ${maxX - minX + pad * 2} ${vb.height}`
-          );
+          // Preserve the original viewBox before we mutate it (useful for debug/reset).
+          if (!originalViewBoxRef.current) {
+            originalViewBoxRef.current = svg.getAttribute("viewBox") ??
+              `${vb.x} ${vb.y} ${vb.width} ${vb.height}`;
+          }
+          const cropped = `${minX - pad} ${vb.y} ${maxX - minX + pad * 2} ${vb.height}`;
+          svg.setAttribute("viewBox", cropped);
+          // Persist so re-renders triggered by selection state can re-apply the crop
+          croppedViewBoxRef.current = cropped;
         }
       }
 
