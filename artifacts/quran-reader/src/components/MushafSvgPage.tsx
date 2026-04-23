@@ -46,8 +46,10 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     );
   };
 
-  // Sync .md-word-selected classes whenever the Zustand selection changes
-  // (covers both drag updates and external clear/reset).
+  // Sync selection visuals whenever the Zustand selection changes.
+  // Each selected word gets its own per-word background rect (.md-sel-rect) injected
+  // as the first child of the word <g> — the same "held hover" look as md-hover-rect.
+  // Diff-based: only processes newly added / newly removed words per update.
   const prevSvgSelectedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     const container = containerRef.current;
@@ -56,86 +58,43 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     const prev = prevSvgSelectedRef.current;
 
     prev.forEach((id) => {
-      if (!next.has(id)) svgWordQuery(id, container)?.classList.toggle("md-word-selected", false);
-    });
-    next.forEach((id) => {
-      if (!prev.has(id)) svgWordQuery(id, container)?.classList.toggle("md-word-selected", true);
-    });
-    prevSvgSelectedRef.current = next;
-  }, [selectedWordIds]);
-
-  // ── Selection unit outlines ──────────────────────────────────────────────
-  // In Line or Ayah fineness mode, draw a rounded-rect outline around each
-  // selection unit so the user can see which words act as one deselectable block.
-  const brushFineness = useQuranStore((s) => s.brushFineness);
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const svg = container.querySelector<SVGSVGElement>("svg");
-    if (!svg) return;
-
-    // Always clear stale outlines first
-    svg.querySelector(".md-unit-outlines")?.remove();
-
-    // Only draw in line / ayah mode with an active selection
-    if (brushFineness === "word" || selectedWordIds.length === 0) return;
-
-    // Group selected word IDs → their SVG <g> elements, keyed by unit
-    const unitMap = new Map<string, SVGGElement[]>();
-
-    for (const wordId of selectedWordIds) {
-      const [s, a, w] = wordId.split(":");
-      const el = container.querySelector<SVGGElement>(
-        `g[data-surah="${s.padStart(3, "0")}"][data-aya="${a.padStart(3, "0")}"][data-word-index-in-ayah="${w}"]`
-      );
-      if (!el) continue;
-
-      const unitKey =
-        brushFineness === "line"
-          ? (el.getAttribute("data-line-number") ?? `${s}:${a}:${w}`)
-          : `${s}:${a}`;
-
-      if (!unitMap.has(unitKey)) unitMap.set(unitKey, []);
-      unitMap.get(unitKey)!.push(el);
-    }
-
-    if (unitMap.size === 0) return;
-
-    const PAD_X = 5;
-    const PAD_Y = 4;
-    const outlineGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    outlineGroup.classList.add("md-unit-outlines");
-
-    for (const els of unitMap.values()) {
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-      for (const el of els) {
-        try {
-          const bbox = el.getBBox();
-          if (bbox.width === 0 && bbox.height === 0) continue;
-          if (bbox.x < minX) minX = bbox.x;
-          if (bbox.y < minY) minY = bbox.y;
-          if (bbox.x + bbox.width > maxX) maxX = bbox.x + bbox.width;
-          if (bbox.y + bbox.height > maxY) maxY = bbox.y + bbox.height;
-        } catch {
-          // getBBox can throw for hidden/detached elements — skip silently
+      if (!next.has(id)) {
+        const wordEl = svgWordQuery(id, container);
+        if (wordEl) {
+          wordEl.querySelector(".md-sel-rect")?.remove();
+          wordEl.classList.remove("md-word-selected");
         }
       }
+    });
 
-      if (!isFinite(minX)) continue;
+    next.forEach((id) => {
+      if (!prev.has(id)) {
+        const wordEl = svgWordQuery(id, container);
+        if (!wordEl) return;
+        wordEl.classList.add("md-word-selected");
+        if (!wordEl.querySelector(".md-sel-rect")) {
+          try {
+            const bbox = (wordEl as SVGGElement).getBBox();
+            if (bbox.width > 0 || bbox.height > 0) {
+              const padX = 3, padY = 2;
+              const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+              rect.classList.add("md-sel-rect");
+              rect.setAttribute("rx",     "6");
+              rect.setAttribute("x",      String(bbox.x - padX));
+              rect.setAttribute("y",      String(bbox.y - padY));
+              rect.setAttribute("width",  String(bbox.width  + padX * 2));
+              rect.setAttribute("height", String(bbox.height + padY * 2));
+              wordEl.insertBefore(rect, wordEl.firstChild);
+            }
+          } catch {
+            // getBBox can throw for hidden/detached elements — skip silently
+          }
+        }
+      }
+    });
 
-      const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      rect.classList.add("md-unit-outline");
-      rect.setAttribute("x",      String(minX - PAD_X));
-      rect.setAttribute("y",      String(minY - PAD_Y));
-      rect.setAttribute("width",  String(maxX - minX + PAD_X * 2));
-      rect.setAttribute("height", String(maxY - minY + PAD_Y * 2));
-      rect.setAttribute("rx",     "5");
-      outlineGroup.appendChild(rect);
-    }
-
-    svg.appendChild(outlineGroup);
-  }, [selectedWordIds, brushFineness, svgText]);
+    prevSvgSelectedRef.current = next;
+  }, [selectedWordIds]);
 
   // Keep a live ref to playbackActiveIds so the word-current effect can re-apply
   // the line/ayah gold without needing it as a React dependency.
