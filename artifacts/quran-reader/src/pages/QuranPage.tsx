@@ -187,6 +187,10 @@ function SurahSelectorButton({
 
 // ── Individual verse block ────────────────────────────────────────────────────
 
+function toEasternArabic(n: number): string {
+  return String(n).replace(/\d/g, (d) => "٠١٢٣٤٥٦٧٨٩"[parseInt(d)]);
+}
+
 function VerseBlock({
   ayah,
   fontSize,
@@ -196,10 +200,10 @@ function VerseBlock({
 }) {
   return (
     <div className="verse-block flex items-start gap-3">
-      {/* Left: muted verse number badge */}
+      {/* Left: surah:ayah pill badge */}
       <div className="flex-shrink-0 pt-1">
-        <div className="w-7 h-7 rounded-full border border-border/50 flex items-center justify-center text-xs text-muted-foreground font-sans font-medium select-none">
-          {ayah.numberInSurah}
+        <div className="ayah-badge select-none">
+          {ayah.surah.number}:{ayah.numberInSurah}
         </div>
       </div>
 
@@ -225,10 +229,10 @@ function VerseBlock({
             </span>
           ))}
           <span
-            className="ayah-end-marker select-none"
+            className="ayah-end-marker font-quran select-none"
             aria-label={`Ayah ${ayah.numberInSurah}`}
           >
-            {ayah.numberInSurah}
+            {toEasternArabic(ayah.numberInSurah)}
           </span>
         </div>
       </div>

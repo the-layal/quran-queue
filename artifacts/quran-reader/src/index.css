@@ -172,23 +172,41 @@
   border-radius: 3px;
 }
 
-/* Circular ayah end marker (quran.com style) */
+/* Surah:ayah pill badge (left column in reading mode) */
+.ayah-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.15em 0.55em;
+  border: 1px solid hsl(var(--border) / 0.6);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  color: hsl(var(--muted-foreground));
+  font-family: var(--app-font-sans);
+  font-weight: 500;
+  white-space: nowrap;
+  line-height: 1.5;
+  user-select: none;
+}
+
+/* Ornamental ayah end marker — flexible ring that scales with digit count */
 .ayah-end-marker {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.6em;
-  height: 1.6em;
-  border: 1px solid hsl(var(--primary) / 0.55);
-  border-radius: 50%;
-  font-size: 0.48em;
+  min-width: 1.5em;
+  height: 1.5em;
+  padding-inline: 0.2em;
+  border: 2px solid hsl(var(--primary) / 0.7);
+  box-shadow: 0 0 0 1.5px hsl(var(--primary) / 0.2);
+  border-radius: 999px;
+  font-size: 0.5em;
   color: hsl(var(--primary));
-  vertical-align: middle;
-  margin-inline: 0.25em;
+  vertical-align: 0.2em;
+  margin-inline: 0.3em;
   user-select: none;
-  font-family: var(--app-font-sans);
-  font-weight: 500;
   line-height: 1;
+  white-space: nowrap;
   flex-shrink: 0;
 }
 
