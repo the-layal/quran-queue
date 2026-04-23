@@ -173,10 +173,10 @@ function SettingsPanel({
               </div>
             </div>
             <button
-              onClick={() => setShowTranslation(!showTranslation)}
+              onClick={undefined}
               disabled
               className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors bg-muted cursor-not-allowed opacity-50"
-              aria-checked={showTranslation}
+              aria-checked={false}
               role="switch"
             >
               <span

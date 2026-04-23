@@ -112,7 +112,7 @@ export async function fetchQuranPage(pageNumber: number): Promise<QuranPage> {
 // ── Mushaf mode (Quran.com) ─────────────────────────────────────────────────────
 
 async function fetchMushafVerses(pageNumber: number): Promise<MushafApiVerse[]> {
-  const fields = "text_uthmani,line_number,page_number,location,char_type_name";
+  const fields = "text_uthmani,line_number,page_number,location,char_type_name,code_v2";
   const allVerses: MushafApiVerse[] = [];
   let page = 1;
 
