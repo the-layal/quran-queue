@@ -195,10 +195,10 @@ export function useSmartBrush(
       const ids = resolveIds(e.clientX, e.clientY);
       if (ids.length === 0) return; // Not on a word — let native scroll continue
 
-      // In reading mode, prevent text-selection and touch-scroll when dragging
-      // across words. In mushaf mode we skip this so the existing click handler
-      // (which fires after pointerup) continues to work for single-tap actions.
-      if (mode === "reading") e.preventDefault();
+      // Prevent text-selection (reading) and touch-scroll (SVG) for both modes.
+      // In SVG mode, click events won't fire after this — the MushafSvgPage
+      // wrapper handles single-tap (active-word toggle) via onPointerUp detection.
+      e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
       isDragging.current = true;
       dragSet.current = new Set();

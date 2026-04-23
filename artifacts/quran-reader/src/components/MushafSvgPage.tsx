@@ -283,22 +283,63 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     [getWordGroup, clearHoverWord, removeHoverRect]
   );
 
-  const handleClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      const wordEl = getWordGroup(e.target as Element, e.currentTarget);
-      if (!wordEl) return;
-      const wordId = wordEl.id;
-      if (!wordId) return;
+  // Active-word toggle via direct hit-rect scan at a given screen position.
+  // Called from handlePointerUp when the pointer didn't move (single tap).
+  // We can't use onClick because preventDefault() in onPointerDown suppresses it.
+  const handleTap = useCallback(
+    (clientX: number, clientY: number) => {
+      const container = containerRef.current;
+      if (!container) return;
+      let wordGroup: Element | null = null;
+      const hitRects = container.querySelectorAll<Element>(".md-hit-rect");
+      for (const rect of hitRects) {
+        const bbox = rect.getBoundingClientRect();
+        if (
+          clientX >= bbox.left && clientX <= bbox.right &&
+          clientY >= bbox.top  && clientY <= bbox.bottom
+        ) {
+          const wid = rect.getAttribute("data-target-word");
+          if (wid) wordGroup = container.querySelector(`#${wid}`);
+          break;
+        }
+      }
+      if (!wordGroup) return;
+      const wordId = wordGroup.id;
       if (activeWordIdRef.current === wordId) {
-        wordEl.classList.remove("md-word-active");
+        wordGroup.classList.remove("md-word-active");
         activeWordIdRef.current = null;
         return;
       }
       clearActiveWord();
-      wordEl.classList.add("md-word-active");
+      wordGroup.classList.add("md-word-active");
       activeWordIdRef.current = wordId;
     },
-    [getWordGroup, clearActiveWord]
+    [clearActiveWord]
+  );
+
+  // Track pointer-down position so onPointerUp can detect a single tap.
+  const tapStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      tapStartRef.current = { x: e.clientX, y: e.clientY };
+      brush.onPointerDown(e);
+    },
+    [brush]
+  );
+
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      brush.onPointerUp();
+      const start = tapStartRef.current;
+      tapStartRef.current = null;
+      if (start) {
+        const dx = e.clientX - start.x;
+        const dy = e.clientY - start.y;
+        if (dx * dx + dy * dy < 64) handleTap(e.clientX, e.clientY);
+      }
+    },
+    [brush, handleTap]
   );
 
   // ── Render ──────────────────────────────────────────────────────────────
@@ -336,13 +377,12 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
             ref={containerRef}
             className="mushaf-svg-container"
             style={{ height: `${containerHeight}px` }}
-            onClick={handleClick}
             onMouseOver={handleMouseOver}
             onMouseLeave={handleMouseLeave}
-            onPointerDown={brush.onPointerDown}
+            onPointerDown={handlePointerDown}
             onPointerMove={brush.onPointerMove}
-            onPointerUp={brush.onPointerUp}
-            onPointerCancel={brush.onPointerCancel}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
             dangerouslySetInnerHTML={{ __html: svgText }}
           />
         </div>
