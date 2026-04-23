@@ -328,7 +328,7 @@ function SettingsPanel({
               </div>
               <input
                 type="range"
-                min={28}
+                min={24}
                 max={48}
                 step={2}
                 value={fontSize}

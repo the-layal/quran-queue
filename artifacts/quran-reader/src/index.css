@@ -2,7 +2,9 @@
 
 @font-face {
   font-family: 'UthmanicHafs1Ver18';
-  src: url('./assets/fonts/UthmanicHafs1Ver18.otf') format('opentype');
+  src: url('https://fonts.qurancdn.com/UthmanicHafs1Ver18.woff2') format('woff2'),
+       url('https://fonts.qurancdn.com/UthmanicHafs1Ver18.woff') format('woff'),
+       url('./assets/fonts/UthmanicHafs1Ver18.otf') format('opentype');
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -135,8 +137,11 @@
   font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
 }
 
+/* KFGQPC HAFS renders optically ~10% larger than Amiri; base at 26px so
+   diacritics don't crowd at the default slider position */
 .quran-text {
   font-family: var(--app-font-quran);
+  font-size: 26px;
   line-height: 2.6;
   text-align: right;
   direction: rtl;
