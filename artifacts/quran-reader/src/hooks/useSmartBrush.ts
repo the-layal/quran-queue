@@ -157,6 +157,25 @@ export function useSmartBrush(
   const selectedSetRef = useRef<Set<string>>(new Set());
   selectedSetRef.current = new Set(selectedWordIds);
 
+  // Returns the single word-ID directly under the pointer, WITHOUT fineness expansion.
+  // Used to determine add-vs-deselect mode before we expand by line/ayah.
+  const resolveAnchorId = useCallback(
+    (clientX: number, clientY: number): string | null => {
+      if (mode === "reading") {
+        const el = document.elementFromPoint(clientX, clientY);
+        if (!el) return null;
+        const wordEl = getReadingWordEl(el);
+        return wordEl?.id ?? null;
+      } else {
+        const container = containerRef.current;
+        if (!container) return null;
+        const info = findSvgInfoAtPoint(clientX, clientY, container);
+        return info ? info.normalizedId : null;
+      }
+    },
+    [mode, containerRef]
+  );
+
   const resolveIds = useCallback(
     (clientX: number, clientY: number): string[] => {
       const fineness = finenessRef.current;
@@ -221,13 +240,21 @@ export function useSmartBrush(
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
+      // Resolve the single anchor word first (no fineness expansion) to correctly
+      // decide add vs. deselect mode: only the directly-tapped word counts.
+      const anchorId = resolveAnchorId(e.clientX, e.clientY);
+      if (!anchorId) return; // Not on a word — no-op, preserves existing selection
+
       const ids = resolveIds(e.clientX, e.clientY);
-      if (ids.length === 0) return; // Not on a word — no-op, preserves existing selection
+      if (ids.length === 0) return;
 
       // Snapshot the current selection; decide add vs. deselect mode
       const snap = selectedSetRef.current;
       initialSelectedRef.current = new Set(snap);
-      isDeselecting.current = ids.some((id) => snap.has(id));
+      // Use the anchor word — not the expanded set — to decide the gesture mode.
+      // This prevents line/ayah expansion from accidentally entering deselect mode
+      // when an adjacent word happens to be selected but the tapped word is not.
+      isDeselecting.current = snap.has(anchorId);
 
       // Prevent text-selection (reading) and touch-scroll (SVG) for both modes.
       // In SVG mode, click events won't fire after this — the MushafSvgPage
@@ -239,7 +266,7 @@ export function useSmartBrush(
       dragSet.current = isDeselecting.current ? new Set() : new Set(snap);
       commitIds(ids);
     },
-    [resolveIds, commitIds]
+    [resolveAnchorId, resolveIds, commitIds]
   );
 
   const onPointerMove = useCallback(
