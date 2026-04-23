@@ -20,7 +20,7 @@ function WordSpan({ word }: { word: MushafWord }) {
   return (
     <span
       id={word.spanId}
-      className="mushaf-word font-quran"
+      className="quran-word mushaf-word font-quran"
       data-surah={word.surahNumber}
       data-ayah={word.ayahNumber}
       data-word={word.wordIndex}
