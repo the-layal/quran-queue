@@ -69,6 +69,7 @@ interface QuranComSurahWord {
   position: number;
   char_type_name: "word" | "end";
   text_uthmani: string;
+  code_v2: string;
   location: string;
   page_number?: number;
 }
@@ -103,7 +104,7 @@ export async function fetchSurahVerses(surahNumber: number): Promise<SurahData> 
   while (true) {
     const url =
       `${QURANCOM_BASE}/verses/by_chapter/${surahNumber}` +
-      `?words=true&word_fields=text_uthmani,location,page_number&per_page=50&page=${apiPage}`;
+      `?words=true&word_fields=text_uthmani,code_v2,location,page_number&per_page=50&page=${apiPage}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Quran.com API error: ${res.status}`);
     const data: QuranComSurahResponse = await res.json();
@@ -131,6 +132,8 @@ export async function fetchSurahVerses(surahNumber: number): Promise<SurahData> 
         );
         return {
           text: w.text_uthmani,
+          codeV2: w.code_v2 ?? w.text_uthmani,
+          pageNumber: w.page_number ?? verse.page_number,
           wordIndex,
           surahNumber: s,
           ayahNumber: a,

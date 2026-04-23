@@ -191,6 +191,35 @@ function toEasternArabic(n: number): string {
   return String(n).replace(/\d/g, (d) => "٠١٢٣٤٥٦٧٨٩"[parseInt(d)]);
 }
 
+const loadedQpcPages = new Set<number>();
+
+function useQpcFonts(ayahs: QuranAyah[]) {
+  useEffect(() => {
+    const pages = new Set<number>();
+    for (const ayah of ayahs) {
+      for (const word of ayah.words) {
+        if (word.pageNumber) pages.add(word.pageNumber);
+      }
+    }
+    pages.forEach((pageNum) => {
+      if (loadedQpcPages.has(pageNum)) return;
+      loadedQpcPages.add(pageNum);
+      const family = `QCFv2p${pageNum}`;
+      const url = `/api/font/qpc-v2/p${pageNum}.ttf`;
+      const face = new FontFace(family, `url(${url})`, {
+        display: "swap",
+        style: "normal",
+        weight: "normal",
+      });
+      face.load().then((loaded) => {
+        document.fonts.add(loaded);
+      }).catch(() => {
+        loadedQpcPages.delete(pageNum);
+      });
+    });
+  }, [ayahs]);
+}
+
 function VerseBlock({
   ayah,
   fontSize,
@@ -219,17 +248,18 @@ function VerseBlock({
             <span
               key={word.spanId}
               id={word.spanId}
-              className="quran-word font-quran"
+              className="quran-word"
+              style={{ fontFamily: `QCFv2p${word.pageNumber}, serif` }}
               data-surah={word.surahNumber}
               data-ayah={word.ayahNumber}
               data-word={word.wordIndex}
             >
-              {word.text}
+              {word.codeV2}
               {" "}
             </span>
           ))}
           <span
-            className="ayah-end-marker font-quran select-none"
+            className="ayah-end-marker select-none"
             aria-label={`Ayah ${ayah.numberInSurah}`}
           >
             {toEasternArabic(ayah.numberInSurah)}
@@ -254,6 +284,8 @@ function SurahReadingView({
   fontSize: number;
 }) {
   const firstAyah = ayahs[0];
+
+  useQpcFonts(ayahs);
 
   const surahInfo = chapter
     ? {

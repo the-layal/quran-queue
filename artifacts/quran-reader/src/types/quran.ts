@@ -16,6 +16,8 @@ export type AudioDataMap = Record<string, AyahAudioData>;
 
 export interface QuranWord {
   text: string;
+  codeV2: string;
+  pageNumber: number;
   wordIndex: number;
   surahNumber: number;
   ayahNumber: number;

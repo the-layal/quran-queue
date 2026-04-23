@@ -189,25 +189,15 @@
   user-select: none;
 }
 
-/* Ornamental ayah end marker — flexible ring that scales with digit count */
+/* Ornamental ayah end marker — bare numeral, no ring */
 .ayah-end-marker {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.5em;
-  height: 1.5em;
-  padding-inline: 0.2em;
-  border: 2px solid hsl(var(--primary) / 0.7);
-  box-shadow: 0 0 0 1.5px hsl(var(--primary) / 0.2);
-  border-radius: 999px;
-  font-size: 0.5em;
+  display: inline;
+  font-size: 0.55em;
   color: hsl(var(--primary));
-  vertical-align: 0.2em;
-  margin-inline: 0.3em;
+  vertical-align: 0.25em;
+  margin-inline: 0.25em;
   user-select: none;
-  line-height: 1;
   white-space: nowrap;
-  flex-shrink: 0;
 }
 
 /* Surah header — clean banner with horizontal rules */
