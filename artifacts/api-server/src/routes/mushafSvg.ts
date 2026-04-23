@@ -5,10 +5,14 @@ import path from "path";
 
 const router = Router();
 
-const ZIP_PATH = path.resolve(
-  process.cwd(),
-  "..",
-  "..",
+// The API server process starts from artifacts/api-server (two levels below workspace root).
+// Support an explicit env override for deployment flexibility.
+const WORKSPACE_ROOT =
+  process.env.WORKSPACE_ROOT ??
+  path.resolve(process.cwd(), "..", "..");
+
+const ZIP_PATH = path.join(
+  WORKSPACE_ROOT,
   "attached_assets",
   "ligature-basd-svg_1776916961528.zip"
 );
