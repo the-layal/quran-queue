@@ -193,9 +193,11 @@ function toEasternArabic(n: number): string {
 
 const loadedQpcPages = new Set<number>();
 
-function useQpcFonts(ayahs: QuranAyah[]) {
+function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number) {
   useEffect(() => {
     const pages = new Set<number>();
+    // Always load page 1 — the standalone Bismillah header uses 1:1 glyphs
+    pages.add(1);
     for (const ayah of ayahs) {
       for (const word of ayah.words) {
         if (word.pageNumber) pages.add(word.pageNumber);

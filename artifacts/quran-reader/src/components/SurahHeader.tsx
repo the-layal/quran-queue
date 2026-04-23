@@ -10,7 +10,7 @@ interface SurahHeaderProps {
   surah: SurahInfo;
 }
 
-const BISMILLAH = "بِسۡمِ ٱللَّهِ ٱلرَّحۡمَـٰنِ ٱلرَّحِیمِ";
+const BISMILLAH_CODE_V2 = "ﱁ ﱂ ﱃ ﱄ";
 
 export default function SurahHeader({ surah }: SurahHeaderProps) {
   const showBismillah = surah.number !== 9 && surah.number !== 1;
@@ -35,12 +35,13 @@ export default function SurahHeader({ surah }: SurahHeaderProps) {
       <div className="surah-header-rule" aria-hidden="true" />
       {showBismillah && (
         <div
-          className="font-quran text-2xl text-primary mt-4 bismillah"
+          className="text-2xl text-primary mt-4 bismillah"
           dir="rtl"
           lang="ar"
+          style={{ fontFamily: "'QCFv2p1', serif" }}
           aria-label="Bismillah"
         >
-          {BISMILLAH}
+          {BISMILLAH_CODE_V2}
         </div>
       )}
     </div>
