@@ -160,9 +160,22 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
 
       // Crop the SVG viewBox horizontally to the text column with equal padding
       // on both sides so pages with wide margin annotations stay visually centered.
-      // For pages 1 and 2, also crop vertically to remove equal whitespace from
-      // the top and bottom so those pages share the same aspect ratio as a normal
-      // full-text page (naturalAspect = original H / original W).
+      // For pages 1 and 2, also crop vertically — trimming equally from the top
+      // and bottom of the original viewBox — so those pages have the same
+      // width÷height aspect ratio as a standard full-text page (pages 3+).
+      //
+      // HOW THE VERTICAL CROP WORKS FOR PAGES 1 & 2:
+      //   All SVG pages share the same original viewBox (382.68 × 547.09).
+      //   After horizontal cropping, pages 3+ end up ~305 SVG units wide.
+      //   Pages 1/2 end up ~245 SVG units wide (shorter text lines).
+      //   To give them the same display aspect ratio we solve:
+      //     croppedW₁₂ / targetH = refCroppedW / origH
+      //     → targetH = croppedW₁₂ × origH / refCroppedW
+      //   The surplus (origH − targetH) is then split equally between
+      //   the top and bottom margins.  origH and origY come from the saved
+      //   originalViewBoxRef so this stays stable across re-renders
+      //   (useLayoutEffect re-applies the cropped viewBox before each RAF,
+      //   so reading svg.viewBox.baseVal would give the already-cropped values).
       if (minX !== Infinity && maxX !== -Infinity) {
         const vb = svg.viewBox.baseVal;
         if (vb && vb.width > 0) {
@@ -171,20 +184,20 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
             originalViewBoxRef.current = svg.getAttribute("viewBox") ??
               `${vb.x} ${vb.y} ${vb.width} ${vb.height}`;
           }
+          // Parse the *original* viewBox so origH/origY are stable across re-renders.
+          const [, origY,, origH] = originalViewBoxRef.current.split(/\s+/).map(Number);
 
-          const croppedW  = maxX - minX + padX * 2;
-          let newY        = vb.y;
-          let newHeight   = vb.height;
+          const croppedW = maxX - minX + padX * 2;
+          let newY       = origY;
+          let newHeight  = origH;
 
           if (pageNumber <= 2) {
-            // Target height = croppedWidth × natural page aspect ratio (H÷W).
-            // This is purely geometric — no content detection needed — so the
-            // surah name and borders are untouched; we just trim equal amounts
-            // from the top and bottom of the original viewBox.
-            const naturalAspect = vb.height / vb.width;
-            const targetH       = croppedW * naturalAspect;
-            const trim          = (vb.height - targetH) / 2;
-            newY      = vb.y + trim;
+            // Reference crop width measured from pages 3–5 data-rect metadata.
+            // Changing this constant adjusts how tall pages 1/2 appear.
+            const REF_CROPPED_W = 305; // SVG units — pages 3+ standard crop width
+            const targetH = croppedW * (origH / REF_CROPPED_W);
+            const trim    = (origH - targetH) / 2; // equal from top and bottom
+            newY      = origY + trim;
             newHeight = targetH;
           }
 
