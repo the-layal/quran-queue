@@ -1,5 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Amiri+Quran&display=swap');
+
+@font-face {
+  font-family: 'UthmanicHafs1Ver18';
+  src: url('./assets/fonts/UthmanicHafs1Ver18.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
 
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -68,7 +75,7 @@
   --destructive-foreground: 0 0% 98%;
 
   --app-font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
-  --app-font-quran: 'Amiri Quran', 'Scheherazade New', 'Traditional Arabic', serif;
+  --app-font-quran: 'UthmanicHafs1Ver18', 'Scheherazade New', 'Traditional Arabic', serif;
   --radius: 0.625rem;
 
   /* Mushaf page colours */
@@ -130,11 +137,11 @@
 
 .quran-text {
   font-family: var(--app-font-quran);
-  line-height: 2.35;
+  line-height: 2.6;
   text-align: right;
   direction: rtl;
   unicode-bidi: isolate;
-  word-spacing: 0.08em;
+  word-spacing: 0.06em;
   letter-spacing: 0;
 }
 
@@ -237,7 +244,7 @@
 
 @media (max-width: 640px) {
   .quran-text {
-    line-height: 2.5;
+    line-height: 2.8;
   }
 
   .verse-block {
