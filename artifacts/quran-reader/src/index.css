@@ -406,8 +406,24 @@ input[type="number"]::-webkit-outer-spin-button {
   fill: hsl(38 90% 68%);
 }
 
-/* Hover highlight rect injected via JS */
+/* Transparent hit-rect covering the full word bounding box (pointer events only) */
+.mushaf-svg-container .md-hit-rect {
+  fill: transparent;
+  pointer-events: all;
+  cursor: pointer;
+}
+
+/* Hover highlight rect injected via JS (visual only, no pointer events) */
 .mushaf-svg-container .md-hover-rect {
-  fill: hsl(var(--accent) / 0.55);
+  fill: hsl(var(--accent) / 0.45);
   pointer-events: none;
+}
+
+/* Hover: tint the word text amber while hovering */
+.mushaf-svg-container g[data-word-index-in-ayah].md-word-hovered path[data-type="text"] {
+  fill: hsl(42 85% 35%);
+}
+
+.dark .mushaf-svg-container g[data-word-index-in-ayah].md-word-hovered path[data-type="text"] {
+  fill: hsl(42 90% 65%);
 }

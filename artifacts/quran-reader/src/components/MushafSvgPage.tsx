@@ -26,6 +26,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const [error, setError] = useState<string | null>(null);
   const activeWordIdRef = useRef<string | null>(null);
   const hoverRectRef = useRef<SVGRectElement | null>(null);
+  const hoverWordRef = useRef<Element | null>(null);
   const [availH, setAvailH] = useState(0);
 
   useLayoutEffect(() => {
@@ -72,6 +73,30 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     if (prev >= 1 && !SVG_CACHE.has(prev)) fetchSvgPage(prev).catch(() => {});
   }, [pageNumber]);
 
+  // Inject transparent hit-rects covering each word's full bounding box so
+  // hovering anywhere inside the word area (including gaps between letter
+  // paths) triggers pointer events correctly.
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container || !svgText) return;
+    const wordGroups = container.querySelectorAll<SVGGElement>("g[data-word-index-in-ayah]");
+    wordGroups.forEach((wordEl) => {
+      try {
+        const bbox = wordEl.getBBox();
+        if (bbox.width === 0 && bbox.height === 0) return;
+        const hitRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        hitRect.setAttribute("x", String(bbox.x));
+        hitRect.setAttribute("y", String(bbox.y));
+        hitRect.setAttribute("width", String(bbox.width));
+        hitRect.setAttribute("height", String(bbox.height));
+        hitRect.classList.add("md-hit-rect");
+        wordEl.appendChild(hitRect);
+      } catch {
+        // getBBox can throw for hidden elements; skip silently
+      }
+    });
+  }, [svgText]);
+
   const clearActiveWord = useCallback(() => {
     const prev = activeWordIdRef.current;
     if (prev && containerRef.current) {
@@ -91,6 +116,13 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     }
   }, []);
 
+  const clearHoverWord = useCallback(() => {
+    if (hoverWordRef.current) {
+      hoverWordRef.current.classList.remove("md-word-hovered");
+      hoverWordRef.current = null;
+    }
+  }, []);
+
   const getWordGroup = useCallback((target: Element, currentTarget: Element): Element | null => {
     let el: Element | null = target;
     while (el && el !== currentTarget) {
@@ -103,23 +135,31 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const handleMouseOver = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const wordEl = getWordGroup(e.target as Element, e.currentTarget);
+
       if (!wordEl) {
+        clearHoverWord();
         removeHoverRect();
         return;
       }
 
+      // Apply hover class for text colour change
+      if (hoverWordRef.current !== wordEl) {
+        clearHoverWord();
+        wordEl.classList.add("md-word-hovered");
+        hoverWordRef.current = wordEl;
+      }
+
+      // Position / move the hover highlight rect
       let svgBBox: SVGRect;
       try {
         svgBBox = (wordEl as SVGGElement).getBBox();
       } catch {
         return;
       }
-
       if (svgBBox.width === 0 && svgBBox.height === 0) return;
 
       const padX = 3;
       const padY = 2;
-
       let rect = hoverRectRef.current;
       if (!rect) {
         rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -127,14 +167,14 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
         rect.classList.add("md-hover-rect");
         hoverRectRef.current = rect;
       }
-
+      // Insert before first child so rect renders behind the text paths
       wordEl.insertBefore(rect, wordEl.firstChild);
       rect.setAttribute("x", String(svgBBox.x - padX));
       rect.setAttribute("y", String(svgBBox.y - padY));
       rect.setAttribute("width", String(svgBBox.width + padX * 2));
       rect.setAttribute("height", String(svgBBox.height + padY * 2));
     },
-    [getWordGroup, removeHoverRect]
+    [getWordGroup, clearHoverWord, removeHoverRect]
   );
 
   const handleMouseLeave = useCallback(
@@ -144,9 +184,10 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
         const wordEl = getWordGroup(related, e.currentTarget);
         if (wordEl) return;
       }
+      clearHoverWord();
       removeHoverRect();
     },
-    [getWordGroup, removeHoverRect]
+    [getWordGroup, clearHoverWord, removeHoverRect]
   );
 
   const handleClick = useCallback(
