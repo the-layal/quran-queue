@@ -25,21 +25,20 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const activeWordIdRef = useRef<string | null>(null);
-  const [dims, setDims] = useState({ w: 0, h: 0 });
+  const [availH, setAvailH] = useState(0);
 
   useLayoutEffect(() => {
     const el = wrapperRef.current;
     if (!el) return;
-    const measure = () =>
-      setDims({ w: el.clientWidth, h: el.clientHeight });
-    measure();
-    const ro = new ResizeObserver(measure);
+    const ro = new ResizeObserver((entries) => {
+      const h = entries[0]?.contentRect.height ?? 0;
+      setAvailH(h);
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
-  const baseHeight = dims.h > 0 ? dims.h : 600;
-  const containerHeight = Math.round(baseHeight * scale);
+  const containerHeight = Math.round((availH > 0 ? availH : 600) * scale);
 
   useEffect(() => {
     let cancelled = false;
