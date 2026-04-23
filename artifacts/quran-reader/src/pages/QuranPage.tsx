@@ -18,14 +18,13 @@ import {
 import { useQuranStore } from "../store/quranStore";
 import {
   fetchSurahVerses,
-  fetchMushafPage,
   loadChapters,
   TOTAL_PAGES,
   TOTAL_SURAHS,
 } from "../services/quranApi";
 import type { QuranAyah, ChapterMap, ChapterInfo } from "../types/quran";
 import SurahHeader from "../components/SurahHeader";
-import MushafPage from "../components/MushafPage";
+import MushafSvgPage from "../components/MushafSvgPage";
 
 // ── Surah picker modal ────────────────────────────────────────────────────────
 
@@ -450,7 +449,6 @@ export default function QuranPage() {
     currentPage,
     viewMode,
     surahCache,
-    mushafPageCache,
     settings,
     isLoading,
     error,
@@ -458,7 +456,6 @@ export default function QuranPage() {
     setCurrentPage,
     setViewMode,
     setSurahData,
-    setMushafPageData,
     setLoading,
     setError,
     updateSettings,
@@ -473,7 +470,6 @@ export default function QuranPage() {
 
   const isMushaf = viewMode === "mushaf";
   const surahData = surahCache.get(currentSurah);
-  const mushafPageData = mushafPageCache.get(currentPage);
   const chapter = chapters[currentSurah];
 
   // Load chapters list on mount (for surah picker + SurahHeader)
@@ -501,43 +497,16 @@ export default function QuranPage() {
     [surahCache, setLoading, setError, setSurahData]
   );
 
-  // ── Load page in mushaf mode ──────────────────────────────────────────────
-  const loadMushafPage = useCallback(
-    async (page: number) => {
-      if (mushafPageCache.has(page)) return;
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await fetchMushafPage(page);
-        setMushafPageData(page, data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load Mushaf page");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [mushafPageCache, setLoading, setError, setMushafPageData]
-  );
-
-  // Trigger fetch on surah/page/mode change
+  // Trigger fetch on surah change (reading mode only)
   useEffect(() => {
-    if (isMushaf) {
-      loadMushafPage(currentPage);
-    } else {
+    if (!isMushaf) {
       loadSurah(currentSurah);
     }
-  }, [currentSurah, currentPage, isMushaf, loadSurah, loadMushafPage]);
+  }, [currentSurah, isMushaf, loadSurah]);
 
-  // Prefetch adjacent surahs / mushaf pages
+  // Prefetch adjacent surahs in reading mode
   useEffect(() => {
-    if (isMushaf) {
-      const next = currentPage + 1;
-      const prev = currentPage - 1;
-      if (next <= TOTAL_PAGES && !mushafPageCache.has(next))
-        fetchMushafPage(next).then((d) => setMushafPageData(next, d)).catch(() => {});
-      if (prev >= 1 && !mushafPageCache.has(prev))
-        fetchMushafPage(prev).then((d) => setMushafPageData(prev, d)).catch(() => {});
-    } else {
+    if (!isMushaf) {
       const next = currentSurah + 1;
       const prev = currentSurah - 1;
       if (next <= TOTAL_SURAHS && !surahCache.has(next))
@@ -545,7 +514,7 @@ export default function QuranPage() {
       if (prev >= 1 && !surahCache.has(prev))
         fetchSurahVerses(prev).then((d) => setSurahData(prev, d)).catch(() => {});
     }
-  }, [currentSurah, currentPage, isMushaf, surahCache, mushafPageCache, setSurahData, setMushafPageData]);
+  }, [currentSurah, isMushaf, surahCache, setSurahData]);
 
   // Proactively keep currentPage in sync with currentSurah in reading mode,
   // so that if chapters are loaded later or surah changes, the page is always
@@ -609,8 +578,7 @@ export default function QuranPage() {
     document.documentElement.classList.toggle("dark", isDark);
   };
 
-  const currentData = isMushaf ? mushafPageData : surahData;
-  const isFirstLoad = isLoading && !currentData;
+  const isFirstLoad = !isMushaf && isLoading && !surahData;
 
   return (
     <div
@@ -682,9 +650,7 @@ export default function QuranPage() {
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
             <p className="text-sm text-muted-foreground">
-              {isMushaf
-                ? `Loading page ${currentPage}…`
-                : `Loading ${chapter?.nameSimple ?? `Surah ${currentSurah}`}…`}
+              Loading {chapter?.nameSimple ?? `Surah ${currentSurah}`}…
             </p>
           </div>
         )}
@@ -696,8 +662,7 @@ export default function QuranPage() {
             <button
               onClick={() => {
                 setError(null);
-                if (isMushaf) loadMushafPage(currentPage);
-                else loadSurah(currentSurah);
+                loadSurah(currentSurah);
               }}
               className="text-sm text-primary underline"
             >
@@ -706,8 +671,8 @@ export default function QuranPage() {
           </div>
         )}
 
-        {!error && !isFirstLoad && isMushaf && mushafPageData && (
-          <MushafPage pageData={mushafPageData} />
+        {isMushaf && (
+          <MushafSvgPage pageNumber={currentPage} />
         )}
 
         {!error && !isFirstLoad && !isMushaf && surahData && (

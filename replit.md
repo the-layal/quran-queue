@@ -22,19 +22,32 @@ pnpm workspace monorepo using TypeScript. Contains a Quran web reader app modele
 - **Route**: `/` (root)
 - **Stack**: React + Vite + Tailwind CSS + Zustand + Wouter
 - **Font**: Amiri Quran (Google Fonts) — authentic Uthmanic script
+- **View modes**: Mushaf SVG (default) and Surah reading mode
 - **Key files**:
   - `src/App.tsx` — router setup (wouter), routes: `/` and `/analytics`
   - `src/pages/QuranPage.tsx` — main reader with pagination (604 Mushaf pages)
   - `src/pages/AnalyticsPage.tsx` — placeholder analytics view
-  - `src/store/quranStore.ts` — Zustand store (currentPage, pageCache, settings)
+  - `src/store/quranStore.ts` — Zustand store (currentPage, viewMode, settings); default viewMode="mushaf"
   - `src/services/quranApi.ts` — fetches from AlQuran.cloud API, merges with audio data
   - `src/types/quran.ts` — TypeScript types for Quran data structures
+  - `src/components/MushafSvgPage.tsx` — SVG ligature Mushaf renderer with word-click highlighting
+  - `src/components/MushafPage.tsx` — legacy text-based Mushaf (kept, not used as default)
   - `src/components/SurahHeader.tsx` — surah name header with bismillah
   - `public/quran-audio-data.json` — word-level audio timestamps (sourced from attached_assets)
 
 ### `artifacts/api-server` — Express API Server
 - **Route**: `/api`
 - **Stack**: Express 5 + Drizzle ORM + PostgreSQL
+- **Key routes**:
+  - `GET /api/healthz` — health check
+  - `GET /api/mushaf-svg/:page` — serves SVG for Mushaf pages 1–604, extracted on-demand from ZIP with in-memory caching
+
+## SVG Mushaf Architecture
+
+- ZIP file: `attached_assets/ligature-basd-svg_1776916961528.zip` (~80MB, 604 SVG files)
+- API server opens ZIP fd at startup, parses central directory for all 604 entries, extracts SVGs on-demand with `readSync` + `inflateRawSync`, caches strings in memory
+- Each SVG word group: `<g id="md-word-NNN" data-surah="..." data-aya="..." data-word-index-in-ayah="N" data-type="text">`
+- Word highlighting: CSS class `md-word-active` toggled via React event delegation; CSS in `index.css` targets `.mushaf-svg-container g[data-word-index-in-ayah].md-word-active path[data-type="text"]`
 
 ## Audio Data Format
 

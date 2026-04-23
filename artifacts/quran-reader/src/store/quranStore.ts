@@ -27,7 +27,7 @@ export const useQuranStore = create<QuranStore>()(
     (set) => ({
       currentSurah: 1,
       currentPage: 1,
-      viewMode: "reading",
+      viewMode: "mushaf",
       surahCache: new Map(),
       mushafPageCache: new Map(),
       settings: {
