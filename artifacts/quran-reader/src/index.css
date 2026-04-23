@@ -393,8 +393,8 @@ input[type="number"]::-webkit-outer-spin-button {
   pointer-events: bounding-box;
 }
 
-/* Active (clicked) word highlight */
-.mushaf-svg-container g[data-word-index-in-ayah].md-word-active path[data-type="text"] {
+/* Active (clicked) word — all paths (letters + diacritics) turn amber */
+.mushaf-svg-container g[data-word-index-in-ayah].md-word-active path {
   fill: hsl(42 90% 40%);
 }
 
@@ -403,7 +403,7 @@ input[type="number"]::-webkit-outer-spin-button {
   fill: hsl(40 15% 88%);
 }
 
-.dark .mushaf-svg-container g[data-word-index-in-ayah].md-word-active path[data-type="text"] {
+.dark .mushaf-svg-container g[data-word-index-in-ayah].md-word-active path {
   fill: hsl(38 90% 68%);
 }
 
@@ -420,11 +420,11 @@ input[type="number"]::-webkit-outer-spin-button {
   pointer-events: none;
 }
 
-/* Hover: tint the word text amber while hovering */
-.mushaf-svg-container g[data-word-index-in-ayah].md-word-hovered path[data-type="text"] {
+/* Hover — all paths (letters + diacritics) tinted amber */
+.mushaf-svg-container g[data-word-index-in-ayah].md-word-hovered path {
   fill: hsl(42 85% 35%);
 }
 
-.dark .mushaf-svg-container g[data-word-index-in-ayah].md-word-hovered path[data-type="text"] {
+.dark .mushaf-svg-container g[data-word-index-in-ayah].md-word-hovered path {
   fill: hsl(42 90% 65%);
 }
