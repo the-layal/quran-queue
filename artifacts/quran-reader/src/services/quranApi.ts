@@ -151,6 +151,7 @@ export async function fetchSurahVerses(surahNumber: number): Promise<SurahData> 
         revelationType,
       },
       juz: verse.juz_number,
+      hizb: verse.hizb_number ?? 0,
       page: verse.page_number,
       words,
     };

@@ -158,26 +158,28 @@ function SurahPickerModal({
 
 function SurahSelectorButton({
   chapter,
+  surahNumber,
   onClick,
 }: {
   chapter: ChapterInfo | undefined;
+  surahNumber: number;
   onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-1.5 hover:bg-muted rounded-lg px-2 py-1 transition-colors"
+      className="flex items-center gap-1.5 hover:bg-muted rounded-lg px-2 py-1 transition-colors max-w-[60vw]"
       aria-label="Select surah"
     >
-      <span className="text-sm text-muted-foreground tabular-nums font-medium">
-        {chapter?.id ?? "…"}.
-      </span>
       <span
-        className="font-quran text-base text-foreground leading-none"
+        className="font-quran text-base text-foreground leading-none truncate"
         dir="rtl"
         lang="ar"
       >
         {chapter?.nameArabic ?? ""}
+      </span>
+      <span className="text-xs text-muted-foreground tabular-nums font-medium whitespace-nowrap flex-shrink-0">
+        {surahNumber} / {TOTAL_SURAHS}
       </span>
       <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
     </button>
@@ -194,32 +196,42 @@ function VerseBlock({
   fontSize: number;
 }) {
   return (
-    <div className="verse-block">
-      <div
-        className="quran-text text-right"
-        dir="rtl"
-        lang="ar"
-        style={{ fontSize: `${fontSize}px` }}
-      >
-        {ayah.words.map((word) => (
-          <span
-            key={word.spanId}
-            id={word.spanId}
-            className="quran-word font-quran"
-            data-surah={word.surahNumber}
-            data-ayah={word.ayahNumber}
-            data-word={word.wordIndex}
-          >
-            {word.text}
-            {" "}
-          </span>
-        ))}
-        <span
-          className="ayah-end-marker select-none"
-          aria-label={`Ayah ${ayah.numberInSurah}`}
-        >
+    <div className="verse-block flex items-start gap-3">
+      {/* Left: muted verse number badge */}
+      <div className="flex-shrink-0 pt-1">
+        <div className="w-7 h-7 rounded-full border border-border/50 flex items-center justify-center text-xs text-muted-foreground font-sans font-medium select-none">
           {ayah.numberInSurah}
-        </span>
+        </div>
+      </div>
+
+      {/* Right: Arabic text block */}
+      <div className="flex-1">
+        <div
+          className="quran-text text-right"
+          dir="rtl"
+          lang="ar"
+          style={{ fontSize: `${fontSize}px` }}
+        >
+          {ayah.words.map((word) => (
+            <span
+              key={word.spanId}
+              id={word.spanId}
+              className="quran-word font-quran"
+              data-surah={word.surahNumber}
+              data-ayah={word.ayahNumber}
+              data-word={word.wordIndex}
+            >
+              {word.text}
+              {" "}
+            </span>
+          ))}
+          <span
+            className="ayah-end-marker select-none"
+            aria-label={`Ayah ${ayah.numberInSurah}`}
+          >
+            {ayah.numberInSurah}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -256,8 +268,9 @@ function SurahReadingView({
       {surahInfo && <SurahHeader surah={surahInfo} />}
 
       {firstAyah && (
-        <div className="text-center text-xs text-muted-foreground mb-6 tracking-wide">
+        <div className="sticky top-12 z-20 bg-background/95 backdrop-blur-sm text-center text-xs text-muted-foreground py-2 mb-4 tracking-wide border-b border-border/30">
           Page {firstAyah.page} · Juz {firstAyah.juz}
+          {firstAyah.hizb ? ` · Hizb ${firstAyah.hizb}` : ""}
         </div>
       )}
 
@@ -316,7 +329,7 @@ function SettingsPanel({
               </div>
               <input
                 type="range"
-                min={20}
+                min={28}
                 max={48}
                 step={2}
                 value={fontSize}
@@ -614,6 +627,7 @@ export default function QuranPage() {
         ) : (
           <SurahSelectorButton
             chapter={chapter}
+            surahNumber={currentSurah}
             onClick={() => setSurahPickerOpen(true)}
           />
         )}

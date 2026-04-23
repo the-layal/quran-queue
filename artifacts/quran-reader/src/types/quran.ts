@@ -35,6 +35,7 @@ export interface QuranAyah {
     revelationType: string;
   };
   juz: number;
+  hizb: number;
   page: number;
   words: QuranWord[];
 }
