@@ -6,8 +6,6 @@ interface MushafSvgPageProps {
   scale?: number;
 }
 
-const MUSHAF_ASPECT = 382.68 / 547.09;
-
 const SVG_CACHE = new Map<number, string>();
 
 async function fetchSvgPage(pageNum: number): Promise<string> {
@@ -40,11 +38,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     return () => ro.disconnect();
   }, []);
 
-  const baseHeight =
-    dims.h > 0 && dims.w > 0
-      ? Math.min(dims.h, dims.w / MUSHAF_ASPECT)
-      : dims.h || dims.w / MUSHAF_ASPECT || 600;
-
+  const baseHeight = dims.h > 0 ? dims.h : 600;
   const containerHeight = Math.round(baseHeight * scale);
 
   useEffect(() => {
