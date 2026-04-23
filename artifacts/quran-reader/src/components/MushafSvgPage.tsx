@@ -169,15 +169,16 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       if (minX !== Infinity && maxX !== -Infinity) {
         const vb = svg.viewBox.baseVal;
         if (vb && vb.width > 0) {
-          const pad = 30; // SVG units — symmetric gutter
+          const padX = 30;
+          const padY = 110;
           if (!originalViewBoxRef.current) {
             originalViewBoxRef.current = svg.getAttribute("viewBox") ??
               `${vb.x} ${vb.y} ${vb.width} ${vb.height}`;
           }
-          const cropY = (pageNumber <= 2 && minY !== Infinity && maxY !== -Infinity);
-          const newY      = cropY ? minY - pad : vb.y;
-          const newHeight = cropY ? maxY - minY + pad * 2 : vb.height;
-          const cropped = `${minX - pad} ${newY} ${maxX - minX + pad * 2} ${newHeight}`;
+          const cropY = pageNumber <= 2 && minY !== Infinity && maxY !== -Infinity;
+          const newY = cropY ? minY - padY : vb.y;
+          const newHeight = cropY ? maxY - minY + padY * 2 : vb.height;
+          const cropped = `${minX - padX} ${newY} ${maxX - minX + padX * 2} ${newHeight}`;
           svg.setAttribute("viewBox", cropped);
           croppedViewBoxRef.current = cropped;
         }
