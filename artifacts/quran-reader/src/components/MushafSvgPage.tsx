@@ -45,14 +45,12 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     if (!container) return;
     const next = new Set(selectedWordIds);
     const prev = prevSvgSelectedRef.current;
-    console.log("[svg-fx] useEffect selectedWordIds changed: prev", [...prev], "next", [...next]);
 
     const setClass = (nid: string, add: boolean) => {
       const [s, a, w] = nid.split(":");
       const el = container.querySelector<Element>(
         `g[data-surah="${s.padStart(3, "0")}"][data-aya="${a.padStart(3, "0")}"][data-word-index-in-ayah="${w}"]`
       );
-      console.log("[svg-fx] setClass", nid, add, "el:", el?.id ?? "NOT_FOUND");
       el?.classList.toggle("md-word-selected", add);
     };
 

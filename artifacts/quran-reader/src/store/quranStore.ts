@@ -78,14 +78,12 @@ export const useQuranStore = create<QuranStore>()(
           settings: { ...state.settings, ...settings },
         })),
 
-      setSelectedWordIds: (ids) => {
-        if (ids.length === 0) console.log('[store] setSelectedWordIds([]) STACK:', new Error().stack);
-        set({ selectedWordIds: ids });
-      },
+      setSelectedWordIds: (ids) => set({ selectedWordIds: ids }),
       setBrushFineness: (brushFineness) => set({ brushFineness }),
-      clearSelection: () => { console.log('[store] clearSelection() STACK:', new Error().stack); set({ selectedWordIds: [] }); },
+      clearSelection: () => set({ selectedWordIds: [] }),
       confirmSelection: () => {
-        console.log('[store] confirmSelection() STACK:', new Error().stack);
+        // Stub — future task will persist the selection (bookmark / copy etc.)
+        // For now just clear so the UI returns to neutral.
         set({ selectedWordIds: [] });
       },
     }),
