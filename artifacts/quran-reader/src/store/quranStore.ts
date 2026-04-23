@@ -28,7 +28,7 @@ export const useQuranStore = create<QuranStore>()(
       pageCache: new Map(),
       mushafPageCache: new Map(),
       settings: {
-        fontSize: 28,
+        fontSize: 26,
         showTranslation: false,
       },
       isLoading: false,

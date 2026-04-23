@@ -42,7 +42,7 @@
 
 /* LIGHT MODE */
 :root {
-  --background: 40 25% 96%;
+  --background: 0 0% 99%;
   --foreground: 20 40% 12%;
 
   --card: 40 25% 99%;
@@ -77,8 +77,8 @@
 }
 
 .dark {
-  --background: 20 18% 7%;
-  --foreground: 40 20% 91%;
+  --background: 220 13% 8%;
+  --foreground: 40 15% 90%;
 
   --card: 20 15% 10%;
   --card-foreground: 40 20% 91%;
@@ -130,11 +130,11 @@
 
 .quran-text {
   font-family: var(--app-font-quran);
-  line-height: 2.2;
+  line-height: 2.6;
   text-align: right;
   direction: rtl;
   unicode-bidi: isolate;
-  word-spacing: 0.05em;
+  word-spacing: 0.08em;
   letter-spacing: 0;
 }
 
@@ -158,37 +158,40 @@
   border-radius: 3px;
 }
 
-.ayah-number {
-  font-family: var(--app-font-quran);
+/* Circular ayah end marker (quran.com style) */
+.ayah-end-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6em;
+  height: 1.6em;
+  border: 1px solid hsl(var(--primary) / 0.55);
+  border-radius: 50%;
+  font-size: 0.48em;
   color: hsl(var(--primary));
-  font-size: 0.75em;
   vertical-align: middle;
+  margin-inline: 0.25em;
   user-select: none;
-  margin-inline: 0.15em;
+  font-family: var(--app-font-sans);
+  font-weight: 500;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
+/* Surah header — clean banner with horizontal rules */
 .surah-header {
-  border-top: 1px solid hsl(var(--border));
-  border-bottom: 1px solid hsl(var(--border));
-  margin-block: 1.5rem;
-  background: linear-gradient(
-    to bottom,
-    hsl(var(--accent) / 0.3),
-    transparent
-  );
+  margin-block: 2rem;
+}
+
+.surah-header-rule {
+  width: 100%;
+  height: 1px;
+  background: hsl(var(--border));
 }
 
 .surah-arabic-name {
   font-family: var(--app-font-quran);
   color: hsl(var(--foreground));
-}
-
-.surah-ornament {
-  font-family: var(--app-font-quran);
-  color: hsl(var(--primary));
-  font-size: 1.5rem;
-  opacity: 0.6;
-  line-height: 1;
 }
 
 .bismillah {
@@ -198,13 +201,32 @@
   color: hsl(var(--primary));
 }
 
+/* Centered muted page number at the foot of reading content */
+.reading-page-number {
+  text-align: center;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
+  margin-top: 2rem;
+  padding-bottom: 0.5rem;
+  user-select: none;
+  letter-spacing: 0.05em;
+}
+
+.reading-page-number::before {
+  content: "— ";
+}
+
+.reading-page-number::after {
+  content: " —";
+}
+
 .quran-page-content {
   min-height: calc(100vh - 120px);
 }
 
 @media (max-width: 640px) {
   .quran-text {
-    line-height: 2.4;
+    line-height: 2.8;
   }
 }
 

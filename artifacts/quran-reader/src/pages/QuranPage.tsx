@@ -23,10 +23,10 @@ import MushafPage from "../components/MushafPage";
 function AyahNumber({ n }: { n: number }) {
   return (
     <span
-      className="ayah-number inline-flex items-center justify-center mx-1 text-primary select-none"
+      className="ayah-end-marker select-none"
       aria-label={`Ayah ${n}`}
     >
-      ﴿<span className="mx-0.5 text-xs font-semibold">{n}</span>﴾
+      {n}
     </span>
   );
 }
@@ -62,12 +62,12 @@ function PageContent({
   const ayahsBySurah = groupAyahsBySurah(pageData.ayahs);
 
   return (
-    <div className="quran-page-content px-4 py-6 max-w-2xl mx-auto">
+    <div className="quran-page-content px-5 sm:px-10 py-6 max-w-4xl mx-auto w-full">
       {ayahsBySurah.map(({ surah, ayahs, isFirstSurahOnPage }) => (
         <div key={surah.number} className="surah-block">
           {isFirstSurahOnPage && <SurahHeader surah={surah} />}
           <div
-            className="quran-text leading-loose text-right"
+            className="quran-text text-right"
             dir="rtl"
             lang="ar"
             style={{ fontSize: `${fontSize}px` }}
@@ -81,6 +81,9 @@ function PageContent({
           </div>
         </div>
       ))}
+      <div className="reading-page-number" aria-label={`Page ${pageData.pageNumber}`}>
+        {pageData.pageNumber}
+      </div>
     </div>
   );
 }
