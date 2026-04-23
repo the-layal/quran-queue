@@ -26,6 +26,7 @@ import type { QuranAyah, ChapterMap, ChapterInfo } from "../types/quran";
 import SurahHeader from "../components/SurahHeader";
 import MushafSvgPage from "../components/MushafSvgPage";
 import BrushFinenessToggle from "../components/BrushFinenessToggle";
+import AudioControlBar from "../components/AudioControlBar";
 import { useSmartBrush } from "../hooks/useSmartBrush";
 
 // ── Surah picker modal ────────────────────────────────────────────────────────
@@ -946,6 +947,8 @@ export default function QuranPage() {
         setShowTranslation={(v) => updateSettings({ showTranslation: v })}
         isMushafMode={isMushaf}
       />
+
+      <AudioControlBar chapters={chapters} />
     </div>
   );
 }
