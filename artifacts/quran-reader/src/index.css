@@ -1,10 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
+/* Local OTF first — always loads. CDN woff2/woff listed as fallback
+   (serve from production domain where CORS is permitted by QuranCDN). */
 @font-face {
   font-family: 'UthmanicHafs1Ver18';
-  src: url('https://fonts.qurancdn.com/UthmanicHafs1Ver18.woff2') format('woff2'),
-       url('https://fonts.qurancdn.com/UthmanicHafs1Ver18.woff') format('woff'),
-       url('./assets/fonts/UthmanicHafs1Ver18.otf') format('opentype');
+  src: url('./assets/fonts/UthmanicHafs1Ver18.otf') format('opentype'),
+       url('https://fonts.qurancdn.com/UthmanicHafs1Ver18.woff2') format('woff2'),
+       url('https://fonts.qurancdn.com/UthmanicHafs1Ver18.woff') format('woff');
   font-weight: normal;
   font-style: normal;
   font-display: swap;
