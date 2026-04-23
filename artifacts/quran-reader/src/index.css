@@ -466,6 +466,15 @@ input[type="number"]::-webkit-outer-spin-button {
   fill: hsl(38 85% 68%);
 }
 
+/* Word-level accent overlay during recitation — match the original text color */
+.mushaf-svg-container g[data-word-index-in-ayah].md-word-current path {
+  fill: hsl(var(--foreground));
+}
+
+.dark .mushaf-svg-container g[data-word-index-in-ayah].md-word-current path {
+  fill: hsl(var(--foreground));
+}
+
 /* Hover highlight rect injected via JS (visual only, no pointer events) */
 .mushaf-svg-container .md-hover-rect {
   fill: hsl(var(--accent) / 0.45);

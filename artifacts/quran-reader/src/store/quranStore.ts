@@ -19,6 +19,7 @@ interface QuranStore {
 
   playbackHighlightMode: PlaybackHighlightMode;
   playbackActiveIds: string[];
+  playbackCurrentWordId: string | null;
 
   setCurrentSurah: (surah: number) => void;
   setCurrentPage: (page: number) => void;
@@ -34,6 +35,7 @@ interface QuranStore {
   confirmSelection: () => void;
   setPlaybackHighlightMode: (mode: PlaybackHighlightMode) => void;
   setPlaybackActiveIds: (ids: string[]) => void;
+  setPlaybackCurrentWordId: (id: string | null) => void;
 }
 
 export const useQuranStore = create<QuranStore>()(
@@ -57,6 +59,7 @@ export const useQuranStore = create<QuranStore>()(
 
       playbackHighlightMode: "ayah",
       playbackActiveIds: [],
+      playbackCurrentWordId: null,
 
       setCurrentSurah: (surah) =>
         set({ currentSurah: Math.max(1, Math.min(114, surah)) }),
@@ -97,6 +100,7 @@ export const useQuranStore = create<QuranStore>()(
 
       setPlaybackHighlightMode: (playbackHighlightMode) => set({ playbackHighlightMode }),
       setPlaybackActiveIds: (playbackActiveIds) => set({ playbackActiveIds }),
+      setPlaybackCurrentWordId: (playbackCurrentWordId) => set({ playbackCurrentWordId }),
     }),
     {
       name: "quran-reader-store",

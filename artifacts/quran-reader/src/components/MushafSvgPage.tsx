@@ -36,6 +36,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   // ── Smart Brush ─────────────────────────────────────────────────────────
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
   const playbackActiveIds = useQuranStore((s) => s.playbackActiveIds);
+  const playbackCurrentWordId = useQuranStore((s) => s.playbackCurrentWordId);
   const brush = useSmartBrush("mushaf", containerRef as RefObject<HTMLElement | null>);
 
   const svgWordQuery = (nid: string, container: Element) => {
@@ -136,6 +137,11 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     svg.appendChild(outlineGroup);
   }, [selectedWordIds, brushFineness, svgText]);
 
+  // Keep a live ref to playbackActiveIds so the word-current effect can re-apply
+  // the line/ayah gold without needing it as a React dependency.
+  const playbackActiveIdsRef = useRef(playbackActiveIds);
+  playbackActiveIdsRef.current = playbackActiveIds;
+
   // Sync .md-word-playing classes whenever playbackActiveIds changes.
   // Query the container directly each time so the update is always idempotent —
   // no ref bookkeeping means no stale-state bugs when modes toggle rapidly.
@@ -157,6 +163,30 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       }
     }
   }, [playbackActiveIds]);
+
+  // Sync .md-word-current class for the single word being spoken right now.
+  // Runs independently from the playbackActiveIds effect so both classes coexist.
+  // Re-applies the line/ayah (.md-word-playing) gold defensively on every word
+  // advance so that the background highlight can never silently drop out.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Step 1 — clear the current-word accent
+    container
+      .querySelectorAll<Element>(".md-word-current")
+      .forEach((el) => el.classList.remove("md-word-current"));
+
+    if (playbackCurrentWordId) {
+      // Step 2 — re-assert the line/ayah gold so it can't go missing
+      playbackActiveIdsRef.current.forEach((id) => {
+        svgWordQuery(id, container)?.classList.add("md-word-playing");
+      });
+
+      // Step 3 — apply the deeper word accent on top
+      svgWordQuery(playbackCurrentWordId, container)?.classList.add("md-word-current");
+    }
+  }, [playbackCurrentWordId]);
 
   // Clear SVG classes and cached viewBox when page changes
   useEffect(() => {

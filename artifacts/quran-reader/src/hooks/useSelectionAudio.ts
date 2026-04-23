@@ -125,6 +125,7 @@ export function useSelectionAudio(): SelectionAudioState {
   const brushFineness = useQuranStore((s) => s.brushFineness);
   const playbackHighlightMode = useQuranStore((s) => s.playbackHighlightMode);
   const setPlaybackActiveIds = useQuranStore((s) => s.setPlaybackActiveIds);
+  const setPlaybackCurrentWordId = useQuranStore((s) => s.setPlaybackCurrentWordId);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLooping, setIsLooping] = useState(false);
@@ -141,6 +142,7 @@ export function useSelectionAudio(): SelectionAudioState {
   const totalDurSecRef = useRef(0);
   const elapsedBeforeSecRef = useRef(0);
   const prevActiveIdsRef = useRef<string[]>([]);
+  const prevCurrentWordIdRef = useRef<string | null>(null);
 
   const playbackHighlightModeRef = useRef(playbackHighlightMode);
   playbackHighlightModeRef.current = playbackHighlightMode;
@@ -156,6 +158,7 @@ export function useSelectionAudio(): SelectionAudioState {
   // produce the same word list as the old mode (e.g. a single-line short ayah).
   useEffect(() => {
     prevActiveIdsRef.current = [];
+    prevCurrentWordIdRef.current = null;
   }, [playbackHighlightMode]);
 
   useEffect(() => {
@@ -182,7 +185,9 @@ export function useSelectionAudio(): SelectionAudioState {
 
   function clearActiveHighlight() {
     prevActiveIdsRef.current = [];
+    prevCurrentWordIdRef.current = null;
     setPlaybackActiveIds([]);
+    setPlaybackCurrentWordId(null);
   }
 
   function cancelRaf() {
@@ -216,7 +221,9 @@ export function useSelectionAudio(): SelectionAudioState {
         setIsPlaying(false);
         setProgress(1);
         prevActiveIdsRef.current = [];
+        prevCurrentWordIdRef.current = null;
         setPlaybackActiveIds([]);
+        setPlaybackCurrentWordId(null);
       }
       return;
     }
@@ -255,10 +262,15 @@ export function useSelectionAudio(): SelectionAudioState {
           : region.startMs + regionElapsed * 1000;
 
         let newActiveIds: string[];
+        let currentWordIndex: number | null = null;
+
         if (mode === "ayah") {
           newActiveIds = getAllAyahWordIds(activeKey);
+          currentWordIndex = aData
+            ? computeCurrentWordIndex(audioRelativeMs, aData, activeKey)
+            : null;
         } else {
-          const currentWordIndex = aData
+          currentWordIndex = aData
             ? computeCurrentWordIndex(audioRelativeMs, aData, activeKey)
             : null;
           if (currentWordIndex !== null) {
@@ -275,6 +287,19 @@ export function useSelectionAudio(): SelectionAudioState {
         if (changed) {
           prevActiveIdsRef.current = newActiveIds;
           setPlaybackActiveIds(newActiveIds);
+        }
+
+        // Publish the single word being spoken right now (for word-level overlay).
+        // Deduplicate: only update the store when the word actually changes so we
+        // don't trigger unnecessary Zustand updates on every RAF tick.
+        const [surahStr, ayahStr] = activeKey.split(":");
+        const newCurrentWordId =
+          currentWordIndex !== null
+            ? `${parseInt(surahStr, 10)}:${parseInt(ayahStr, 10)}:${currentWordIndex}`
+            : null;
+        if (newCurrentWordId !== prevCurrentWordIdRef.current) {
+          prevCurrentWordIdRef.current = newCurrentWordId;
+          setPlaybackCurrentWordId(newCurrentWordId);
         }
 
         if (ct >= endSec - 0.08 || audio.ended) {
