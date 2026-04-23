@@ -672,6 +672,20 @@ export default function QuranPage() {
     }
   }, [currentSurah, chapter, isMushaf, setCurrentPage]);
 
+  // Reverse sync: when the user turns Mushaf pages, update currentSurah to
+  // match whichever surah begins on or before the current page.
+  useEffect(() => {
+    if (!isMushaf) return;
+    const allChapters = Object.values(chapters);
+    if (allChapters.length === 0) return;
+    const match = allChapters
+      .filter((ch) => ch.mushafStartPage <= currentPage)
+      .sort((a, b) => b.mushafStartPage - a.mushafStartPage)[0];
+    if (match && match.id !== currentSurah) {
+      setCurrentSurah(match.id);
+    }
+  }, [currentPage, isMushaf, chapters, currentSurah, setCurrentSurah]);
+
   // Sync mushaf page when switching from reading mode
   const handleModeSwitch = () => {
     if (!isMushaf) {
