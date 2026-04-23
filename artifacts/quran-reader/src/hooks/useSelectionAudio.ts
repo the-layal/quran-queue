@@ -53,6 +53,7 @@ function stopAllSources(sources: AudioBufferSourceNode[]) {
 
 export function useSelectionAudio(): SelectionAudioState {
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
+  const brushFineness = useQuranStore((s) => s.brushFineness);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLooping, setIsLooping] = useState(false);
@@ -76,12 +77,12 @@ export function useSelectionAudio(): SelectionAudioState {
 
   useEffect(() => {
     if (!audioData) return;
-    const newRegions = computePlaybackRegions(selectedWordIds, audioData);
+    const newRegions = computePlaybackRegions(selectedWordIds, audioData, brushFineness);
     setRegions(newRegions);
     stopPlayback();
     setProgress(0);
     setCurrentAyahKey(null);
-  }, [selectedWordIds, audioData]);
+  }, [selectedWordIds, audioData, brushFineness]);
 
   function getOrCreateContext(): AudioContext {
     if (!ctxRef.current || ctxRef.current.state === "closed") {
@@ -154,6 +155,7 @@ export function useSelectionAudio(): SelectionAudioState {
       }
 
       const sources: AudioBufferSourceNode[] = [];
+      const resolvedRegions: PlaybackRegion[] = [];
       let scheduleTime = ctx.currentTime;
       const startedAt = scheduleTime;
       let totalDuration = 0;
@@ -161,32 +163,43 @@ export function useSelectionAudio(): SelectionAudioState {
       for (let i = 0; i < regionsToPlay.length; i++) {
         const region = regionsToPlay[i];
         const buffer = buffers[i];
-        const startSec = region.startMs / 1000;
-        const durSec = region.durationMs / 1000;
-
-        if (durSec <= 0) continue;
 
         const source = ctx.createBufferSource();
         source.buffer = buffer;
         source.connect(ctx.destination);
-        source.start(scheduleTime, startSec, durSec);
 
-        sources.push(source);
-        scheduleTime += durSec;
-        totalDuration += durSec;
+        if (region.playFullAyah) {
+          source.start(scheduleTime, 0);
+          const durSec = buffer.duration;
+          sources.push(source);
+          resolvedRegions.push({ ...region, durationMs: durSec * 1000 });
+          scheduleTime += durSec;
+          totalDuration += durSec;
+        } else {
+          const startSec = region.startMs / 1000;
+          const durSec = region.durationMs / 1000;
+
+          if (durSec <= 0) continue;
+
+          source.start(scheduleTime, startSec, durSec);
+          sources.push(source);
+          resolvedRegions.push(region);
+          scheduleTime += durSec;
+          totalDuration += durSec;
+        }
       }
 
       schedulerRef.current = {
         sources,
         startedAtContextTime: startedAt,
         totalDurationSec: totalDuration,
-        regions: regionsToPlay,
+        regions: resolvedRegions,
         looping: loop,
       };
 
       setIsPlaying(true);
-      setCurrentAyahKey(regionsToPlay[0].ayahKey);
-      startProgressLoop(ctx, startedAt, totalDuration, regionsToPlay);
+      setCurrentAyahKey(resolvedRegions[0]?.ayahKey ?? regionsToPlay[0].ayahKey);
+      startProgressLoop(ctx, startedAt, totalDuration, resolvedRegions);
 
       const lastSource = sources[sources.length - 1];
       if (lastSource) {

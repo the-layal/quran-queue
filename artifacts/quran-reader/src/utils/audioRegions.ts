@@ -1,4 +1,4 @@
-import type { AudioDataMap } from "../types/quran";
+import type { AudioDataMap, BrushFineness } from "../types/quran";
 
 export interface PlaybackRegion {
   audioUrl: string;
@@ -8,11 +8,13 @@ export interface PlaybackRegion {
   surahNumber: number;
   ayahNumber: number;
   durationMs: number;
+  playFullAyah?: boolean;
 }
 
 export function computePlaybackRegions(
   selectedWordIds: string[],
-  audioData: AudioDataMap
+  audioData: AudioDataMap,
+  brushFineness: BrushFineness = "word"
 ): PlaybackRegion[] {
   const parsed = selectedWordIds
     .map((id) => {
@@ -42,9 +44,25 @@ export function computePlaybackRegions(
 
   const regions: PlaybackRegion[] = [];
 
+  const fullAyahMode = brushFineness !== "word" && brushFineness !== "line";
+
   for (const [ayahKey, { surah, ayah, wordIndices }] of sortedEntries) {
     const ayahAudio = audioData[ayahKey];
     if (!ayahAudio) continue;
+
+    if (fullAyahMode) {
+      regions.push({
+        audioUrl: ayahAudio.audio_url,
+        startMs: 0,
+        endMs: 0,
+        ayahKey,
+        surahNumber: surah,
+        ayahNumber: ayah,
+        durationMs: 0,
+        playFullAyah: true,
+      });
+      continue;
+    }
 
     const matched = wordIndices
       .map((wi) => ayahAudio.segments.find((seg) => seg[0] === wi))
