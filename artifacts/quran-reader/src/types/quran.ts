@@ -85,3 +85,72 @@ export interface Settings {
   fontSize: number;
   showTranslation: boolean;
 }
+
+// ── Mushaf Mode types ──────────────────────────────────────────────────────────
+
+export interface MushafApiWord {
+  id: number;
+  position: number;
+  char_type_name: "word" | "end";
+  text_uthmani: string;
+  line_number: number;
+  location: string;
+  page_number: number;
+}
+
+export interface MushafApiVerse {
+  id: number;
+  verse_number: number;
+  verse_key: string;
+  page_number: number;
+  juz_number: number;
+  words: MushafApiWord[];
+}
+
+export interface MushafApiResponse {
+  verses: MushafApiVerse[];
+  pagination: {
+    per_page: number;
+    current_page: number;
+    next_page: number | null;
+    total_pages: number;
+    total_records: number;
+  };
+}
+
+export interface MushafWord {
+  text: string;
+  charType: "word" | "end";
+  surahNumber: number;
+  ayahNumber: number;
+  wordIndex: number;
+  spanId: string;
+  lineNumber: number;
+}
+
+export type MushafHeaderType = "surah-name" | "bismillah";
+
+export interface MushafLine {
+  lineNumber: number;
+  words: MushafWord[];
+  headerType?: MushafHeaderType;
+  surahName?: string;
+  surahEnglishName?: string;
+}
+
+export interface MushafPageData {
+  pageNumber: number;
+  lines: MushafLine[];
+}
+
+export interface ChapterInfo {
+  id: number;
+  nameArabic: string;
+  nameSimple: string;
+  nameTranslation: string;
+  versesCount: number;
+}
+
+export type ChapterMap = Record<number, ChapterInfo>;
+
+export type ViewMode = "reading" | "mushaf";

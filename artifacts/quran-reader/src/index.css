@@ -70,6 +70,10 @@
   --app-font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
   --app-font-quran: 'Amiri Quran', 'Scheherazade New', 'Traditional Arabic', serif;
   --radius: 0.625rem;
+
+  /* Mushaf page colours */
+  --mushaf-bg: 40 60% 97%;
+  --mushaf-border: 38 50% 60%;
 }
 
 .dark {
@@ -97,6 +101,10 @@
 
   --destructive: 0 62% 45%;
   --destructive-foreground: 0 0% 98%;
+
+  /* Mushaf page colours — dark */
+  --mushaf-bg: 25 25% 10%;
+  --mushaf-border: 35 30% 30%;
 }
 
 @layer base {
@@ -113,7 +121,8 @@
   }
 }
 
-/* Arabic / Quranic text */
+/* ── Arabic / Quranic text ───────────────────────────────────────────────── */
+
 .font-quran {
   font-family: var(--app-font-quran);
   font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
@@ -211,4 +220,93 @@ input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
+}
+
+/* ── Mushaf 15-line page ─────────────────────────────────────────────────── */
+
+.mushaf-page-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.mushaf-page {
+  /* A5 portrait ratio: 148mm × 210mm ≈ 1 : 1.418 */
+  aspect-ratio: 100 / 142;
+  max-height: 100%;
+  max-width: 100%;
+  width: auto;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 3px;
+  overflow: hidden;
+  /* Subtle outer shadow */
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18), 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.mushaf-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  /* Tiny top separator to distinguish lines on hover */
+}
+
+.mushaf-line:not(.mushaf-header-line):hover {
+  background-color: hsl(var(--accent) / 0.15);
+}
+
+/* Words within a line */
+.mushaf-line-words {
+  font-family: var(--app-font-quran);
+  direction: rtl;
+  unicode-bidi: isolate;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+/* Mushaf mode: word spans */
+.mushaf-line .mushaf-word {
+  font-family: var(--app-font-quran);
+  cursor: default;
+  display: inline;
+  padding: 0 0.05em;
+  border-radius: 2px;
+  transition: background-color 0.1s;
+}
+
+.mushaf-line .mushaf-word:hover {
+  background-color: hsl(var(--accent));
+  cursor: pointer;
+}
+
+.mushaf-line .mushaf-word.highlighted {
+  background-color: hsl(var(--primary) / 0.2);
+  color: hsl(var(--primary));
+  outline: 1px solid hsl(var(--primary) / 0.4);
+}
+
+/* Ayah end markers (Eastern Arabic numerals) */
+.mushaf-ayah-end {
+  font-family: var(--app-font-quran);
+  color: hsl(var(--primary));
+  font-size: 0.8em;
+  display: inline;
+  margin-inline: 0.1em;
+  opacity: 0.85;
+}
+
+/* Surah name box inside header lines */
+.mushaf-surah-box {
+  background: linear-gradient(
+    to bottom,
+    hsl(var(--accent) / 0.5),
+    hsl(var(--accent) / 0.2)
+  );
+  border-color: hsl(var(--mushaf-border));
 }

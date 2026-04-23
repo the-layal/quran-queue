@@ -1,14 +1,31 @@
 import { useEffect, useCallback, useState } from "react";
 import { Link } from "wouter";
-import { ChevronLeft, ChevronRight, Settings, BarChart2, Moon, Sun, Loader2, AlertCircle } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Settings,
+  BarChart2,
+  Moon,
+  Sun,
+  Loader2,
+  AlertCircle,
+  BookOpen,
+  AlignLeft,
+} from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
-import { fetchQuranPage, TOTAL_PAGES } from "../services/quranApi";
+import { fetchQuranPage, fetchMushafPage, TOTAL_PAGES } from "../services/quranApi";
 import type { QuranAyah, QuranPage as QuranPageData } from "../types/quran";
 import SurahHeader from "../components/SurahHeader";
+import MushafPage from "../components/MushafPage";
+
+// ── Reading mode sub-components ───────────────────────────────────────────────
 
 function AyahNumber({ n }: { n: number }) {
   return (
-    <span className="ayah-number inline-flex items-center justify-center mx-1 text-primary select-none" aria-label={`Ayah ${n}`}>
+    <span
+      className="ayah-number inline-flex items-center justify-center mx-1 text-primary select-none"
+      aria-label={`Ayah ${n}`}
+    >
       ﴿<span className="mx-0.5 text-xs font-semibold">{n}</span>﴾
     </span>
   );
@@ -35,7 +52,13 @@ function AyahBlock({ ayah }: { ayah: QuranAyah }) {
   );
 }
 
-function PageContent({ pageData, fontSize }: { pageData: QuranPageData; fontSize: number }) {
+function PageContent({
+  pageData,
+  fontSize,
+}: {
+  pageData: QuranPageData;
+  fontSize: number;
+}) {
   const ayahsBySurah = groupAyahsBySurah(pageData.ayahs);
 
   return (
@@ -50,7 +73,10 @@ function PageContent({ pageData, fontSize }: { pageData: QuranPageData; fontSize
             style={{ fontSize: `${fontSize}px` }}
           >
             {ayahs.map((ayah) => (
-              <AyahBlock key={`${ayah.surah.number}:${ayah.numberInSurah}`} ayah={ayah} />
+              <AyahBlock
+                key={`${ayah.surah.number}:${ayah.numberInSurah}`}
+                ayah={ayah}
+              />
             ))}
           </div>
         </div>
@@ -71,11 +97,7 @@ function groupAyahsBySurah(ayahs: QuranAyah[]): SurahGroup[] {
 
   for (const ayah of ayahs) {
     if (ayah.surah.number !== currentSurahNumber) {
-      groups.push({
-        surah: ayah.surah,
-        ayahs: [ayah],
-        isFirstSurahOnPage: true,
-      });
+      groups.push({ surah: ayah.surah, ayahs: [ayah], isFirstSurahOnPage: true });
       currentSurahNumber = ayah.surah.number;
     } else {
       groups[groups.length - 1].ayahs.push(ayah);
@@ -85,6 +107,8 @@ function groupAyahsBySurah(ayahs: QuranAyah[]): SurahGroup[] {
   return groups;
 }
 
+// ── Settings panel ────────────────────────────────────────────────────────────
+
 function SettingsPanel({
   open,
   onClose,
@@ -92,6 +116,7 @@ function SettingsPanel({
   setFontSize,
   showTranslation,
   setShowTranslation,
+  isMushafMode,
 }: {
   open: boolean;
   onClose: () => void;
@@ -99,6 +124,7 @@ function SettingsPanel({
   setFontSize: (n: number) => void;
   showTranslation: boolean;
   setShowTranslation: (v: boolean) => void;
+  isMushafMode: boolean;
 }) {
   if (!open) return null;
   return (
@@ -109,30 +135,42 @@ function SettingsPanel({
         <h2 className="text-base font-semibold mb-5">Settings</h2>
 
         <div className="space-y-5">
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium">Font Size</span>
-              <span className="text-sm text-muted-foreground tabular-nums">{fontSize}px</span>
+          {!isMushafMode && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium">Font Size</span>
+                <span className="text-sm text-muted-foreground tabular-nums">
+                  {fontSize}px
+                </span>
+              </div>
+              <input
+                type="range"
+                min={18}
+                max={44}
+                step={2}
+                value={fontSize}
+                onChange={(e) => setFontSize(Number(e.target.value))}
+                className="w-full accent-primary cursor-pointer"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                <span>Small</span>
+                <span>Large</span>
+              </div>
             </div>
-            <input
-              type="range"
-              min={18}
-              max={44}
-              step={2}
-              value={fontSize}
-              onChange={(e) => setFontSize(Number(e.target.value))}
-              className="w-full accent-primary cursor-pointer"
-            />
-            <div className="flex justify-between text-xs text-muted-foreground mt-1">
-              <span>Small</span>
-              <span>Large</span>
-            </div>
-          </div>
+          )}
+
+          {isMushafMode && (
+            <p className="text-sm text-muted-foreground">
+              Font size is fixed in Mushaf view — it scales automatically to fit the page.
+            </p>
+          )}
 
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-medium">Show Translation</div>
-              <div className="text-xs text-muted-foreground">Sahih International (coming soon)</div>
+              <div className="text-xs text-muted-foreground">
+                Sahih International (coming soon)
+              </div>
             </div>
             <button
               onClick={() => setShowTranslation(!showTranslation)}
@@ -141,7 +179,9 @@ function SettingsPanel({
               aria-checked={showTranslation}
               role="switch"
             >
-              <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${showTranslation ? "translate-x-6" : "translate-x-1"}`} />
+              <span
+                className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${showTranslation ? "translate-x-6" : "translate-x-1"}`}
+              />
             </button>
           </div>
         </div>
@@ -156,6 +196,8 @@ function SettingsPanel({
     </>
   );
 }
+
+// ── Page number input ─────────────────────────────────────────────────────────
 
 function PageInput({
   currentPage,
@@ -216,15 +258,21 @@ function PageInput({
   );
 }
 
+// ── Main page ─────────────────────────────────────────────────────────────────
+
 export default function QuranPage() {
   const {
     currentPage,
+    viewMode,
     pageCache,
+    mushafPageCache,
     settings,
     isLoading,
     error,
     setCurrentPage,
+    setViewMode,
     setPageData,
+    setMushafPageData,
     setLoading,
     setError,
     updateSettings,
@@ -235,9 +283,12 @@ export default function QuranPage() {
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  const isMushaf = viewMode === "mushaf";
   const pageData = pageCache.get(currentPage);
+  const mushafPageData = mushafPageCache.get(currentPage);
 
-  const loadPage = useCallback(
+  // ── Load current page in reading mode ──────────────────────────────────────
+  const loadReadingPage = useCallback(
     async (page: number) => {
       if (pageCache.has(page)) return;
       setLoading(true);
@@ -254,20 +305,49 @@ export default function QuranPage() {
     [pageCache, setLoading, setError, setPageData]
   );
 
-  useEffect(() => {
-    loadPage(currentPage);
-  }, [currentPage, loadPage]);
+  // ── Load current page in mushaf mode ───────────────────────────────────────
+  const loadMushafPage = useCallback(
+    async (page: number) => {
+      if (mushafPageCache.has(page)) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await fetchMushafPage(page);
+        setMushafPageData(page, data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load Mushaf page");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [mushafPageCache, setLoading, setError, setMushafPageData]
+  );
 
+  // Load on page/mode change
+  useEffect(() => {
+    if (isMushaf) {
+      loadMushafPage(currentPage);
+    } else {
+      loadReadingPage(currentPage);
+    }
+  }, [currentPage, isMushaf, loadMushafPage, loadReadingPage]);
+
+  // Prefetch adjacent pages
   useEffect(() => {
     const next = currentPage + 1;
     const prev = currentPage - 1;
-    if (next <= TOTAL_PAGES && !pageCache.has(next)) {
-      fetchQuranPage(next).then((data) => setPageData(next, data)).catch(() => {});
+    if (isMushaf) {
+      if (next <= TOTAL_PAGES && !mushafPageCache.has(next))
+        fetchMushafPage(next).then((d) => setMushafPageData(next, d)).catch(() => {});
+      if (prev >= 1 && !mushafPageCache.has(prev))
+        fetchMushafPage(prev).then((d) => setMushafPageData(prev, d)).catch(() => {});
+    } else {
+      if (next <= TOTAL_PAGES && !pageCache.has(next))
+        fetchQuranPage(next).then((d) => setPageData(next, d)).catch(() => {});
+      if (prev >= 1 && !pageCache.has(prev))
+        fetchQuranPage(prev).then((d) => setPageData(prev, d)).catch(() => {});
     }
-    if (prev >= 1 && !pageCache.has(prev)) {
-      fetchQuranPage(prev).then((data) => setPageData(prev, data)).catch(() => {});
-    }
-  }, [currentPage, pageCache, setPageData]);
+  }, [currentPage, isMushaf, pageCache, mushafPageCache, setPageData, setMushafPageData]);
 
   const goNext = () => {
     if (currentPage < TOTAL_PAGES) setCurrentPage(currentPage + 1);
@@ -291,22 +371,42 @@ export default function QuranPage() {
     document.documentElement.classList.toggle("dark", isDark);
   };
 
+  const currentData = isMushaf ? mushafPageData : pageData;
+  const isFirstLoad = isLoading && !currentData;
+
   return (
-    <div className="flex flex-col min-h-screen bg-background text-foreground">
+    <div
+      className="flex flex-col min-h-screen bg-background text-foreground"
+      style={isMushaf ? { height: "100dvh", overflow: "hidden" } : undefined}
+    >
+      {/* ── Header ───────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 bg-background/90 backdrop-blur-sm border-b border-border flex items-center justify-between px-4 py-2.5">
         <Link href="/analytics">
-          <button className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground" aria-label="Analytics">
+          <button
+            className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            aria-label="Analytics"
+          >
             <BarChart2 className="w-5 h-5" />
           </button>
         </Link>
 
-        <PageInput
-          currentPage={currentPage}
-          totalPages={TOTAL_PAGES}
-          onGo={setCurrentPage}
-        />
+        <PageInput currentPage={currentPage} totalPages={TOTAL_PAGES} onGo={setCurrentPage} />
 
         <div className="flex items-center gap-1">
+          {/* View mode toggle */}
+          <button
+            onClick={() => setViewMode(isMushaf ? "reading" : "mushaf")}
+            className={`p-2 rounded-lg hover:bg-muted transition-colors ${isMushaf ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+            aria-label={isMushaf ? "Switch to Reading mode" : "Switch to Mushaf mode"}
+            title={isMushaf ? "Reading mode" : "Mushaf mode"}
+          >
+            {isMushaf ? (
+              <AlignLeft className="w-5 h-5" />
+            ) : (
+              <BookOpen className="w-5 h-5" />
+            )}
+          </button>
+
           <button
             onClick={toggleDark}
             className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
@@ -324,8 +424,9 @@ export default function QuranPage() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-auto">
-        {isLoading && !pageData && (
+      {/* ── Main content ──────────────────────────────────────────────────── */}
+      <main className={`flex-1 ${isMushaf ? "flex flex-col overflow-hidden" : "overflow-auto"}`}>
+        {isFirstLoad && (
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
             <p className="text-sm text-muted-foreground">Loading page {currentPage}…</p>
@@ -337,7 +438,11 @@ export default function QuranPage() {
             <AlertCircle className="w-8 h-8 text-destructive" />
             <p className="text-sm text-destructive text-center max-w-xs">{error}</p>
             <button
-              onClick={() => { setError(null); loadPage(currentPage); }}
+              onClick={() => {
+                setError(null);
+                if (isMushaf) loadMushafPage(currentPage);
+                else loadReadingPage(currentPage);
+              }}
               className="text-sm text-primary underline"
             >
               Try again
@@ -345,11 +450,16 @@ export default function QuranPage() {
           </div>
         )}
 
-        {pageData && (
+        {!error && !isFirstLoad && isMushaf && mushafPageData && (
+          <MushafPage pageData={mushafPageData} />
+        )}
+
+        {!error && !isFirstLoad && !isMushaf && pageData && (
           <PageContent pageData={pageData} fontSize={settings.fontSize} />
         )}
       </main>
 
+      {/* ── Footer navigation ─────────────────────────────────────────────── */}
       <footer className="sticky bottom-0 z-30 bg-background/90 backdrop-blur-sm border-t border-border">
         <div className="flex items-center justify-between px-6 py-3 max-w-lg mx-auto">
           <button
@@ -401,6 +511,7 @@ export default function QuranPage() {
         setFontSize={(n) => updateSettings({ fontSize: n })}
         showTranslation={settings.showTranslation}
         setShowTranslation={(v) => updateSettings({ showTranslation: v })}
+        isMushafMode={isMushaf}
       />
     </div>
   );
