@@ -10,6 +10,11 @@ interface MushafSvgPageProps {
 
 const SVG_CACHE = new Map<number, string>();
 
+// Inline fill applied to SVG path elements for selected words.
+// Mirrors the .md-word-hovered path CSS rule; inline style ensures visibility
+// regardless of CSS cascade on dynamically-injected SVG content.
+const SVG_SEL_FILL = "hsl(153 35% 30%)";
+
 async function fetchSvgPage(pageNum: number): Promise<string> {
   if (SVG_CACHE.has(pageNum)) return SVG_CACHE.get(pageNum)!;
   const url = `/api/mushaf-svg/${pageNum}`;
@@ -64,10 +69,12 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       if (!next.has(id)) {
         const wordEl = svgWordQuery(id, container);
         if (wordEl) {
-          wordEl.querySelector(".md-hover-rect[data-sel]")?.remove();
-          // Keep md-word-hovered if the mouse is still physically over this word.
+          wordEl.querySelector<SVGRectElement>(".md-hover-rect[data-sel]")?.remove();
+          // Keep class and inline fill if the mouse is still hovering — clearHoverWord
+          // will handle clean-up on mouse-leave.
           if (wordEl !== hoverWordRef.current) {
             wordEl.classList.remove("md-word-hovered");
+            wordEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = ""; });
           }
         }
       }
@@ -79,6 +86,9 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
         const wordEl = svgWordQuery(id, container);
         if (!wordEl) return;
         wordEl.classList.add("md-word-hovered");
+        // Set inline fill on every path so the colour is guaranteed to appear
+        // regardless of CSS cascade on dynamically-injected SVG content.
+        wordEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = SVG_SEL_FILL; });
         // Only inject a selection rect if one isn't already there.
         if (!wordEl.querySelector(".md-hover-rect[data-sel]")) {
           try {
@@ -334,9 +344,10 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const clearHoverWord = useCallback(() => {
     if (hoverWordRef.current) {
       // Don't strip md-word-hovered from a word that has a pinned selection rect —
-      // that class is what keeps the selection highlight visible.
+      // that class and the inline fill are what keep the selection highlight visible.
       if (!hoverWordRef.current.querySelector(".md-hover-rect[data-sel]")) {
         hoverWordRef.current.classList.remove("md-word-hovered");
+        hoverWordRef.current.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = ""; });
       }
       hoverWordRef.current = null;
     }

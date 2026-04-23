@@ -51,6 +51,12 @@ function applyReadingClass(id: string, add: boolean) {
   document.getElementById(id)?.classList.toggle("word-selected", add);
 }
 
+// Fill applied directly to SVG path elements during brush selection.
+// Matches the CSS rule for .md-word-hovered path so inline style and class
+// always agree; using inline style guarantees visibility regardless of CSS
+// cascade issues on dynamically-injected SVG content.
+const SVG_SEL_FILL = "hsl(153 35% 30%)";
+
 function applySvgClass(nid: string, add: boolean, container: Element) {
   const [s, a, w] = nid.split(":");
   const surahPad = s.padStart(3, "0");
@@ -58,14 +64,15 @@ function applySvgClass(nid: string, add: boolean, container: Element) {
   const sel = `g[data-surah="${surahPad}"][data-aya="${ayaPad}"][data-word-index-in-ayah="${w}"]`;
   const el = container.querySelector<Element>(sel);
   if (!el) return;
-  // Reuse the hover class so selection looks identical to hover (guaranteed to work).
-  // The persistent selection rect is managed by MushafSvgPage's selectedWordIds effect.
   if (add) {
     el.classList.add("md-word-hovered");
+    el.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = SVG_SEL_FILL; });
   } else {
-    // Only remove the class if the word doesn't have a pinned selection rect.
+    // Only remove if there is no pinned selection rect — the word may still be
+    // in the committed Zustand selection even as the brush moves away.
     if (!el.querySelector(".md-hover-rect[data-sel]")) {
       el.classList.remove("md-word-hovered");
+      el.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = ""; });
     }
   }
 }
