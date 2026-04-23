@@ -547,12 +547,22 @@ export default function QuranPage() {
     }
   }, [currentSurah, currentPage, isMushaf, surahCache, mushafPageCache, setSurahData, setMushafPageData]);
 
+  // Proactively keep currentPage in sync with currentSurah in reading mode,
+  // so that if chapters are loaded later or surah changes, the page is always
+  // up-to-date before the user switches to Mushaf mode.
+  useEffect(() => {
+    if (!isMushaf && chapter?.mushafStartPage) {
+      setCurrentPage(chapter.mushafStartPage);
+    }
+  }, [currentSurah, chapter, isMushaf, setCurrentPage]);
+
   // Sync mushaf page when switching from reading mode
   const handleModeSwitch = () => {
     if (!isMushaf) {
-      // Switching reading → mushaf: jump to the mushaf start page of current surah
+      // Guard: wait until chapter metadata is available so sync is never skipped
       const startPage = chapters[currentSurah]?.mushafStartPage;
-      if (startPage) setCurrentPage(startPage);
+      if (!startPage) return; // chapters not yet loaded — silently skip
+      setCurrentPage(startPage);
     }
     setViewMode(isMushaf ? "reading" : "mushaf");
   };
