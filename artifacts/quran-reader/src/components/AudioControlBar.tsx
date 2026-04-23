@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from "react";
-import { Play, Pause, Repeat, Music2 } from "lucide-react";
+import { Play, Pause, Repeat, Music2, Highlighter } from "lucide-react";
 import type { ChapterMap } from "../types/quran";
 import { useSelectionAudio } from "../hooks/useSelectionAudio";
 import { useQuranStore } from "../store/quranStore";
@@ -24,6 +24,8 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
 
   const playbackHighlightMode = useQuranStore((s) => s.playbackHighlightMode);
   const setPlaybackHighlightMode = useQuranStore((s) => s.setPlaybackHighlightMode);
+  const playbackHighlightEnabled = useQuranStore((s) => s.playbackHighlightEnabled);
+  const setPlaybackHighlightEnabled = useQuranStore((s) => s.setPlaybackHighlightEnabled);
 
   const handlePlayPause = useCallback(() => {
     if (isPlaying) {
@@ -133,6 +135,21 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
           />
         </div>
       </div>
+
+      <button
+        onClick={() => setPlaybackHighlightEnabled(!playbackHighlightEnabled)}
+        style={{ pointerEvents: "auto" }}
+        className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 border ${
+          playbackHighlightEnabled
+            ? "bg-primary/15 border-primary text-primary"
+            : "border-border text-muted-foreground hover:bg-muted"
+        }`}
+        aria-label={playbackHighlightEnabled ? "Disable per-word colour highlight" : "Enable per-word colour highlight"}
+        aria-pressed={playbackHighlightEnabled}
+        title={playbackHighlightEnabled ? "Word colour: on" : "Word colour: off"}
+      >
+        <Highlighter className="w-3.5 h-3.5" />
+      </button>
 
       <div
         className="flex items-center rounded-lg border border-border overflow-hidden flex-shrink-0"

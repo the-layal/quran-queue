@@ -18,6 +18,7 @@ interface QuranStore {
   brushFineness: BrushFineness;
 
   playbackHighlightMode: PlaybackHighlightMode;
+  playbackHighlightEnabled: boolean;
   playbackActiveIds: string[];
   playbackCurrentWordId: string | null;
 
@@ -34,6 +35,7 @@ interface QuranStore {
   clearSelection: () => void;
   confirmSelection: () => void;
   setPlaybackHighlightMode: (mode: PlaybackHighlightMode) => void;
+  setPlaybackHighlightEnabled: (enabled: boolean) => void;
   setPlaybackActiveIds: (ids: string[]) => void;
   setPlaybackCurrentWordId: (id: string | null) => void;
 }
@@ -58,6 +60,7 @@ export const useQuranStore = create<QuranStore>()(
       brushFineness: "word",
 
       playbackHighlightMode: "ayah",
+      playbackHighlightEnabled: true,
       playbackActiveIds: [],
       playbackCurrentWordId: null,
 
@@ -99,6 +102,7 @@ export const useQuranStore = create<QuranStore>()(
       },
 
       setPlaybackHighlightMode: (playbackHighlightMode) => set({ playbackHighlightMode }),
+      setPlaybackHighlightEnabled: (playbackHighlightEnabled) => set({ playbackHighlightEnabled }),
       setPlaybackActiveIds: (playbackActiveIds) => set({ playbackActiveIds }),
       setPlaybackCurrentWordId: (playbackCurrentWordId) => set({ playbackCurrentWordId }),
     }),

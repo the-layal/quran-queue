@@ -124,6 +124,7 @@ export function useSelectionAudio(): SelectionAudioState {
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
   const brushFineness = useQuranStore((s) => s.brushFineness);
   const playbackHighlightMode = useQuranStore((s) => s.playbackHighlightMode);
+  const playbackHighlightEnabled = useQuranStore((s) => s.playbackHighlightEnabled);
   const setPlaybackActiveIds = useQuranStore((s) => s.setPlaybackActiveIds);
   const setPlaybackCurrentWordId = useQuranStore((s) => s.setPlaybackCurrentWordId);
 
@@ -147,6 +148,9 @@ export function useSelectionAudio(): SelectionAudioState {
   const playbackHighlightModeRef = useRef(playbackHighlightMode);
   playbackHighlightModeRef.current = playbackHighlightMode;
 
+  const playbackHighlightEnabledRef = useRef(playbackHighlightEnabled);
+  playbackHighlightEnabledRef.current = playbackHighlightEnabled;
+
   const audioDataRef = useRef(audioData);
   audioDataRef.current = audioData;
 
@@ -160,6 +164,19 @@ export function useSelectionAudio(): SelectionAudioState {
     prevActiveIdsRef.current = [];
     prevCurrentWordIdRef.current = null;
   }, [playbackHighlightMode]);
+
+  // When word highlighting is disabled, clear the current-word highlight immediately.
+  // Also reset prevActiveIdsRef so the very next RAF tick unconditionally re-fires
+  // setPlaybackActiveIds — this re-stamps the group (line/ayah) highlight classes
+  // on the DOM, which can otherwise go missing when the current-word effect clears
+  // its own classes and skips the "re-assert playing" branch.
+  useEffect(() => {
+    if (!playbackHighlightEnabled) {
+      prevCurrentWordIdRef.current = null;
+      prevActiveIdsRef.current = [];
+      setPlaybackCurrentWordId(null);
+    }
+  }, [playbackHighlightEnabled, setPlaybackCurrentWordId]);
 
   useEffect(() => {
     loadAudioData()
@@ -254,6 +271,7 @@ export function useSelectionAudio(): SelectionAudioState {
         setProgress(prog);
 
         // Highlight tracking: compute which words are active and push to store
+        const highlightEnabled = playbackHighlightEnabledRef.current;
         const mode = playbackHighlightModeRef.current;
         const aData = audioDataRef.current;
         const activeKey = region.ayahKey;
@@ -261,6 +279,7 @@ export function useSelectionAudio(): SelectionAudioState {
           ? regionElapsed * 1000
           : region.startMs + regionElapsed * 1000;
 
+        // Line/ayah group highlight always runs regardless of the word-highlight toggle.
         let newActiveIds: string[];
         let currentWordIndex: number | null = null;
 
@@ -289,17 +308,18 @@ export function useSelectionAudio(): SelectionAudioState {
           setPlaybackActiveIds(newActiveIds);
         }
 
-        // Publish the single word being spoken right now (for word-level overlay).
-        // Deduplicate: only update the store when the word actually changes so we
-        // don't trigger unnecessary Zustand updates on every RAF tick.
-        const [surahStr, ayahStr] = activeKey.split(":");
-        const newCurrentWordId =
-          currentWordIndex !== null
-            ? `${parseInt(surahStr, 10)}:${parseInt(ayahStr, 10)}:${currentWordIndex}`
-            : null;
-        if (newCurrentWordId !== prevCurrentWordIdRef.current) {
-          prevCurrentWordIdRef.current = newCurrentWordId;
-          setPlaybackCurrentWordId(newCurrentWordId);
+        // Publish the single current-word highlight only when word highlighting is on.
+        // Deduplicate to avoid unnecessary Zustand updates on every RAF tick.
+        if (highlightEnabled) {
+          const [surahStr, ayahStr] = activeKey.split(":");
+          const newCurrentWordId =
+            currentWordIndex !== null
+              ? `${parseInt(surahStr, 10)}:${parseInt(ayahStr, 10)}:${currentWordIndex}`
+              : null;
+          if (newCurrentWordId !== prevCurrentWordIdRef.current) {
+            prevCurrentWordIdRef.current = newCurrentWordId;
+            setPlaybackCurrentWordId(newCurrentWordId);
+          }
         }
 
         // Pre-compute gapless eligibility so we can set the boundary threshold
