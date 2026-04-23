@@ -14,6 +14,7 @@ export interface SelectionAudioState {
   play: () => void;
   pause: () => void;
   toggleLoop: () => void;
+  seekTo: (fraction: number) => void;
 }
 
 function getWordElement(wordId: string): Element | null {
@@ -138,10 +139,16 @@ export function useSelectionAudio(): SelectionAudioState {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const isLoopingRef = useRef(false);
+  const isPlayingRef = useRef(false);
   const regionsRef = useRef<PlaybackRegion[]>([]);
   const regionIndexRef = useRef(0);
   const totalDurSecRef = useRef(0);
   const elapsedBeforeSecRef = useRef(0);
+  const pendingSeekRef = useRef<{
+    regionIndex: number;
+    offsetInRegion: number;
+    elapsedBefore: number;
+  } | null>(null);
   const prevActiveIdsRef = useRef<string[]>([]);
   const prevCurrentWordIdRef = useRef<string | null>(null);
 
@@ -155,6 +162,7 @@ export function useSelectionAudio(): SelectionAudioState {
   audioDataRef.current = audioData;
 
   isLoopingRef.current = isLooping;
+  isPlayingRef.current = isPlaying;
   regionsRef.current = regions;
 
   // When the highlight mode changes, invalidate the cached IDs so the very next
@@ -187,6 +195,9 @@ export function useSelectionAudio(): SelectionAudioState {
   useEffect(() => {
     if (!audioData) return;
     const newRegions = computePlaybackRegions(selectedWordIds, audioData, brushFineness);
+    // Initialise totalDurSecRef eagerly so seekTo() works before the first play().
+    totalDurSecRef.current =
+      newRegions.reduce((sum, r) => sum + r.durationMs, 0) / 1000;
     setRegions(newRegions);
     stopPlayback();
     setProgress(0);
@@ -216,6 +227,7 @@ export function useSelectionAudio(): SelectionAudioState {
 
   function stopPlayback() {
     cancelRaf();
+    pendingSeekRef.current = null;
     if (audioRef.current) {
       audioRef.current.onended = null;
       audioRef.current.pause();
@@ -226,7 +238,7 @@ export function useSelectionAudio(): SelectionAudioState {
     clearActiveHighlight();
   }
 
-  const playRegion = useCallback((regionIndex: number, gapless = false) => {
+  const playRegion = useCallback((regionIndex: number, gapless = false, seekOffsetSec?: number) => {
     const allRegions = regionsRef.current;
 
     if (regionIndex >= allRegions.length) {
@@ -357,13 +369,15 @@ export function useSelectionAudio(): SelectionAudioState {
     };
 
     const doSeekAndPlay = () => {
-      // Seek slightly before the desired start to avoid MP3 frame-alignment
-      // cut-offs (the decoder snaps to the nearest keyframe, which can be
-      // ~26 ms after the requested point). The RAF loop discards the pre-roll
-      // via Math.max(0, ct - startSec), so highlights and progress are
-      // unaffected. 100 ms is typically inter-word silence in recitation.
+      // When seeking to a specific offset within the region (scrubbing), jump
+      // directly to the target time. Otherwise use the pre-roll approach to
+      // avoid MP3 frame-alignment cut-offs at region boundaries.
       const PREROLL_SEC = 0.1;
-      audio.currentTime = Math.max(0, startSec - PREROLL_SEC);
+      const targetTime =
+        seekOffsetSec !== undefined
+          ? startSec + seekOffsetSec
+          : Math.max(0, startSec - PREROLL_SEC);
+      audio.currentTime = targetTime;
       const p = audio.play();
       if (p) {
         p.then(startTicking).catch(() => {
@@ -389,12 +403,26 @@ export function useSelectionAudio(): SelectionAudioState {
 
   const play = useCallback(() => {
     if (regions.length === 0) return;
-    const totalMs = regions.reduce((sum, r) => sum + r.durationMs, 0);
-    totalDurSecRef.current = totalMs / 1000;
-    elapsedBeforeSecRef.current = 0;
-    regionIndexRef.current = 0;
+    // Keep totalDurSecRef in sync (it was already set when regions were
+    // computed, but update it here too in case regions changed without a
+    // re-render between compute and play).
+    totalDurSecRef.current =
+      regions.reduce((sum, r) => sum + r.durationMs, 0) / 1000;
+
+    const pending = pendingSeekRef.current;
+    pendingSeekRef.current = null;
+
     setIsPlaying(true);
-    playRegion(0);
+    if (pending) {
+      // Resume from a position the user scrubbed to while paused.
+      elapsedBeforeSecRef.current = pending.elapsedBefore;
+      regionIndexRef.current = pending.regionIndex;
+      playRegion(pending.regionIndex, false, pending.offsetInRegion);
+    } else {
+      elapsedBeforeSecRef.current = 0;
+      regionIndexRef.current = 0;
+      playRegion(0);
+    }
   }, [regions, playRegion]);
 
   const pause = useCallback(() => {
@@ -404,6 +432,78 @@ export function useSelectionAudio(): SelectionAudioState {
   const toggleLoop = useCallback(() => {
     setIsLooping((prev) => !prev);
   }, []);
+
+  const seekTo = useCallback(
+    (fraction: number) => {
+      const allRegions = regionsRef.current;
+      if (allRegions.length === 0) return;
+      const totalDur = totalDurSecRef.current;
+      if (totalDur <= 0) return;
+
+      const clamped = Math.max(0, Math.min(1, fraction));
+      const targetSec = clamped * totalDur;
+
+      // Find which region this target falls in and the offset within it.
+      let accumulated = 0;
+      let targetRegionIndex = allRegions.length - 1;
+      let offsetInRegion = 0;
+
+      for (let i = 0; i < allRegions.length; i++) {
+        const regionDurSec = allRegions[i].durationMs / 1000;
+        if (accumulated + regionDurSec > targetSec || i === allRegions.length - 1) {
+          targetRegionIndex = i;
+          offsetInRegion = Math.max(0, targetSec - accumulated);
+          break;
+        }
+        accumulated += regionDurSec;
+      }
+
+      const wasPlaying = isPlayingRef.current;
+
+      // Stop the RAF loop and pause audio before seeking.
+      cancelRaf();
+      if (audioRef.current) audioRef.current.pause();
+
+      elapsedBeforeSecRef.current = accumulated;
+      setCurrentAyahKey(allRegions[targetRegionIndex].ayahKey);
+      setProgress(clamped);
+
+      // Invalidate cached highlight IDs so the first tick after seek fires fresh.
+      prevActiveIdsRef.current = [];
+      prevCurrentWordIdRef.current = null;
+
+      if (wasPlaying) {
+        setIsPlaying(true);
+        playRegion(targetRegionIndex, false, offsetInRegion);
+      } else {
+        // When paused: record the seeked position so play() resumes from here.
+        pendingSeekRef.current = {
+          regionIndex: targetRegionIndex,
+          offsetInRegion,
+          elapsedBefore: accumulated,
+        };
+        // Pre-load and seek the underlying audio element so there is no
+        // startup delay when the user later presses play.
+        const audio = getOrCreateAudio();
+        const region = allRegions[targetRegionIndex];
+        const targetTime = region.startMs / 1000 + offsetInRegion;
+        if (audio.src !== region.audioUrl) {
+          audio.src = region.audioUrl;
+          audio.load();
+          audio.addEventListener(
+            "canplay",
+            () => {
+              audio.currentTime = targetTime;
+            },
+            { once: true }
+          );
+        } else {
+          audio.currentTime = targetTime;
+        }
+      }
+    },
+    [playRegion]
+  );
 
   useEffect(() => {
     return () => {
@@ -430,5 +530,6 @@ export function useSelectionAudio(): SelectionAudioState {
     play,
     pause,
     toggleLoop,
+    seekTo,
   };
 }

@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { Play, Pause, Repeat, Music2, Highlighter } from "lucide-react";
 import type { ChapterMap } from "../types/quran";
 import { useSelectionAudio } from "../hooks/useSelectionAudio";
@@ -20,7 +20,60 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
     play,
     pause,
     toggleLoop,
+    seekTo,
   } = useSelectionAudio();
+
+  const progressBarRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
+
+  const getFractionFromEvent = useCallback(
+    (clientX: number): number => {
+      const el = progressBarRef.current;
+      if (!el) return 0;
+      const rect = el.getBoundingClientRect();
+      return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    },
+    []
+  );
+
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      isDraggingRef.current = true;
+      progressBarRef.current?.setPointerCapture(e.pointerId);
+      seekTo(getFractionFromEvent(e.clientX));
+    },
+    [seekTo, getFractionFromEvent]
+  );
+
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!isDraggingRef.current) return;
+      e.preventDefault();
+      seekTo(getFractionFromEvent(e.clientX));
+    },
+    [seekTo, getFractionFromEvent]
+  );
+
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!isDraggingRef.current) return;
+      isDraggingRef.current = false;
+      progressBarRef.current?.releasePointerCapture(e.pointerId);
+      seekTo(getFractionFromEvent(e.clientX));
+    },
+    [seekTo, getFractionFromEvent]
+  );
+
+  const handlePointerCancel = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!isDraggingRef.current) return;
+      isDraggingRef.current = false;
+      progressBarRef.current?.releasePointerCapture(e.pointerId);
+      // Do not seek on cancel — just end the drag at the last valid position.
+    },
+    []
+  );
 
   const playbackHighlightMode = useQuranStore((s) => s.playbackHighlightMode);
   const setPlaybackHighlightMode = useQuranStore((s) => s.setPlaybackHighlightMode);
@@ -128,10 +181,29 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
             {ayahLabel}
           </span>
         )}
-        <div className="relative h-1 w-24 sm:w-36 rounded-full bg-muted overflow-hidden">
+        <div
+          ref={progressBarRef}
+          className="relative h-3 w-24 sm:w-36 flex items-center cursor-pointer select-none touch-none"
+          style={{ pointerEvents: "auto" }}
+          role="slider"
+          aria-label="Playback position"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progress * 100)}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
+        >
+          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 rounded-full bg-muted overflow-hidden">
+            <div
+              className="absolute inset-y-0 left-0 bg-primary rounded-full"
+              style={{ width: `${Math.round(progress * 100)}%` }}
+            />
+          </div>
           <div
-            className="absolute inset-y-0 left-0 bg-primary rounded-full transition-[width] duration-100"
-            style={{ width: `${Math.round(progress * 100)}%` }}
+            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-primary shadow-sm transition-opacity"
+            style={{ left: `${Math.round(progress * 100)}%` }}
           />
         </div>
       </div>
