@@ -770,7 +770,7 @@ export default function QuranPage() {
                 aria-label="Previous page"
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
               >
-                <ChevronRight className="w-4 h-4" />
+                <ChevronLeft className="w-4 h-4" />
                 Prev
               </button>
 
@@ -801,7 +801,7 @@ export default function QuranPage() {
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
               >
                 Next
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -813,7 +813,7 @@ export default function QuranPage() {
               aria-label="Previous surah"
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronLeft className="w-4 h-4" />
               Prev
             </button>
 
@@ -831,7 +831,7 @@ export default function QuranPage() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
             >
               Next
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         )}
