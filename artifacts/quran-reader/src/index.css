@@ -472,6 +472,21 @@ input[type="number"]::-webkit-outer-spin-button {
   pointer-events: none;
 }
 
+/* Selection unit outline — brackets a line or ayah group so users can see
+   what acts as one atomic deselectable unit (Line / Ayah fineness modes). */
+.mushaf-svg-container .md-unit-outline {
+  fill: hsl(153 45% 42% / 0.07);
+  stroke: hsl(153 45% 38%);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 2.5;
+  pointer-events: none;
+}
+
+.dark .mushaf-svg-container .md-unit-outline {
+  fill: hsl(153 50% 68% / 0.08);
+  stroke: hsl(153 50% 62%);
+}
+
 /* Hover — all paths (letters + diacritics) tinted sage green */
 .mushaf-svg-container g[data-word-index-in-ayah].md-word-hovered path {
   fill: hsl(153 35% 30%);
