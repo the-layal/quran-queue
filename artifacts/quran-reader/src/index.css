@@ -61,10 +61,10 @@
 
   --border: 35 20% 87%;
   --input: 35 20% 87%;
-  --ring: 38 70% 45%;
+  --ring: 153 19% 45%;
 
-  --primary: 38 70% 42%;
-  --primary-foreground: 40 100% 98%;
+  --primary: 153 19% 45%;
+  --primary-foreground: 153 100% 98%;
 
   --secondary: 35 15% 90%;
   --secondary-foreground: 20 30% 25%;
@@ -72,7 +72,7 @@
   --muted: 35 15% 93%;
   --muted-foreground: 20 20% 50%;
 
-  --accent: 38 65% 88%;
+  --accent: 153 25% 88%;
   --accent-foreground: 20 40% 15%;
 
   --destructive: 0 72% 51%;
@@ -84,7 +84,7 @@
 
   /* Mushaf page colours */
   --mushaf-bg: 40 60% 97%;
-  --mushaf-border: 38 50% 60%;
+  --mushaf-border: 153 18% 55%;
 }
 
 .dark {
@@ -96,9 +96,9 @@
 
   --border: 20 12% 18%;
   --input: 20 12% 20%;
-  --ring: 38 65% 55%;
+  --ring: 153 22% 55%;
 
-  --primary: 38 65% 52%;
+  --primary: 153 22% 55%;
   --primary-foreground: 20 15% 8%;
 
   --secondary: 20 12% 16%;
@@ -107,7 +107,7 @@
   --muted: 20 12% 13%;
   --muted-foreground: 20 10% 55%;
 
-  --accent: 38 30% 18%;
+  --accent: 153 15% 18%;
   --accent-foreground: 40 20% 91%;
 
   --destructive: 0 62% 45%;
@@ -115,7 +115,7 @@
 
   /* Mushaf page colours — dark */
   --mushaf-bg: 25 25% 10%;
-  --mushaf-border: 35 30% 30%;
+  --mushaf-border: 153 12% 28%;
 }
 
 @layer base {
@@ -425,9 +425,9 @@ input[type="number"]::-webkit-outer-spin-button {
   pointer-events: bounding-box;
 }
 
-/* Active (clicked) word — all paths (letters + diacritics) turn amber */
+/* Active (clicked) word — all paths (letters + diacritics) turn sage green */
 .mushaf-svg-container g[data-word-index-in-ayah].md-word-active path {
-  fill: hsl(42 90% 40%);
+  fill: hsl(153 38% 32%);
 }
 
 /* ── Dark mode SVG text — flip fills to light so text is legible on dark parchment */
@@ -436,7 +436,7 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 .dark .mushaf-svg-container g[data-word-index-in-ayah].md-word-active path {
-  fill: hsl(38 90% 68%);
+  fill: hsl(153 45% 62%);
 }
 
 /* Transparent hit-rect covering the full word bounding box (pointer events only) */
@@ -452,11 +452,11 @@ input[type="number"]::-webkit-outer-spin-button {
   pointer-events: none;
 }
 
-/* Hover — all paths (letters + diacritics) tinted amber */
+/* Hover — all paths (letters + diacritics) tinted sage green */
 .mushaf-svg-container g[data-word-index-in-ayah].md-word-hovered path {
-  fill: hsl(42 85% 35%);
+  fill: hsl(153 35% 30%);
 }
 
 .dark .mushaf-svg-container g[data-word-index-in-ayah].md-word-hovered path {
-  fill: hsl(42 90% 65%);
+  fill: hsl(153 40% 58%);
 }
