@@ -14,41 +14,6 @@ export interface SelectionAudioState {
   play: () => void;
   pause: () => void;
   toggleLoop: () => void;
-  audioContext: AudioContext | null;
-}
-
-interface SchedulerState {
-  sources: AudioBufferSourceNode[];
-  startedAtContextTime: number;
-  totalDurationSec: number;
-  regions: PlaybackRegion[];
-  looping: boolean;
-}
-
-const bufferCache = new Map<string, AudioBuffer>();
-
-async function fetchAndDecode(
-  ctx: AudioContext,
-  url: string
-): Promise<AudioBuffer> {
-  const cached = bufferCache.get(url);
-  if (cached) return cached;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Audio fetch failed: ${url}`);
-  const arrayBuffer = await res.arrayBuffer();
-  const decoded = await ctx.decodeAudioData(arrayBuffer);
-  bufferCache.set(url, decoded);
-  return decoded;
-}
-
-function stopAllSources(sources: AudioBufferSourceNode[]) {
-  for (const src of sources) {
-    try {
-      src.onended = null;
-      src.stop();
-    } catch {
-    }
-  }
 }
 
 export function useSelectionAudio(): SelectionAudioState {
@@ -62,12 +27,16 @@ export function useSelectionAudio(): SelectionAudioState {
   const [audioData, setAudioData] = useState<AudioDataMap | null>(null);
   const [regions, setRegions] = useState<PlaybackRegion[]>([]);
 
-  const ctxRef = useRef<AudioContext | null>(null);
-  const schedulerRef = useRef<SchedulerState | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const isLoopingRef = useRef(false);
+  const regionsRef = useRef<PlaybackRegion[]>([]);
+  const regionIndexRef = useRef(0);
+  const totalDurSecRef = useRef(0);
+  const elapsedBeforeSecRef = useRef(0);
 
   isLoopingRef.current = isLooping;
+  regionsRef.current = regions;
 
   useEffect(() => {
     loadAudioData()
@@ -84,166 +53,132 @@ export function useSelectionAudio(): SelectionAudioState {
     setCurrentAyahKey(null);
   }, [selectedWordIds, audioData, brushFineness]);
 
-  function getOrCreateContext(): AudioContext {
-    if (!ctxRef.current || ctxRef.current.state === "closed") {
-      ctxRef.current = new AudioContext();
+  function getOrCreateAudio(): HTMLAudioElement {
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
     }
-    return ctxRef.current;
+    return audioRef.current;
   }
 
-  function stopPlayback() {
+  function cancelRaf() {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
-    if (schedulerRef.current) {
-      stopAllSources(schedulerRef.current.sources);
-      schedulerRef.current = null;
+  }
+
+  function stopPlayback() {
+    cancelRaf();
+    if (audioRef.current) {
+      audioRef.current.onended = null;
+      audioRef.current.pause();
     }
+    regionIndexRef.current = 0;
+    elapsedBeforeSecRef.current = 0;
     setIsPlaying(false);
   }
 
-  function startProgressLoop(
-    ctx: AudioContext,
-    startedAt: number,
-    totalDuration: number,
-    regionsSnapshot: PlaybackRegion[]
-  ) {
-    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+  const playRegion = useCallback((regionIndex: number) => {
+    const allRegions = regionsRef.current;
 
-    function tick() {
-      const elapsed = ctx.currentTime - startedAt;
-      const prog = totalDuration > 0 ? Math.min(elapsed / totalDuration, 1) : 0;
-      setProgress(prog);
-
-      let cumulative = 0;
-      let activeKey: string | null = null;
-      for (const region of regionsSnapshot) {
-        const regionDur = region.durationMs / 1000;
-        if (elapsed >= cumulative && elapsed < cumulative + regionDur) {
-          activeKey = region.ayahKey;
-          break;
-        }
-        cumulative += regionDur;
+    if (regionIndex >= allRegions.length) {
+      if (isLoopingRef.current) {
+        elapsedBeforeSecRef.current = 0;
+        playRegion(0);
+      } else {
+        cancelRaf();
+        setIsPlaying(false);
+        setProgress(1);
       }
-      if (activeKey === null && regionsSnapshot.length > 0) {
-        activeKey = regionsSnapshot[regionsSnapshot.length - 1].ayahKey;
-      }
-      setCurrentAyahKey(activeKey);
-
-      rafRef.current = requestAnimationFrame(tick);
+      return;
     }
 
-    rafRef.current = requestAnimationFrame(tick);
-  }
+    const region = allRegions[regionIndex];
+    regionIndexRef.current = regionIndex;
 
-  const scheduleRegions = useCallback(
-    async (regionsToPlay: PlaybackRegion[], loop: boolean) => {
-      if (regionsToPlay.length === 0) return;
+    const startSec = region.startMs / 1000;
+    const endSec = region.endMs / 1000;
+    const regionDurSec = region.durationMs / 1000;
+    const totalDur = totalDurSecRef.current;
+    const elapsedBefore = elapsedBeforeSecRef.current;
 
-      const ctx = getOrCreateContext();
-      if (ctx.state === "suspended") {
-        await ctx.resume();
-      }
+    setCurrentAyahKey(region.ayahKey);
+    cancelRaf();
 
-      const buffers = await Promise.all(
-        regionsToPlay.map((r) => fetchAndDecode(ctx, r.audioUrl))
-      );
+    const audio = getOrCreateAudio();
+    audio.onended = null;
 
-      if (schedulerRef.current) {
-        stopAllSources(schedulerRef.current.sources);
-      }
+    const startTicking = () => {
+      const tick = () => {
+        const ct = audio.currentTime;
+        const regionElapsed = Math.max(0, ct - startSec);
+        const prog =
+          totalDur > 0
+            ? Math.min((elapsedBefore + regionElapsed) / totalDur, 1)
+            : 0;
+        setProgress(prog);
 
-      const sources: AudioBufferSourceNode[] = [];
-      const resolvedRegions: PlaybackRegion[] = [];
-      let scheduleTime = ctx.currentTime;
-      const startedAt = scheduleTime;
-      let totalDuration = 0;
+        if (ct >= endSec - 0.08 || audio.ended) {
+          audio.pause();
+          audio.onended = null;
+          elapsedBeforeSecRef.current = elapsedBefore + regionDurSec;
+          playRegion(regionIndex + 1);
+          return;
+        }
 
-      for (let i = 0; i < regionsToPlay.length; i++) {
-        const region = regionsToPlay[i];
-        const buffer = buffers[i];
-
-        const source = ctx.createBufferSource();
-        source.buffer = buffer;
-        source.connect(ctx.destination);
-
-        const startSec = region.startMs / 1000;
-        const durSec = region.durationMs / 1000;
-
-        if (durSec <= 0) continue;
-
-        source.start(scheduleTime, startSec, durSec);
-        sources.push(source);
-        resolvedRegions.push(region);
-        scheduleTime += durSec;
-        totalDuration += durSec;
-      }
-
-      schedulerRef.current = {
-        sources,
-        startedAtContextTime: startedAt,
-        totalDurationSec: totalDuration,
-        regions: resolvedRegions,
-        looping: loop,
+        rafRef.current = requestAnimationFrame(tick);
       };
+      rafRef.current = requestAnimationFrame(tick);
+    };
 
-      setIsPlaying(true);
-      setCurrentAyahKey(resolvedRegions[0]?.ayahKey ?? regionsToPlay[0].ayahKey);
-      startProgressLoop(ctx, startedAt, totalDuration, resolvedRegions);
-
-      const lastSource = sources[sources.length - 1];
-      if (lastSource) {
-        lastSource.onended = () => {
-          const current = schedulerRef.current;
-          if (!current) return;
-
-          const ctx2 = ctxRef.current;
-          if (!ctx2) return;
-
-          const elapsed = ctx2.currentTime - current.startedAtContextTime;
-          if (elapsed < current.totalDurationSec - 0.1) return;
-
-          if (isLoopingRef.current) {
-            scheduleRegions(current.regions, true);
-          } else {
-            if (rafRef.current !== null) {
-              cancelAnimationFrame(rafRef.current);
-              rafRef.current = null;
-            }
-            schedulerRef.current = null;
-            setIsPlaying(false);
-            setProgress(1);
-          }
-        };
+    const doSeekAndPlay = () => {
+      audio.currentTime = startSec;
+      const p = audio.play();
+      if (p) {
+        p.then(startTicking).catch(() => {
+          setIsPlaying(false);
+        });
+      } else {
+        startTicking();
       }
-    },
-    []
-  );
+    };
+
+    if (audio.src !== region.audioUrl) {
+      audio.src = region.audioUrl;
+      audio.load();
+      audio.addEventListener("canplay", doSeekAndPlay, { once: true });
+    } else {
+      doSeekAndPlay();
+    }
+  }, []);
 
   const play = useCallback(() => {
     if (regions.length === 0) return;
-    scheduleRegions(regions, isLoopingRef.current);
-  }, [regions, scheduleRegions]);
+    const totalMs = regions.reduce((sum, r) => sum + r.durationMs, 0);
+    totalDurSecRef.current = totalMs / 1000;
+    elapsedBeforeSecRef.current = 0;
+    regionIndexRef.current = 0;
+    setIsPlaying(true);
+    playRegion(0);
+  }, [regions, playRegion]);
 
   const pause = useCallback(() => {
     stopPlayback();
   }, []);
 
   const toggleLoop = useCallback(() => {
-    setIsLooping((prev) => {
-      const next = !prev;
-      if (schedulerRef.current) {
-        schedulerRef.current.looping = next;
-      }
-      return next;
-    });
+    setIsLooping((prev) => !prev);
   }, []);
 
   useEffect(() => {
     return () => {
-      stopPlayback();
-      ctxRef.current?.close().catch(() => {});
+      cancelRaf();
+      if (audioRef.current) {
+        audioRef.current.onended = null;
+        audioRef.current.pause();
+        audioRef.current.src = "";
+        audioRef.current = null;
+      }
     };
   }, []);
 
@@ -260,6 +195,5 @@ export function useSelectionAudio(): SelectionAudioState {
     play,
     pause,
     toggleLoop,
-    audioContext: ctxRef.current,
   };
 }

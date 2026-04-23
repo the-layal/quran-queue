@@ -18,19 +18,15 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
     play,
     pause,
     toggleLoop,
-    audioContext,
   } = useSelectionAudio();
 
-  const handlePlayPause = useCallback(async () => {
-    if (audioContext && audioContext.state === "suspended") {
-      await audioContext.resume();
-    }
+  const handlePlayPause = useCallback(() => {
     if (isPlaying) {
       pause();
     } else {
       play();
     }
-  }, [isPlaying, play, pause, audioContext]);
+  }, [isPlaying, play, pause]);
 
   useEffect(() => {
     if (!hasSelection) return;
