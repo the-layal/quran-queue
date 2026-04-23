@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, type RefObject } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
-import { useSmartBrush } from "../hooks/useSmartBrush";
+import { useSmartBrush, svgSelFill } from "../hooks/useSmartBrush";
 
 interface MushafSvgPageProps {
   pageNumber: number;
@@ -64,6 +64,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
         if (wordEl) {
           wordEl.querySelector(".md-sel-rect")?.remove();
           wordEl.classList.remove("md-word-selected");
+          wordEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = ""; });
         }
       }
     });
@@ -73,6 +74,8 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
         const wordEl = svgWordQuery(id, container);
         if (!wordEl) return;
         wordEl.classList.add("md-word-selected");
+        const fill = svgSelFill();
+        wordEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = fill; });
         if (!wordEl.querySelector(".md-sel-rect")) {
           try {
             const bbox = (wordEl as SVGGElement).getBBox();

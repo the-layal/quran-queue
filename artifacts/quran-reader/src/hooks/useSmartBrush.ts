@@ -51,13 +51,24 @@ function applyReadingClass(id: string, add: boolean) {
   document.getElementById(id)?.classList.toggle("word-selected", add);
 }
 
+export function svgSelFill(): string {
+  return document.documentElement.classList.contains("dark")
+    ? "hsl(153 50% 68%)"
+    : "hsl(153 45% 42%)";
+}
+
 function applySvgClass(nid: string, add: boolean, container: Element) {
   const [s, a, w] = nid.split(":");
   const surahPad = s.padStart(3, "0");
   const ayaPad = a.padStart(3, "0");
   const sel = `g[data-surah="${surahPad}"][data-aya="${ayaPad}"][data-word-index-in-ayah="${w}"]`;
   const el = container.querySelector<Element>(sel);
-  el?.classList.toggle("md-word-selected", add);
+  if (!el) return;
+  el.classList.toggle("md-word-selected", add);
+  const fill = add ? svgSelFill() : "";
+  el.querySelectorAll<SVGPathElement>("path").forEach((p) => {
+    p.style.fill = fill;
+  });
 }
 
 // ── Ordered unit index builders ───────────────────────────────────────────────
