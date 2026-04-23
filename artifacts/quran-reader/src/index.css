@@ -387,9 +387,10 @@ input[type="number"]::-webkit-outer-spin-button {
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18), 0 1px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* Word groups: pointer cursor on hover */
+/* Word groups: pointer cursor + respond to events over the full bounding box */
 .mushaf-svg-container g[data-word-index-in-ayah] {
   cursor: pointer;
+  pointer-events: bounding-box;
 }
 
 /* Active (clicked) word highlight */

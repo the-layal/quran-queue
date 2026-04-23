@@ -19,16 +19,17 @@ async function fetchSvgPage(pageNum: number): Promise<string> {
 }
 
 export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPageProps) {
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const wrapperRef  = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [svgText, setSvgText] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const activeWordIdRef = useRef<string | null>(null);
-  const hoverRectRef = useRef<SVGRectElement | null>(null);
-  const hoverWordRef = useRef<Element | null>(null);
+  const hoverRectRef   = useRef<SVGRectElement | null>(null);
+  const hoverWordRef   = useRef<Element | null>(null);
   const [availH, setAvailH] = useState(0);
 
+  // ── Measure wrapper height (content-box, padding-excluded) ──────────────
   useLayoutEffect(() => {
     const el = wrapperRef.current;
     if (!el) return;
@@ -42,19 +43,17 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
 
   const containerHeight = Math.round((availH > 0 ? availH : 600) * scale);
 
+  // ── Fetch SVG page ──────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
     activeWordIdRef.current = null;
-    hoverRectRef.current = null;
+    hoverRectRef.current    = null;
 
     fetchSvgPage(pageNumber)
       .then((text) => {
-        if (!cancelled) {
-          setSvgText(text);
-          setLoading(false);
-        }
+        if (!cancelled) { setSvgText(text); setLoading(false); }
       })
       .catch((err) => {
         if (!cancelled) {
@@ -62,41 +61,72 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
           setLoading(false);
         }
       });
-
     return () => { cancelled = true; };
   }, [pageNumber]);
 
+  // ── Prefetch adjacent pages ─────────────────────────────────────────────
   useEffect(() => {
     const next = pageNumber + 1;
     const prev = pageNumber - 1;
     if (next <= 604 && !SVG_CACHE.has(next)) fetchSvgPage(next).catch(() => {});
-    if (prev >= 1 && !SVG_CACHE.has(prev)) fetchSvgPage(prev).catch(() => {});
+    if (prev >= 1  && !SVG_CACHE.has(prev))  fetchSvgPage(prev).catch(() => {});
   }, [pageNumber]);
 
-  // Inject transparent hit-rects covering each word's full bounding box so
-  // hovering anywhere inside the word area (including gaps between letter
-  // paths) triggers pointer events correctly.
-  useLayoutEffect(() => {
-    const container = containerRef.current;
-    if (!container || !svgText) return;
-    const wordGroups = container.querySelectorAll<SVGGElement>("g[data-word-index-in-ayah]");
-    wordGroups.forEach((wordEl) => {
-      try {
-        const bbox = wordEl.getBBox();
-        if (bbox.width === 0 && bbox.height === 0) return;
-        const hitRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        hitRect.setAttribute("x", String(bbox.x));
-        hitRect.setAttribute("y", String(bbox.y));
-        hitRect.setAttribute("width", String(bbox.width));
-        hitRect.setAttribute("height", String(bbox.height));
-        hitRect.classList.add("md-hit-rect");
-        wordEl.appendChild(hitRect);
-      } catch {
-        // getBBox can throw for hidden elements; skip silently
-      }
+  // ── Inject transparent hit-rects into a top-level SVG layer ────────────
+  //
+  // WHY a separate top-level layer?
+  //   - Appending rects inside each word group puts them below later
+  //     sibling line-groups in SVG z-order, so those groups intercept
+  //     events first.  A <g> appended as the LAST child of the <svg>
+  //     is always on top of all page content.
+  //
+  // WHY requestAnimationFrame?
+  //   - useLayoutEffect fires before the browser has finished computing
+  //     SVG layout, so getBBox() returns zeros and rects are never created.
+  //     rAF defers to after the first paint when layout is complete.
+  useEffect(() => {
+    if (!svgText) return;
+    let rafId: number;
+
+    rafId = requestAnimationFrame(() => {
+      const container = containerRef.current;
+      if (!container) return;
+      const svg = container.querySelector("svg");
+      if (!svg) return;
+
+      // Remove any stale hit-layer from a previous page
+      svg.querySelector("#md-hit-layer")?.remove();
+
+      const hitLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      hitLayer.id = "md-hit-layer";
+
+      const wordGroups = container.querySelectorAll<SVGGElement>("g[data-word-index-in-ayah]");
+      wordGroups.forEach((wordEl) => {
+        if (!wordEl.id) return;
+        try {
+          const bbox = wordEl.getBBox();
+          if (bbox.width === 0 && bbox.height === 0) return;
+          const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+          rect.setAttribute("x",      String(bbox.x));
+          rect.setAttribute("y",      String(bbox.y));
+          rect.setAttribute("width",  String(bbox.width));
+          rect.setAttribute("height", String(bbox.height));
+          rect.setAttribute("data-target-word", wordEl.id);
+          rect.classList.add("md-hit-rect");
+          hitLayer.appendChild(rect);
+        } catch {
+          // getBBox can throw for hidden/detached elements — skip silently
+        }
+      });
+
+      // Append last so hit-layer is always on top of all SVG content
+      svg.appendChild(hitLayer);
     });
+
+    return () => cancelAnimationFrame(rafId);
   }, [svgText]);
 
+  // ── Word-state helpers ──────────────────────────────────────────────────
   const clearActiveWord = useCallback(() => {
     const prev = activeWordIdRef.current;
     if (prev && containerRef.current) {
@@ -105,15 +135,10 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     activeWordIdRef.current = null;
   }, []);
 
-  useEffect(() => {
-    clearActiveWord();
-  }, [pageNumber, clearActiveWord]);
+  useEffect(() => { clearActiveWord(); }, [pageNumber, clearActiveWord]);
 
   const removeHoverRect = useCallback(() => {
-    if (hoverRectRef.current) {
-      hoverRectRef.current.remove();
-      hoverRectRef.current = null;
-    }
+    if (hoverRectRef.current) { hoverRectRef.current.remove(); hoverRectRef.current = null; }
   }, []);
 
   const clearHoverWord = useCallback(() => {
@@ -123,24 +148,35 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     }
   }, []);
 
-  const getWordGroup = useCallback((target: Element, currentTarget: Element): Element | null => {
-    let el: Element | null = target;
-    while (el && el !== currentTarget) {
-      if (el.hasAttribute("data-word-index-in-ayah")) return el;
-      el = el.parentElement;
-    }
-    return null;
-  }, []);
+  // ── Resolve target element → word group ────────────────────────────────
+  //
+  // Hit rects live in #md-hit-layer (not inside the word group), so the
+  // normal DOM-walk would never find data-word-index-in-ayah.  Instead we
+  // read data-target-word and look the group up by ID.
+  const getWordGroup = useCallback(
+    (target: Element, currentTarget: Element): Element | null => {
+      // Hit-rect path: resolve via data-target-word attribute
+      if (target.classList.contains("md-hit-rect")) {
+        const wordId = target.getAttribute("data-target-word");
+        return wordId ? currentTarget.querySelector(`#${wordId}`) : null;
+      }
+      // Normal path: walk up from the event target
+      let el: Element | null = target;
+      while (el && el !== currentTarget) {
+        if (el.hasAttribute("data-word-index-in-ayah")) return el;
+        el = el.parentElement;
+      }
+      return null;
+    },
+    []
+  );
 
+  // ── Mouse handlers ──────────────────────────────────────────────────────
   const handleMouseOver = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const wordEl = getWordGroup(e.target as Element, e.currentTarget);
 
-      if (!wordEl) {
-        clearHoverWord();
-        removeHoverRect();
-        return;
-      }
+      if (!wordEl) { clearHoverWord(); removeHoverRect(); return; }
 
       // Apply hover class for text colour change
       if (hoverWordRef.current !== wordEl) {
@@ -149,17 +185,12 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
         hoverWordRef.current = wordEl;
       }
 
-      // Position / move the hover highlight rect
-      let svgBBox: SVGRect;
-      try {
-        svgBBox = (wordEl as SVGGElement).getBBox();
-      } catch {
-        return;
-      }
-      if (svgBBox.width === 0 && svgBBox.height === 0) return;
+      // Position / update the amber highlight rect
+      let bbox: SVGRect;
+      try { bbox = (wordEl as SVGGElement).getBBox(); } catch { return; }
+      if (bbox.width === 0 && bbox.height === 0) return;
 
-      const padX = 3;
-      const padY = 2;
+      const padX = 3, padY = 2;
       let rect = hoverRectRef.current;
       if (!rect) {
         rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -169,10 +200,10 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       }
       // Insert before first child so rect renders behind the text paths
       wordEl.insertBefore(rect, wordEl.firstChild);
-      rect.setAttribute("x", String(svgBBox.x - padX));
-      rect.setAttribute("y", String(svgBBox.y - padY));
-      rect.setAttribute("width", String(svgBBox.width + padX * 2));
-      rect.setAttribute("height", String(svgBBox.height + padY * 2));
+      rect.setAttribute("x",      String(bbox.x - padX));
+      rect.setAttribute("y",      String(bbox.y - padY));
+      rect.setAttribute("width",  String(bbox.width  + padX * 2));
+      rect.setAttribute("height", String(bbox.height + padY * 2));
     },
     [getWordGroup, clearHoverWord, removeHoverRect]
   );
@@ -208,6 +239,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     [getWordGroup, clearActiveWord]
   );
 
+  // ── Render ──────────────────────────────────────────────────────────────
   return (
     <div ref={wrapperRef} className="mushaf-svg-wrapper flex-1 overflow-auto">
       {loading && (
@@ -224,8 +256,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
           <button
             onClick={() => {
               SVG_CACHE.delete(pageNumber);
-              setLoading(true);
-              setError(null);
+              setLoading(true); setError(null);
               fetchSvgPage(pageNumber)
                 .then((t) => { setSvgText(t); setLoading(false); })
                 .catch((err) => { setError(err.message); setLoading(false); });
