@@ -29,6 +29,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const activeWordIdRef   = useRef<string | null>(null);
   const hoverRectRef      = useRef<SVGRectElement | null>(null);
   const hoverWordRef      = useRef<Element | null>(null);
+  const isBrushingRef     = useRef(false);
   const croppedViewBoxRef  = useRef<string | null>(null);
   const originalViewBoxRef = useRef<string | null>(null);
   const [availH, setAvailH] = useState(0);
@@ -340,6 +341,10 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   // ── Mouse handlers ──────────────────────────────────────────────────────
   const handleMouseOver = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
+      // Suppress hover entirely while a brush drag is active — selected words
+      // are already highlighted and the hover rect would be distracting/confusing.
+      if (isBrushingRef.current) return;
+
       const wordEl = getWordGroup(e.target as Element, e.currentTarget);
 
       if (!wordEl) { clearHoverWord(); removeHoverRect(); return; }
@@ -377,6 +382,9 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
 
   const handleMouseLeave = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
+      // During a brush drag hover was already cleared and is suppressed — skip.
+      if (isBrushingRef.current) return;
+
       const related = e.relatedTarget as Element | null;
       if (related instanceof Node && e.currentTarget.contains(related)) {
         const wordEl = getWordGroup(related, e.currentTarget);
@@ -416,13 +424,18 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       tapStartRef.current = { x: e.clientX, y: e.clientY };
+      // Set brushing flag before clearing hover so mouse handlers can't race.
+      isBrushingRef.current = true;
+      clearHoverWord();
+      removeHoverRect();
       brush.onPointerDown(e);
     },
-    [brush]
+    [brush, clearHoverWord, removeHoverRect]
   );
 
   const handlePointerUp = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      isBrushingRef.current = false;
       brush.onPointerUp();
       const start = tapStartRef.current;
       tapStartRef.current = null;

@@ -430,9 +430,9 @@ input[type="number"]::-webkit-outer-spin-button {
   fill: hsl(153 38% 32%);
 }
 
-/* Smart Brush — selected word(s) in mushaf SVG mode (path tint matches hover) */
+/* Smart Brush — selected word(s) in mushaf SVG mode */
 .mushaf-svg-container g[data-word-index-in-ayah].md-word-selected path {
-  fill: hsl(153 35% 30%);
+  fill: hsl(153 45% 42%);
 }
 
 /* ── Dark mode SVG text — flip fills to light so text is legible on dark parchment */
@@ -445,7 +445,7 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 .dark .mushaf-svg-container g[data-word-index-in-ayah].md-word-selected path {
-  fill: hsl(153 40% 58%);
+  fill: hsl(153 50% 68%);
 }
 
 /* Playback follow-along highlight — reading mode */
@@ -480,9 +480,9 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 /* Selection highlight rect — per-word "held hover" background injected by JS.
-   Slightly more opaque than md-hover-rect so selected feels locked-in. */
+   Uses a clearly visible green tint rather than the pale accent colour. */
 .mushaf-svg-container .md-sel-rect {
-  fill: hsl(var(--accent) / 0.6);
+  fill: hsl(153 45% 42% / 0.22);
   pointer-events: none;
 }
 
