@@ -30,11 +30,18 @@ function extractSvgInfo(el: Element): SvgInfo | null {
 // This is the same approach used by reading mode and is always accurate —
 // it works whether the click lands on a letter stroke, in the gap between
 // strokes, or during a pointer-captured drag.
-function findSvgWordAtPoint(clientX: number, clientY: number): SvgInfo | null {
+// The optional `container` guard ensures we only match word groups that belong
+// to the current page surface, not a stacked layer or a different Mushaf page.
+function findSvgWordAtPoint(
+  clientX: number,
+  clientY: number,
+  container?: Element | null
+): SvgInfo | null {
   const el = document.elementFromPoint(clientX, clientY);
   if (!el) return null;
   const wordGroup = el.closest("[data-word-index-in-ayah]");
   if (!wordGroup) return null;
+  if (container && !container.contains(wordGroup)) return null;
   return extractSvgInfo(wordGroup);
 }
 
@@ -227,11 +234,11 @@ export function useSmartBrush(
         const wordEl = (el as HTMLElement).closest?.(".quran-word") as HTMLElement | null;
         return wordEl?.id ?? null;
       } else {
-        const info = findSvgWordAtPoint(clientX, clientY);
+        const info = findSvgWordAtPoint(clientX, clientY, containerRef.current);
         return info ? info.normalizedId : null;
       }
     },
-    [mode]
+    [mode, containerRef]
   );
 
   // Resolve the unit index under the pointer using the already-built ordered list.
@@ -247,12 +254,12 @@ export function useSmartBrush(
         if (!wordEl?.id) return -1;
         return findUnitIndex(units, wordEl.id);
       } else {
-        const info = findSvgWordAtPoint(clientX, clientY);
+        const info = findSvgWordAtPoint(clientX, clientY, containerRef.current);
         if (!info) return -1;
         return findUnitIndex(units, info.normalizedId);
       }
     },
-    [mode]
+    [mode, containerRef]
   );
 
   // Apply a contiguous range of units as the current gesture's contribution,
@@ -380,7 +387,7 @@ export function useSmartBrush(
             ? ((el as HTMLElement).closest?.(".quran-word") as HTMLElement | null)?.id ?? null
             : null;
         } else {
-          const info = findSvgWordAtPoint(e.clientX, e.clientY);
+          const info = findSvgWordAtPoint(e.clientX, e.clientY, container);
           wordId = info ? info.normalizedId : null;
         }
 
