@@ -90,6 +90,7 @@ export interface AlQuranPageResponse {
 export interface Settings {
   fontSize: number;
   showTranslation: boolean;
+  mushafScale: number;
 }
 
 export interface ChapterInfo {

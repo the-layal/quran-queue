@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
 
 interface MushafSvgPageProps {
   pageNumber: number;
+  scale?: number;
 }
+
+const MUSHAF_ASPECT = 382.68 / 547.09;
 
 const SVG_CACHE = new Map<number, string>();
 
@@ -17,12 +20,32 @@ async function fetchSvgPage(pageNum: number): Promise<string> {
   return text;
 }
 
-export default function MushafSvgPage({ pageNumber }: MushafSvgPageProps) {
+export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPageProps) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [svgText, setSvgText] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const activeWordIdRef = useRef<string | null>(null);
+  const [dims, setDims] = useState({ w: 0, h: 0 });
+
+  useLayoutEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const measure = () =>
+      setDims({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const baseHeight =
+    dims.h > 0 && dims.w > 0
+      ? Math.min(dims.h, dims.w / MUSHAF_ASPECT)
+      : dims.h || dims.w / MUSHAF_ASPECT || 600;
+
+  const containerHeight = Math.round(baseHeight * scale);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,9 +67,7 @@ export default function MushafSvgPage({ pageNumber }: MushafSvgPageProps) {
         }
       });
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [pageNumber]);
 
   useEffect(() => {
@@ -76,16 +97,13 @@ export default function MushafSvgPage({ pageNumber }: MushafSvgPageProps) {
         el = el.parentElement;
       }
       if (!el || el === e.currentTarget) return;
-
       const wordId = el.id;
       if (!wordId) return;
-
       if (activeWordIdRef.current === wordId) {
         el.classList.remove("md-word-active");
         activeWordIdRef.current = null;
         return;
       }
-
       clearActiveWord();
       el.classList.add("md-word-active");
       activeWordIdRef.current = wordId;
@@ -93,45 +111,46 @@ export default function MushafSvgPage({ pageNumber }: MushafSvgPageProps) {
     [clearActiveWord]
   );
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center flex-1 gap-3">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Loading page {pageNumber}…</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center flex-1 gap-3 px-4">
-        <AlertCircle className="w-8 h-8 text-destructive" />
-        <p className="text-sm text-destructive text-center max-w-xs">{error}</p>
-        <button
-          onClick={() => {
-            SVG_CACHE.delete(pageNumber);
-            setLoading(true);
-            setError(null);
-            fetchSvgPage(pageNumber)
-              .then((t) => { setSvgText(t); setLoading(false); })
-              .catch((err) => { setError(err.message); setLoading(false); });
-          }}
-          className="text-sm text-primary underline"
-        >
-          Try again
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="mushaf-svg-wrapper flex-1 flex items-center justify-center p-2 sm:p-4 overflow-hidden">
-      <div
-        ref={containerRef}
-        className="mushaf-svg-container"
-        onClick={handleClick}
-        dangerouslySetInnerHTML={{ __html: svgText ?? "" }}
-      />
+    <div ref={wrapperRef} className="mushaf-svg-wrapper flex-1 overflow-auto">
+      {loading && (
+        <div className="flex flex-col items-center justify-center h-full gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Loading page {pageNumber}…</p>
+        </div>
+      )}
+
+      {error && (
+        <div className="flex flex-col items-center justify-center h-full gap-3 px-4">
+          <AlertCircle className="w-8 h-8 text-destructive" />
+          <p className="text-sm text-destructive text-center max-w-xs">{error}</p>
+          <button
+            onClick={() => {
+              SVG_CACHE.delete(pageNumber);
+              setLoading(true);
+              setError(null);
+              fetchSvgPage(pageNumber)
+                .then((t) => { setSvgText(t); setLoading(false); })
+                .catch((err) => { setError(err.message); setLoading(false); });
+            }}
+            className="text-sm text-primary underline"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
+      {!loading && !error && svgText && (
+        <div className="mushaf-svg-outer">
+          <div
+            ref={containerRef}
+            className="mushaf-svg-container"
+            style={{ height: `${containerHeight}px` }}
+            onClick={handleClick}
+            dangerouslySetInnerHTML={{ __html: svgText }}
+          />
+        </div>
+      )}
     </div>
   );
 }

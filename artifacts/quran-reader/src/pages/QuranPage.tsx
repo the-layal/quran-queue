@@ -344,7 +344,7 @@ function SettingsPanel({
 
           {isMushafMode && (
             <p className="text-sm text-muted-foreground">
-              Font size is fixed in Mushaf view — it scales automatically to fit the page.
+              Use the − / + buttons in the footer to zoom the page in or out.
             </p>
           )}
 
@@ -556,6 +556,15 @@ export default function QuranPage() {
     if (currentPage > 1) setCurrentPage(currentPage - 1);
   };
 
+  const zoomIn = () => {
+    const cur = settings.mushafScale ?? 1;
+    updateSettings({ mushafScale: Math.min(3, Math.round((cur + 0.25) * 100) / 100) });
+  };
+  const zoomOut = () => {
+    const cur = settings.mushafScale ?? 1;
+    updateSettings({ mushafScale: Math.max(0.75, Math.round((cur - 0.25) * 100) / 100) });
+  };
+
   // Keyboard navigation
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -644,7 +653,7 @@ export default function QuranPage() {
 
       {/* ── Main content ────────────────────────────────────────────────── */}
       <main
-        className={`flex-1 ${isMushaf ? "flex flex-col overflow-hidden" : "overflow-auto"}`}
+        className={`flex-1 ${isMushaf ? "flex flex-col min-h-0" : "overflow-auto"}`}
       >
         {isFirstLoad && (
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
@@ -672,7 +681,7 @@ export default function QuranPage() {
         )}
 
         {isMushaf && (
-          <MushafSvgPage pageNumber={currentPage} />
+          <MushafSvgPage pageNumber={currentPage} scale={settings.mushafScale ?? 1} />
         )}
 
         {!error && !isFirstLoad && !isMushaf && surahData && (
@@ -688,46 +697,72 @@ export default function QuranPage() {
       {/* ── Footer navigation ───────────────────────────────────────────── */}
       <footer className="sticky bottom-0 z-30 bg-background/90 backdrop-blur-sm border-t border-border">
         {isMushaf ? (
-          <div className="flex items-center justify-between px-6 py-3 max-w-lg mx-auto">
-            <button
-              onClick={goPrevPage}
-              disabled={currentPage <= 1}
-              aria-label="Previous page"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
-            >
-              <ChevronRight className="w-4 h-4" />
-              Prev
-            </button>
-
-            <div className="flex gap-1">
-              {[-2, -1, 0, 1, 2].map((offset) => {
-                const p = currentPage + offset;
-                if (p < 1 || p > TOTAL_PAGES) return null;
-                return (
-                  <button
-                    key={p}
-                    onClick={() => setCurrentPage(p)}
-                    className={`w-8 h-8 rounded-lg text-xs font-medium transition-colors ${
-                      p === currentPage
-                        ? "bg-primary text-primary-foreground"
-                        : "hover:bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {p}
-                  </button>
-                );
-              })}
+          <div className="max-w-lg mx-auto">
+            {/* ── Zoom row ── */}
+            <div className="flex items-center justify-center gap-2 px-6 pt-2 pb-1">
+              <button
+                onClick={zoomOut}
+                disabled={(settings.mushafScale ?? 1) <= 0.75}
+                aria-label="Zoom out"
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-base font-medium border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors leading-none"
+              >
+                −
+              </button>
+              <span className="text-xs tabular-nums text-muted-foreground w-10 text-center">
+                {Math.round((settings.mushafScale ?? 1) * 100)}%
+              </span>
+              <button
+                onClick={zoomIn}
+                disabled={(settings.mushafScale ?? 1) >= 3}
+                aria-label="Zoom in"
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-base font-medium border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors leading-none"
+              >
+                +
+              </button>
             </div>
 
-            <button
-              onClick={goNextPage}
-              disabled={currentPage >= TOTAL_PAGES}
-              aria-label="Next page"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
-            >
-              Next
-              <ChevronLeft className="w-4 h-4" />
-            </button>
+            {/* ── Page nav row ── */}
+            <div className="flex items-center justify-between px-6 pb-3 pt-1">
+              <button
+                onClick={goPrevPage}
+                disabled={currentPage <= 1}
+                aria-label="Previous page"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+              >
+                <ChevronRight className="w-4 h-4" />
+                Prev
+              </button>
+
+              <div className="flex gap-1">
+                {[-2, -1, 0, 1, 2].map((offset) => {
+                  const p = currentPage + offset;
+                  if (p < 1 || p > TOTAL_PAGES) return null;
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => setCurrentPage(p)}
+                      className={`w-8 h-8 rounded-lg text-xs font-medium transition-colors ${
+                        p === currentPage
+                          ? "bg-primary text-primary-foreground"
+                          : "hover:bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={goNextPage}
+                disabled={currentPage >= TOTAL_PAGES}
+                aria-label="Next page"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+              >
+                Next
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         ) : (
           <div className="flex items-center justify-between px-6 py-3 max-w-lg mx-auto">
