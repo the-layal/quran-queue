@@ -145,6 +145,8 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       // that have no data-word-index-in-ayah attribute.
       let minX = Infinity;
       let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
 
       const wordGroups = container.querySelectorAll<SVGGElement>("g[data-word-index-in-ayah]");
       wordGroups.forEach((wordEl) => {
@@ -153,6 +155,8 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
           if (bbox.width === 0 && bbox.height === 0) return;
           if (bbox.x < minX) minX = bbox.x;
           if (bbox.x + bbox.width > maxX) maxX = bbox.x + bbox.width;
+          if (bbox.y < minY) minY = bbox.y;
+          if (bbox.y + bbox.height > maxY) maxY = bbox.y + bbox.height;
         } catch {
           // getBBox can throw for hidden/detached elements — skip silently
         }
@@ -160,15 +164,20 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
 
       // Crop the SVG viewBox horizontally to the text column with equal padding
       // on both sides so pages with wide margin annotations stay visually centered.
+      // For pages 1 and 2, also crop vertically to remove extra whitespace at
+      // the top and bottom, matching the aspect ratio of all other pages.
       if (minX !== Infinity && maxX !== -Infinity) {
         const vb = svg.viewBox.baseVal;
         if (vb && vb.width > 0) {
-          const pad = 30; // SVG units — symmetric left/right gutter
+          const pad = 30; // SVG units — symmetric gutter
           if (!originalViewBoxRef.current) {
             originalViewBoxRef.current = svg.getAttribute("viewBox") ??
               `${vb.x} ${vb.y} ${vb.width} ${vb.height}`;
           }
-          const cropped = `${minX - pad} ${vb.y} ${maxX - minX + pad * 2} ${vb.height}`;
+          const cropY = (pageNumber <= 2 && minY !== Infinity && maxY !== -Infinity);
+          const newY      = cropY ? minY - pad : vb.y;
+          const newHeight = cropY ? maxY - minY + pad * 2 : vb.height;
+          const cropped = `${minX - pad} ${newY} ${maxX - minX + pad * 2} ${newHeight}`;
           svg.setAttribute("viewBox", cropped);
           croppedViewBoxRef.current = cropped;
         }
@@ -176,7 +185,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     });
 
     return () => cancelAnimationFrame(rafId);
-  }, [svgText, scale]);
+  }, [svgText, scale, pageNumber]);
 
   // ── Word-state helpers ──────────────────────────────────────────────────
   const clearActiveWord = useCallback(() => {
