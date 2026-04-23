@@ -1,3 +1,4 @@
+import { Check, X } from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
 import type { BrushFineness } from "../types/quran";
 
@@ -8,10 +9,13 @@ const TIERS: { value: BrushFineness; label: string; title: string }[] = [
 ];
 
 export default function BrushFinenessToggle() {
-  const brushFineness = useQuranStore((s) => s.brushFineness);
+  const brushFineness    = useQuranStore((s) => s.brushFineness);
   const setBrushFineness = useQuranStore((s) => s.setBrushFineness);
-  const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
-  const clearSelection = useQuranStore((s) => s.clearSelection);
+  const selectedWordIds  = useQuranStore((s) => s.selectedWordIds);
+  const clearSelection   = useQuranStore((s) => s.clearSelection);
+  const confirmSelection = useQuranStore((s) => s.confirmSelection);
+
+  const hasSelection = selectedWordIds.length > 0;
 
   return (
     <div className="flex items-center gap-2">
@@ -33,15 +37,24 @@ export default function BrushFinenessToggle() {
         ))}
       </div>
 
-      {/* Clear button — only shown when something is selected */}
-      {selectedWordIds.length > 0 && (
-        <button
-          onClick={clearSelection}
-          title="Clear selection"
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-muted"
-        >
-          ✕ {selectedWordIds.length}
-        </button>
+      {/* X / ✓ action pair — only visible when words are selected */}
+      {hasSelection && (
+        <div className="flex items-center gap-1">
+          <button
+            onClick={clearSelection}
+            title="Clear selection"
+            className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={confirmSelection}
+            title="Confirm selection"
+            className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10 transition-colors"
+          >
+            <Check className="w-3.5 h-3.5" />
+          </button>
+        </div>
       )}
     </div>
   );

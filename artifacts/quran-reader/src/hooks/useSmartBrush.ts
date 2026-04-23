@@ -140,14 +140,22 @@ export function useSmartBrush(
   containerRef: RefObject<HTMLElement | null>
 ) {
   const brushFineness = useQuranStore((s) => s.brushFineness);
+  const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
   const setSelectedWordIds = useQuranStore((s) => s.setSelectedWordIds);
 
   const isDragging = useRef(false);
-  // Accumulated IDs for the current drag gesture
+  // Words touched in the current drag gesture
   const dragSet = useRef<Set<string>>(new Set());
+  // Snapshot of selection at the moment the drag started
+  const initialSelectedRef = useRef<Set<string>>(new Set());
+  // True when the drag gesture should remove words (pointer started on a selected word)
+  const isDeselecting = useRef(false);
   // Keep fineness in a ref so pointermove callbacks see the latest value without re-creating
   const finenessRef = useRef<BrushFineness>(brushFineness);
   finenessRef.current = brushFineness;
+  // Mirror of selectedWordIds in a ref for synchronous access inside pointer handlers
+  const selectedSetRef = useRef<Set<string>>(new Set());
+  selectedSetRef.current = new Set(selectedWordIds);
 
   const resolveIds = useCallback(
     (clientX: number, clientY: number): string[] => {
@@ -176,16 +184,37 @@ export function useSmartBrush(
     (ids: string[]) => {
       const container = containerRef.current;
       let changed = false;
-      ids.forEach((id) => {
-        if (!dragSet.current.has(id)) {
-          dragSet.current.add(id);
-          changed = true;
-          // Immediate DOM feedback — no waiting for React cycle
-          if (mode === "reading") applyReadingClass(id, true);
-          else if (container) applySvgClass(id, true, container);
+
+      if (isDeselecting.current) {
+        // DESELECT mode: remove words that were selected when the drag started
+        ids.forEach((id) => {
+          if (!dragSet.current.has(id) && initialSelectedRef.current.has(id)) {
+            dragSet.current.add(id);
+            changed = true;
+            if (mode === "reading") applyReadingClass(id, false);
+            else if (container) applySvgClass(id, false, container);
+          }
+        });
+        if (changed) {
+          setSelectedWordIds(
+            [...initialSelectedRef.current].filter((id) => !dragSet.current.has(id))
+          );
         }
-      });
-      if (changed) setSelectedWordIds([...dragSet.current]);
+      } else {
+        // ADD mode: accumulate words into the ongoing selection
+        ids.forEach((id) => {
+          if (!dragSet.current.has(id)) {
+            dragSet.current.add(id);
+            changed = true;
+            // Only apply DOM class for words not already highlighted
+            if (!initialSelectedRef.current.has(id)) {
+              if (mode === "reading") applyReadingClass(id, true);
+              else if (container) applySvgClass(id, true, container);
+            }
+          }
+        });
+        if (changed) setSelectedWordIds([...dragSet.current]);
+      }
     },
     [mode, containerRef, setSelectedWordIds]
   );
@@ -193,7 +222,12 @@ export function useSmartBrush(
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
       const ids = resolveIds(e.clientX, e.clientY);
-      if (ids.length === 0) return; // Not on a word — let native scroll continue
+      if (ids.length === 0) return; // Not on a word — no-op, preserves existing selection
+
+      // Snapshot the current selection; decide add vs. deselect mode
+      const snap = selectedSetRef.current;
+      initialSelectedRef.current = new Set(snap);
+      isDeselecting.current = ids.some((id) => snap.has(id));
 
       // Prevent text-selection (reading) and touch-scroll (SVG) for both modes.
       // In SVG mode, click events won't fire after this — the MushafSvgPage
@@ -201,7 +235,8 @@ export function useSmartBrush(
       e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
       isDragging.current = true;
-      dragSet.current = new Set();
+      // In add mode, start from the existing selection so the drag accumulates
+      dragSet.current = isDeselecting.current ? new Set() : new Set(snap);
       commitIds(ids);
     },
     [resolveIds, commitIds]

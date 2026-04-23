@@ -26,6 +26,7 @@ interface QuranStore {
   setSelectedWordIds: (ids: string[]) => void;
   setBrushFineness: (fineness: BrushFineness) => void;
   clearSelection: () => void;
+  confirmSelection: () => void;
 }
 
 export const useQuranStore = create<QuranStore>()(
@@ -80,6 +81,11 @@ export const useQuranStore = create<QuranStore>()(
       setSelectedWordIds: (ids) => set({ selectedWordIds: ids }),
       setBrushFineness: (brushFineness) => set({ brushFineness }),
       clearSelection: () => set({ selectedWordIds: [] }),
+      confirmSelection: () => {
+        // Stub — future task will persist the selection (bookmark / copy etc.)
+        // For now just clear so the UI returns to neutral.
+        set({ selectedWordIds: [] });
+      },
     }),
     {
       name: "quran-reader-store",
