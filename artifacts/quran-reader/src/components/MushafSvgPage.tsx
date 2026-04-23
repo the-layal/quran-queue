@@ -178,14 +178,15 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
 
       if (!wordEl) { clearHoverWord(); removeHoverRect(); return; }
 
-      // Apply hover class for text colour change
-      if (hoverWordRef.current !== wordEl) {
-        clearHoverWord();
-        wordEl.classList.add("md-word-hovered");
-        hoverWordRef.current = wordEl;
-      }
+      // Same word still hovered — nothing to recompute (prevents bbox feedback loop)
+      if (hoverWordRef.current === wordEl) return;
 
-      // Position / update the amber highlight rect
+      clearHoverWord();
+      wordEl.classList.add("md-word-hovered");
+      hoverWordRef.current = wordEl;
+
+      // Compute bbox once, before inserting the hover rect (rect is a child
+      // of the word group and would inflate getBBox on subsequent calls)
       let bbox: SVGRect;
       try { bbox = (wordEl as SVGGElement).getBBox(); } catch { return; }
       if (bbox.width === 0 && bbox.height === 0) return;
