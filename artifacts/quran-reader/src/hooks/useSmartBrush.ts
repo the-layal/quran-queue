@@ -354,8 +354,6 @@ export function useSmartBrush(
       }
 
       // Add mode: build ordered units and record anchor.
-      // The pre-existing selection is preserved as base; the gesture contributes
-      // a contiguous range on top.
       const fineness = finenessRef.current;
       const container = containerRef.current;
 
