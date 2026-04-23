@@ -282,6 +282,8 @@ input[type="number"]::-webkit-outer-spin-button {
   flex-direction: column;
   border-radius: 3px;
   overflow: hidden;
+  /* Vertical breathing room so diacritics on top/bottom lines are not clipped */
+  padding-block: 6px;
   /* Subtle outer shadow */
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18), 0 1px 4px rgba(0, 0, 0, 0.1);
 }
@@ -304,8 +306,7 @@ input[type="number"]::-webkit-outer-spin-button {
   direction: rtl;
   unicode-bidi: isolate;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: clip;
+  overflow: visible;
 }
 
 /* Mushaf mode: word spans */

@@ -106,8 +106,8 @@ function MushafLineRow({
     >
       {hasWords && (
         <div
-          className="mushaf-line-words w-full flex flex-row-reverse items-baseline overflow-hidden"
-          style={{ fontSize: `${fontSize}px`, lineHeight: 1, justifyContent, gap: "0 0.15em" }}
+          className="mushaf-line-words w-full flex flex-row-reverse items-baseline"
+          style={{ fontSize: `${fontSize}px`, lineHeight: 1.7, justifyContent, gap: "0 0.15em" }}
         >
           {line.words.map((word) => (
             <WordSpan key={`${word.spanId}-${word.lineNumber}`} word={word} />
@@ -128,7 +128,7 @@ export default function MushafPage({ pageData }: MushafPageProps) {
 
     const updateSize = () => {
       const lineHeight = el.clientHeight / 15;
-      setFontSize(Math.max(11, Math.floor(lineHeight * 0.52)));
+      setFontSize(Math.max(10, Math.floor(lineHeight * 0.44)));
     };
 
     updateSize();
