@@ -27,6 +27,7 @@ interface PauseState {
 export function useQueuePlayback(): QueuePlaybackState {
   const reviewQueue = useQuranStore((s) => s.reviewQueue);
   const queueLoopCount = useQuranStore((s) => s.queueLoopCount);
+  const svgToJsonWordMap = useQuranStore((s) => s.svgToJsonWordMap);
 
   const [queueIsPlaying, setQueueIsPlaying] = useState(false);
   const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
@@ -44,6 +45,8 @@ export function useQueuePlayback(): QueuePlaybackState {
   queueLoopCountRef.current = queueLoopCount;
 
   const audioDataRef = useRef<AudioDataMap | null>(null);
+  const svgToJsonWordMapRef = useRef(svgToJsonWordMap);
+  svgToJsonWordMapRef.current = svgToJsonWordMap;
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const isPlayingRef = useRef(false);
@@ -191,7 +194,7 @@ export function useQueuePlayback(): QueuePlaybackState {
       const aData = audioDataRef.current;
       if (!aData) { isPlayingRef.current = false; setQueueIsPlayingRef.current(false); return; }
 
-      const regions = computePlaybackRegions(item.selectedWordIds, aData, item.brushFineness);
+      const regions = computePlaybackRegions(item.selectedWordIds, aData, item.brushFineness, svgToJsonWordMapRef.current);
 
       // Update total duration + regions state for the control bar
       const totalDur = regions.reduce((sum, r) => sum + r.durationMs, 0) / 1000;
@@ -259,7 +262,7 @@ export function useQueuePlayback(): QueuePlaybackState {
               const aData = audioDataRef.current;
               const nextItem = reviewQueueRef.current[nc.itemIndex];
               if (aData && nextItem) {
-                const nr = computePlaybackRegions(nextItem.selectedWordIds, aData, nextItem.brushFineness);
+                const nr = computePlaybackRegions(nextItem.selectedWordIds, aData, nextItem.brushFineness, svgToJsonWordMapRef.current);
                 nextRegion = nr[0] ?? null;
               }
             }
@@ -288,7 +291,7 @@ export function useQueuePlayback(): QueuePlaybackState {
                 updateVisualState(nc.itemIndex);
                 const aData = audioDataRef.current!;
                 const nextItem = reviewQueueRef.current[nc.itemIndex];
-                const nextRegions = computePlaybackRegions(nextItem.selectedWordIds, aData, nextItem.brushFineness);
+                const nextRegions = computePlaybackRegions(nextItem.selectedWordIds, aData, nextItem.brushFineness, svgToJsonWordMapRef.current);
                 const nextTotalDur = nextRegions.reduce((s, r) => s + r.durationMs, 0) / 1000;
                 queueTotalDurationSecRef.current = nextTotalDur;
                 setQueueTotalDurationSecRef.current(nextTotalDur);

@@ -14,7 +14,8 @@ export interface PlaybackRegion {
 export function computePlaybackRegions(
   selectedWordIds: string[],
   audioData: AudioDataMap,
-  brushFineness: BrushFineness = "word"
+  brushFineness: BrushFineness = "word",
+  svgToJsonWordMap?: Record<string, Record<number, number>>
 ): PlaybackRegion[] {
   const parsed = selectedWordIds
     .map((id) => {
@@ -72,8 +73,17 @@ export function computePlaybackRegions(
 
     // Word / line mode: use the word-level segment timestamps.
     // Segments are [wordIndex, startMs, endMs] — absolute within surah MP3.
+    // The SVG assigns separate word indices to waw al-atf groups, but the JSON
+    // bundles each waw with the word that follows it — so SVG word indices are
+    // offset past any preceding waw groups.  svgToJsonWordMap provides the
+    // corrected JSON segment index for every SVG word index in ayahs that have
+    // waw al-atf splits; for other ayahs the SVG and JSON indices align 1-to-1.
+    const svgMap = svgToJsonWordMap?.[ayahKey];
     const matched = wordIndices
-      .map((wi) => ayahAudio.segments.find((seg) => seg[0] === wi))
+      .map((wi) => {
+        const jsonWi = svgMap ? (svgMap[wi] ?? wi) : wi;
+        return ayahAudio.segments.find((seg) => seg[0] === jsonWi);
+      })
       .filter(Boolean) as [number, number, number][];
 
     if (matched.length === 0) continue;

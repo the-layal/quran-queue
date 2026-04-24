@@ -30,6 +30,13 @@ interface QuranStore {
   playbackActiveIds: string[];
   playbackCurrentWordId: string | null;
 
+  svgToJsonWordMap: Record<string, Record<number, number>>;
+  jsonToSvgWordsMap: Record<string, Record<number, number[]>>;
+  setSvgWordAlignmentMaps: (
+    svgToJson: Record<string, Record<number, number>>,
+    jsonToSvg: Record<string, Record<number, number[]>>
+  ) => void;
+
   reviewQueue: ReviewQueueItem[];
   activeQueueItemId: string | null;
   queuePanelOpen: boolean;
@@ -94,6 +101,14 @@ export const useQuranStore = create<QuranStore>()(
       playbackHighlightEnabled: true,
       playbackActiveIds: [],
       playbackCurrentWordId: null,
+
+      svgToJsonWordMap: {},
+      jsonToSvgWordsMap: {},
+      setSvgWordAlignmentMaps: (svgToJson, jsonToSvg) =>
+        set((state) => ({
+          svgToJsonWordMap:  { ...state.svgToJsonWordMap,  ...svgToJson  },
+          jsonToSvgWordsMap: { ...state.jsonToSvgWordsMap, ...jsonToSvg  },
+        })),
 
       reviewQueue: [],
       activeQueueItemId: null,

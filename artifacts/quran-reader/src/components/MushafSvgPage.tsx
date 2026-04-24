@@ -110,6 +110,10 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
   const playbackActiveIds = useQuranStore((s) => s.playbackActiveIds);
   const playbackCurrentWordId = useQuranStore((s) => s.playbackCurrentWordId);
+  const setSvgWordAlignmentMaps = useQuranStore((s) => s.setSvgWordAlignmentMaps);
+  const jsonToSvgWordsMap = useQuranStore((s) => s.jsonToSvgWordsMap);
+  const jsonToSvgWordsMapRef = useRef(jsonToSvgWordsMap);
+  jsonToSvgWordsMapRef.current = jsonToSvgWordsMap;
   const brush = useSmartBrush("mushaf", containerRef as RefObject<HTMLElement | null>);
 
   const svgWordQuery = (nid: string, container: Element) => {
@@ -253,10 +257,27 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     }
   }, [playbackActiveIds]);
 
+  // Expand a JSON-segment word ID (as stored in playbackCurrentWordId) to all
+  // SVG word IDs it covers — the waw al-atf group(s) plus the host word.
+  // If the ayah has no waw alignment data the original ID is returned as-is.
+  const expandJsonIdToSvgIds = useCallback((wordId: string): string[] => {
+    const [s, a, w] = wordId.split(":");
+    const ayahKey = `${parseInt(s, 10)}:${parseInt(a, 10)}`;
+    const jsonIdx = parseInt(w, 10);
+    const svgIndices = jsonToSvgWordsMapRef.current[ayahKey]?.[jsonIdx];
+    if (svgIndices && svgIndices.length > 0) {
+      return svgIndices.map((svgIdx) => `${parseInt(s, 10)}:${parseInt(a, 10)}:${svgIdx}`);
+    }
+    return [wordId];
+  }, []);
+
   // Sync .md-word-current class for the single word being spoken right now.
   // Runs independently from the playbackActiveIds effect so both classes coexist.
   // Re-applies the line/ayah (.md-word-playing) gold defensively on every word
   // advance so that the background highlight can never silently drop out.
+  //
+  // playbackCurrentWordId encodes the JSON segment index as the word index.
+  // expandJsonIdToSvgIds maps it to all SVG word indices (waw + host word).
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -269,18 +290,21 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
 
     const prevId = prevCurrentWordIdRef.current;
     if (prevId) {
-      const prevEl = svgWordQuery(prevId, container);
-      if (prevEl) {
-        if (playbackFillOverrideRef.current.has(prevId)) {
-          // Still in the playing range and was selected — restore gold.
-          prevEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = getSvgPlayingFill(); });
-        } else if (prevEl.classList.contains("md-word-hovered")) {
-          // No longer playing but still selected — restore selection fill.
-          prevEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = getSvgSelFill(); });
+      // Expand JSON id → all SVG ids (covers waw siblings too).
+      expandJsonIdToSvgIds(prevId).forEach((svgId) => {
+        const prevEl = svgWordQuery(svgId, container);
+        if (prevEl) {
+          if (playbackFillOverrideRef.current.has(svgId)) {
+            // Still in the playing range and was selected — restore gold.
+            prevEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = getSvgPlayingFill(); });
+          } else if (prevEl.classList.contains("md-word-hovered")) {
+            // No longer playing but still selected — restore selection fill.
+            prevEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = getSvgSelFill(); });
+          }
+          // Otherwise leave the fill as-is (gold was already cleared by the
+          // playbackActiveIds effect when that word left the playing range).
         }
-        // Otherwise leave the fill as-is (gold was already cleared by the
-        // playbackActiveIds effect when that word left the playing range).
-      }
+      });
       prevCurrentWordIdRef.current = null;
     }
 
@@ -290,21 +314,33 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
         svgWordQuery(id, container)?.classList.add("md-word-playing");
       });
 
-      // Step 3 — apply the deeper word accent on top
-      const currentEl = svgWordQuery(playbackCurrentWordId, container);
-      if (currentEl) {
-        currentEl.classList.add("md-word-current");
-        // If this word is in the override set (selected + playing), write the
-        // foreground accent inline so it beats both selection and gold fills.
-        if (playbackFillOverrideRef.current.has(playbackCurrentWordId)) {
-          currentEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = getSvgCurrentFill(); });
-          prevCurrentWordIdRef.current = playbackCurrentWordId;
+      // Step 3 — apply the deeper word accent to every SVG word in this segment
+      // (the waw al-atf group(s) and the host word both get md-word-current).
+      const svgIds = expandJsonIdToSvgIds(playbackCurrentWordId);
+      let wroteFill = false;
+      svgIds.forEach((svgId) => {
+        const currentEl = svgWordQuery(svgId, container);
+        if (currentEl) {
+          currentEl.classList.add("md-word-current");
+          // If this word is in the override set (selected + playing), write the
+          // foreground accent inline so it beats both selection and gold fills.
+          if (playbackFillOverrideRef.current.has(svgId)) {
+            currentEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = getSvgCurrentFill(); });
+            wroteFill = true;
+          }
         }
+      });
+      if (wroteFill) {
+        // Store the JSON-indexed id so the next call can expand it for restore.
+        prevCurrentWordIdRef.current = playbackCurrentWordId;
       }
     }
-  }, [playbackCurrentWordId]);
+  }, [playbackCurrentWordId, expandJsonIdToSvgIds]);
 
-  // Clear SVG classes and cached viewBox when page changes
+  // Clear SVG classes and cached viewBox when page changes.
+  // Alignment maps (svgToJsonWordMap / jsonToSvgWordsMap) are NOT reset here —
+  // they accumulate across pages so that queue items from previously-visited
+  // pages retain correct waw alignment even after navigating away.
   useEffect(() => {
     prevSvgSelectedRef.current        = new Set();
     playbackFillOverrideRef.current   = new Set();
@@ -462,10 +498,89 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       // Build the per-line height map now that layout is complete.
       // This must run after the viewBox update so getBBox() returns final values.
       lineHeightMapRef.current = buildLineHeightMap(container);
+
+      // ── Build waw al-atf alignment maps ───────────────────────────────────
+      // Walk each ayah's word groups in order. Waw al-atf groups (identified by
+      // data-waw-alatf="true") share the JSON segment of the non-waw word that
+      // follows them, because the JSON timing data bundles the waw with its host.
+      // We produce:
+      //   svgToJson: { ayahKey → { svgWordIndex → jsonSegIndex } }
+      //   jsonToSvg: { ayahKey → { jsonSegIndex → svgWordIndex[] } }
+      // Only ayahs that contain at least one waw get an entry (no-waw ayahs
+      // need no remapping so the maps stay lean).
+      const alignSvgToJson: Record<string, Record<number, number>> = {};
+      const alignJsonToSvg: Record<string, Record<number, number[]>> = {};
+
+      // Collect and group word groups by ayah key.
+      const ayahGroups = new Map<string, { svgIdx: number; isWaw: boolean }[]>();
+      container.querySelectorAll<SVGGElement>("g[data-word-index-in-ayah]").forEach((wordEl) => {
+        const s = wordEl.getAttribute("data-surah");
+        const a = wordEl.getAttribute("data-aya");
+        const wi = wordEl.getAttribute("data-word-index-in-ayah");
+        if (!s || !a || wi === null) return;
+        const surahNum = parseInt(s, 10);
+        const ayahNum  = parseInt(a, 10);
+        const key = `${surahNum}:${ayahNum}`;
+        if (!ayahGroups.has(key)) ayahGroups.set(key, []);
+        ayahGroups.get(key)!.push({
+          svgIdx: parseInt(wi, 10),
+          isWaw: wordEl.getAttribute("data-waw-alatf") === "true",
+        });
+      });
+
+      ayahGroups.forEach((words, key) => {
+        // Only process ayahs that have at least one waw al-atf word.
+        if (!words.some((w) => w.isWaw)) return;
+
+        // Sort ascending by SVG word index so we process left-to-right (RTL
+        // Arabic is stored right-to-left in SVG indices, but the index still
+        // increments sequentially through the ayah regardless of visual order).
+        words.sort((a, b) => a.svgIdx - b.svgIdx);
+
+        const svgToJson: Record<number, number> = {};
+        const jsonToSvg: Record<number, number[]> = {};
+        // JSON segments are 1-based consecutive indices covering only non-waw words.
+        // SVG word indices include waw groups (data-waw-alatf="true"), so each waw
+        // that precedes a non-waw word causes the SVG index to be higher than the
+        // JSON index by the number of preceding waw groups.  We start at 1 to match
+        // the JSON's 1-based numbering.
+        let jsonIdx = 1;
+        const pendingWaws: number[] = [];
+
+        for (const { svgIdx, isWaw } of words) {
+          if (isWaw) {
+            pendingWaws.push(svgIdx);
+          } else {
+            // This non-waw word takes the current jsonIdx.
+            // All preceding pending waws share this same jsonIdx.
+            svgToJson[svgIdx] = jsonIdx;
+            jsonToSvg[jsonIdx] = [...pendingWaws, svgIdx];
+            for (const wawIdx of pendingWaws) {
+              svgToJson[wawIdx] = jsonIdx;
+            }
+            pendingWaws.length = 0;
+            jsonIdx++;
+          }
+        }
+
+        // Trailing waws (unusual but handle gracefully): attach to previous segment.
+        if (pendingWaws.length > 0 && jsonIdx > 0) {
+          const lastJsonIdx = jsonIdx - 1;
+          for (const wawIdx of pendingWaws) {
+            svgToJson[wawIdx] = lastJsonIdx;
+            jsonToSvg[lastJsonIdx].push(wawIdx);
+          }
+        }
+
+        alignSvgToJson[key] = svgToJson;
+        alignJsonToSvg[key] = jsonToSvg;
+      });
+
+      setSvgWordAlignmentMaps(alignSvgToJson, alignJsonToSvg);
     });
 
     return () => cancelAnimationFrame(rafId);
-  }, [svgText, scale, pageNumber]);
+  }, [svgText, scale, pageNumber, setSvgWordAlignmentMaps]);
 
   // ── Word-state helpers ──────────────────────────────────────────────────
   const clearActiveWord = useCallback(() => {

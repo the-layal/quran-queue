@@ -128,6 +128,9 @@ export function useSelectionAudio(): SelectionAudioState {
   const setPlaybackActiveIds = useQuranStore((s) => s.setPlaybackActiveIds);
   const setPlaybackCurrentWordId = useQuranStore((s) => s.setPlaybackCurrentWordId);
   const queueRepeatAll = useQuranStore((s) => s.queueRepeatAll);
+  const svgToJsonWordMap = useQuranStore((s) => s.svgToJsonWordMap);
+  const svgToJsonWordMapRef = useRef(svgToJsonWordMap);
+  svgToJsonWordMapRef.current = svgToJsonWordMap;
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -194,7 +197,12 @@ export function useSelectionAudio(): SelectionAudioState {
 
   useEffect(() => {
     if (!audioData) return;
-    const newRegions = computePlaybackRegions(selectedWordIds, audioData, brushFineness);
+    const newRegions = computePlaybackRegions(
+      selectedWordIds,
+      audioData,
+      brushFineness,
+      svgToJsonWordMapRef.current
+    );
     // Initialise totalDurSecRef eagerly so seekTo() works before the first play().
     totalDurSecRef.current =
       newRegions.reduce((sum, r) => sum + r.durationMs, 0) / 1000;
@@ -202,7 +210,7 @@ export function useSelectionAudio(): SelectionAudioState {
     stopPlayback();
     setProgress(0);
     setCurrentAyahKey(null);
-  }, [selectedWordIds, audioData, brushFineness]);
+  }, [selectedWordIds, audioData, brushFineness, svgToJsonWordMap]);
 
   function getOrCreateAudio(): HTMLAudioElement {
     if (!audioRef.current) {
