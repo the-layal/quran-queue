@@ -231,7 +231,7 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
           {boundaryFractions.map((frac) => (
             <div
               key={frac}
-              className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-foreground/60 pointer-events-none"
+              className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-black pointer-events-none"
               style={{ left: `${frac * 100}%` }}
             />
           ))}
