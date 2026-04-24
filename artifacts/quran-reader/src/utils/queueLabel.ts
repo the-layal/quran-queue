@@ -37,7 +37,7 @@ export function computeQueueItemLabel(
     return `${prefix}${first.surah}:${first.ayah}`;
   }
   if (first.surah === last.surah) {
-    return `${prefix}${first.surah}:${first.ayah}–${last.ayah}`;
+    return `${prefix}${first.surah}:${first.ayah}–${first.surah}:${last.ayah}`;
   }
-  return `${first.surah}:${first.ayah} – ${last.surah}:${last.ayah}`;
+  return `${first.surah}:${first.ayah}–${last.surah}:${last.ayah}`;
 }

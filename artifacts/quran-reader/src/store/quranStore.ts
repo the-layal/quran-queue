@@ -148,6 +148,15 @@ export const useQuranStore = create<QuranStore>()(
       reorderQueue: (fromIndex, toIndex) =>
         set((state) => {
           const q = [...state.reviewQueue];
+          if (
+            fromIndex < 0 ||
+            fromIndex >= q.length ||
+            toIndex < 0 ||
+            toIndex >= q.length ||
+            fromIndex === toIndex
+          ) {
+            return state;
+          }
           const [moved] = q.splice(fromIndex, 1);
           q.splice(toIndex, 0, moved);
           return { reviewQueue: q };
