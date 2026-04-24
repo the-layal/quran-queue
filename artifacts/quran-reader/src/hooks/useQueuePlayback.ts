@@ -91,11 +91,12 @@ export function useQueuePlayback(): QueuePlaybackState {
   }, []);
 
   // ------------------------------------------------------------------
-  // Stop on queue cleared
+  // Stop on queue cleared (whether playing or paused at a position)
   // ------------------------------------------------------------------
   useEffect(() => {
-    if (reviewQueue.length === 0 && isPlayingRef.current) {
-      // Hard stop — cancel RAF, pause audio, reset all state
+    if (reviewQueue.length === 0) {
+      // Hard stop — cancel RAF, pause audio, reset all state regardless of
+      // playing/paused so stale "queue-active" visuals never persist.
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
@@ -109,6 +110,8 @@ export function useQueuePlayback(): QueuePlaybackState {
       setQueueIsPlayingRef.current(false);
       setActiveItemIndexRef.current(null);
       setQueueProgressRef.current(0);
+      setQueueCurrentRegionsRef.current([]);
+      setQueueTotalDurationSecRef.current(0);
       useQuranStore.getState().setActiveQueueItemId(null);
     }
   }, [reviewQueue.length]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -479,6 +482,8 @@ export function useQueuePlayback(): QueuePlaybackState {
     setQueueIsPlaying(false);
     setActiveItemIndex(null);
     setQueueProgress(0);
+    setQueueCurrentRegions([]);
+    setQueueTotalDurationSec(0);
     useQuranStore.getState().setActiveQueueItemId(null);
   }, []);
 
