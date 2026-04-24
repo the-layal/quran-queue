@@ -14,12 +14,29 @@ const SVG_CACHE = new Map<number, string>();
 // Mirrors the .md-word-hovered path CSS rule; inline style ensures visibility
 // regardless of CSS cascade on dynamically-injected SVG content.
 // Colour is theme-aware so contrast is correct in both light and dark mode.
-const SVG_SEL_FILL_LIGHT = "hsl(153 35% 30%)";
-const SVG_SEL_FILL_DARK  = "hsl(153 50% 68%)";
+const SVG_SEL_FILL_LIGHT     = "hsl(153 35% 30%)";
+const SVG_SEL_FILL_DARK      = "hsl(153 50% 68%)";
+// Mirrors .md-word-playing path fill — gold for the active playback range.
+const SVG_PLAYING_FILL_LIGHT = "hsl(38 75% 38%)";
+const SVG_PLAYING_FILL_DARK  = "hsl(38 85% 68%)";
+// Mirrors .md-word-current path fill — near-black/near-white foreground accent.
+const SVG_CURRENT_FILL_LIGHT = "hsl(20 40% 12%)";
+const SVG_CURRENT_FILL_DARK  = "hsl(40 15% 90%)";
+
 function getSvgSelFill(): string {
   return document.documentElement.classList.contains("dark")
     ? SVG_SEL_FILL_DARK
     : SVG_SEL_FILL_LIGHT;
+}
+function getSvgPlayingFill(): string {
+  return document.documentElement.classList.contains("dark")
+    ? SVG_PLAYING_FILL_DARK
+    : SVG_PLAYING_FILL_LIGHT;
+}
+function getSvgCurrentFill(): string {
+  return document.documentElement.classList.contains("dark")
+    ? SVG_CURRENT_FILL_DARK
+    : SVG_CURRENT_FILL_LIGHT;
 }
 
 // ── Line-height normalisation helpers ───────────────────────────────────────
@@ -177,6 +194,13 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const playbackActiveIdsRef = useRef(playbackActiveIds);
   playbackActiveIdsRef.current = playbackActiveIds;
 
+  // Tracks word IDs where a playback-colour inline fill was written over the
+  // selection fill so we can restore the correct colour on playback clear.
+  const playbackFillOverrideRef = useRef<Set<string>>(new Set());
+  // Tracks the word ID that most recently had the current-word foreground fill
+  // written so the next advance can restore it to gold (if still playing).
+  const prevCurrentWordIdRef = useRef<string | null>(null);
+
   // Sync .md-word-playing classes whenever playbackActiveIds changes.
   // Query the container directly each time so the update is always idempotent —
   // no ref bookkeeping means no stale-state bugs when modes toggle rapidly.
@@ -187,8 +211,38 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     container
       .querySelectorAll<Element>(".md-word-playing")
       .forEach((el) => el.classList.remove("md-word-playing"));
+
+    // Restore inline fills for words that had playback gold applied but are no
+    // longer in the active playing range.
+    const nextSet = new Set(playbackActiveIds);
+    playbackFillOverrideRef.current.forEach((id) => {
+      if (!nextSet.has(id)) {
+        const wordEl = svgWordQuery(id, container);
+        if (wordEl) {
+          if (wordEl.classList.contains("md-word-hovered")) {
+            // Still selected — restore the selection (green) fill.
+            wordEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = getSvgSelFill(); });
+          } else {
+            // No longer selected — let CSS take over.
+            wordEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = ""; });
+          }
+        }
+        playbackFillOverrideRef.current.delete(id);
+      }
+    });
+
     playbackActiveIds.forEach((id) => {
-      svgWordQuery(id, container)?.classList.add("md-word-playing");
+      const wordEl = svgWordQuery(id, container);
+      if (!wordEl) return;
+      wordEl.classList.add("md-word-playing");
+      // If the word already has an inline fill it means it is selected.
+      // Override with the gold playback fill so it beats the selection colour.
+      const paths = wordEl.querySelectorAll<SVGPathElement>("path");
+      const hasInlineFill = Array.from(paths).some((p) => p.style.fill !== "");
+      if (hasInlineFill) {
+        paths.forEach((p) => { p.style.fill = getSvgPlayingFill(); });
+        playbackFillOverrideRef.current.add(id);
+      }
     });
 
     if (playbackActiveIds.length > 0) {
@@ -207,10 +261,28 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     const container = containerRef.current;
     if (!container) return;
 
-    // Step 1 — clear the current-word accent
+    // Step 1 — clear the current-word accent and restore the previous current
+    // word's inline fill (gold if still playing and selected, else sel or clear).
     container
       .querySelectorAll<Element>(".md-word-current")
       .forEach((el) => el.classList.remove("md-word-current"));
+
+    const prevId = prevCurrentWordIdRef.current;
+    if (prevId) {
+      const prevEl = svgWordQuery(prevId, container);
+      if (prevEl) {
+        if (playbackFillOverrideRef.current.has(prevId)) {
+          // Still in the playing range and was selected — restore gold.
+          prevEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = getSvgPlayingFill(); });
+        } else if (prevEl.classList.contains("md-word-hovered")) {
+          // No longer playing but still selected — restore selection fill.
+          prevEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = getSvgSelFill(); });
+        }
+        // Otherwise leave the fill as-is (gold was already cleared by the
+        // playbackActiveIds effect when that word left the playing range).
+      }
+      prevCurrentWordIdRef.current = null;
+    }
 
     if (playbackCurrentWordId) {
       // Step 2 — re-assert the line/ayah gold so it can't go missing
@@ -219,16 +291,27 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       });
 
       // Step 3 — apply the deeper word accent on top
-      svgWordQuery(playbackCurrentWordId, container)?.classList.add("md-word-current");
+      const currentEl = svgWordQuery(playbackCurrentWordId, container);
+      if (currentEl) {
+        currentEl.classList.add("md-word-current");
+        // If this word is in the override set (selected + playing), write the
+        // foreground accent inline so it beats both selection and gold fills.
+        if (playbackFillOverrideRef.current.has(playbackCurrentWordId)) {
+          currentEl.querySelectorAll<SVGPathElement>("path").forEach((p) => { p.style.fill = getSvgCurrentFill(); });
+          prevCurrentWordIdRef.current = playbackCurrentWordId;
+        }
+      }
     }
   }, [playbackCurrentWordId]);
 
   // Clear SVG classes and cached viewBox when page changes
   useEffect(() => {
-    prevSvgSelectedRef.current = new Set();
-    croppedViewBoxRef.current  = null;
-    originalViewBoxRef.current = null;
-    lineHeightMapRef.current   = new Map();
+    prevSvgSelectedRef.current        = new Set();
+    playbackFillOverrideRef.current   = new Set();
+    prevCurrentWordIdRef.current      = null;
+    croppedViewBoxRef.current         = null;
+    originalViewBoxRef.current        = null;
+    lineHeightMapRef.current          = new Map();
   }, [pageNumber]);
 
   // Inject SVG text into the container manually so that React never resets it
