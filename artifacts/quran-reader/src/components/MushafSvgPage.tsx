@@ -22,6 +22,48 @@ function getSvgSelFill(): string {
     : SVG_SEL_FILL_LIGHT;
 }
 
+// ── Line-height normalisation helpers ───────────────────────────────────────
+// After the SVG is laid out we bucket every word group by the Y midpoint of
+// its bounding box (rounded to the nearest BUCKET SVG units).  Within each
+// bucket we record the topmost Y and the bottommost edge so every word on the
+// same visual line can share one uniform highlight rectangle height.
+
+const LINE_BUCKET = 10; // SVG units — tolerance for baseline variation
+
+interface LineHeightInfo { normY: number; normHeight: number; }
+
+function buildLineHeightMap(container: Element): Map<number, LineHeightInfo> {
+  const buckets = new Map<number, { minY: number; maxBottom: number }>();
+
+  container.querySelectorAll<SVGGElement>("g[data-word-index-in-ayah]").forEach((wordEl) => {
+    try {
+      const bbox = wordEl.getBBox();
+      if (bbox.width === 0 && bbox.height === 0) return;
+      const key = Math.round((bbox.y + bbox.height / 2) / LINE_BUCKET);
+      const cur = buckets.get(key);
+      if (!cur) {
+        buckets.set(key, { minY: bbox.y, maxBottom: bbox.y + bbox.height });
+      } else {
+        if (bbox.y < cur.minY) cur.minY = bbox.y;
+        const bottom = bbox.y + bbox.height;
+        if (bottom > cur.maxBottom) cur.maxBottom = bottom;
+      }
+    } catch { /* getBBox can throw for hidden/detached elements */ }
+  });
+
+  const result = new Map<number, LineHeightInfo>();
+  buckets.forEach(({ minY, maxBottom }, key) => {
+    result.set(key, { normY: minY, normHeight: maxBottom - minY });
+  });
+  return result;
+}
+
+function getLineNorm(bbox: SVGRect, map: Map<number, LineHeightInfo>): { y: number; height: number } {
+  const key = Math.round((bbox.y + bbox.height / 2) / LINE_BUCKET);
+  const info = map.get(key);
+  return info ? { y: info.normY, height: info.normHeight } : { y: bbox.y, height: bbox.height };
+}
+
 async function fetchSvgPage(pageNum: number): Promise<string> {
   if (SVG_CACHE.has(pageNum)) return SVG_CACHE.get(pageNum)!;
   const url = `/api/mushaf-svg/${pageNum}`;
@@ -44,6 +86,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const isBrushingRef     = useRef(false);
   const croppedViewBoxRef  = useRef<string | null>(null);
   const originalViewBoxRef = useRef<string | null>(null);
+  const lineHeightMapRef   = useRef<Map<number, LineHeightInfo>>(new Map());
   const [availH, setAvailH] = useState(0);
 
   // ── Smart Brush ─────────────────────────────────────────────────────────
@@ -103,14 +146,17 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
             const bbox = (wordEl as SVGGElement).getBBox();
             if (bbox.width > 0 || bbox.height > 0) {
               const padX = 3, padY = 2;
+              // Use the line-normalised height so all words on the same line
+              // share the same highlight rectangle height.
+              const { y: normY, height: normH } = getLineNorm(bbox, lineHeightMapRef.current);
               const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
               rect.classList.add("md-hover-rect");
               rect.setAttribute("data-sel", "true");
               rect.setAttribute("rx",    "6");
               rect.setAttribute("x",     String(bbox.x - padX));
-              rect.setAttribute("y",     String(bbox.y - padY));
+              rect.setAttribute("y",     String(normY - padY));
               rect.setAttribute("width", String(bbox.width  + padX * 2));
-              rect.setAttribute("height",String(bbox.height + padY * 2));
+              rect.setAttribute("height",String(normH + padY * 2));
               wordEl.insertBefore(rect, wordEl.firstChild);
             }
           } catch {
@@ -182,6 +228,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     prevSvgSelectedRef.current = new Set();
     croppedViewBoxRef.current  = null;
     originalViewBoxRef.current = null;
+    lineHeightMapRef.current   = new Map();
   }, [pageNumber]);
 
   // Inject SVG text into the container manually so that React never resets it
@@ -328,6 +375,10 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
           croppedViewBoxRef.current = cropped;
         }
       }
+
+      // Build the per-line height map now that layout is complete.
+      // This must run after the viewBox update so getBBox() returns final values.
+      lineHeightMapRef.current = buildLineHeightMap(container);
     });
 
     return () => cancelAnimationFrame(rafId);
@@ -405,6 +456,9 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       if (bbox.width === 0 && bbox.height === 0) return;
 
       const padX = 3, padY = 2;
+      // Use the line-normalised height so all words on the same line share
+      // the same highlight rectangle height for hover, just as for selection.
+      const { y: normY, height: normH } = getLineNorm(bbox, lineHeightMapRef.current);
       let rect = hoverRectRef.current;
       if (!rect) {
         rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -415,9 +469,9 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       // Insert before first child so rect renders behind the text paths
       wordEl.insertBefore(rect, wordEl.firstChild);
       rect.setAttribute("x",      String(bbox.x - padX));
-      rect.setAttribute("y",      String(bbox.y - padY));
+      rect.setAttribute("y",      String(normY - padY));
       rect.setAttribute("width",  String(bbox.width  + padX * 2));
-      rect.setAttribute("height", String(bbox.height + padY * 2));
+      rect.setAttribute("height", String(normH + padY * 2));
     },
     [getWordGroup, clearHoverWord, removeHoverRect]
   );
