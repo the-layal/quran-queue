@@ -162,6 +162,9 @@ export function useSelectionAudio(): SelectionAudioState {
   const audioDataRef = useRef(audioData);
   audioDataRef.current = audioData;
 
+  const selectedWordIdsRef = useRef<string[]>(selectedWordIds);
+  selectedWordIdsRef.current = selectedWordIds;
+
   isLoopingRef.current = isLooping;
   isPlayingRef.current = isPlaying;
   regionsRef.current = regions;
@@ -299,13 +302,20 @@ export function useSelectionAudio(): SelectionAudioState {
               ? computeCurrentWordIndex(audioRelativeMs, aData, activeKey)
               : null;
           } else {
+            // "line" mode: only highlight words that are both on the current
+            // line AND inside the user's original selection.
+            const selectionSet = new Set(selectedWordIdsRef.current);
             currentWordIndex = aData
               ? computeCurrentWordIndex(audioRelativeMs, aData, activeKey)
               : null;
             if (currentWordIndex !== null) {
-              newActiveIds = getAllLineWordIds(activeKey, currentWordIndex);
+              newActiveIds = getAllLineWordIds(activeKey, currentWordIndex).filter(
+                (id) => selectionSet.has(id)
+              );
             } else {
-              newActiveIds = getAllAyahWordIds(activeKey);
+              newActiveIds = getAllAyahWordIds(activeKey).filter(
+                (id) => selectionSet.has(id)
+              );
             }
           }
         }
