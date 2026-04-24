@@ -34,6 +34,7 @@ interface QuranStore {
   activeQueueItemId: string | null;
   queuePanelOpen: boolean;
   queueRepeatAll: number;
+  queueLoopCount: number;
 
   setCurrentSurah: (surah: number) => void;
   setCurrentPage: (page: number) => void;
@@ -60,6 +61,7 @@ interface QuranStore {
   setQueuePanelOpen: (open: boolean) => void;
   setQueueItemRepeat: (id: string, count: number) => void;
   setQueueRepeatAll: (count: number) => void;
+  setQueueLoopCount: (count: number) => void;
   setReviewQueue: (items: ReviewQueueItem[]) => void;
 }
 
@@ -95,6 +97,7 @@ export const useQuranStore = create<QuranStore>()(
       activeQueueItemId: null,
       queuePanelOpen: false,
       queueRepeatAll: 1,
+      queueLoopCount: 1,
 
       setCurrentSurah: (surah) =>
         set({ currentSurah: Math.max(1, Math.min(114, surah)) }),
@@ -187,6 +190,8 @@ export const useQuranStore = create<QuranStore>()(
           reviewQueue: state.reviewQueue.map((item) => ({ ...item, repeatCount: count })),
         })),
 
+      setQueueLoopCount: (count) => set({ queueLoopCount: count }),
+
       setReviewQueue: (items) =>
         set({ reviewQueue: items, activeQueueItemId: null }),
     }),
@@ -201,6 +206,7 @@ export const useQuranStore = create<QuranStore>()(
         playbackHighlightMode: state.playbackHighlightMode,
         reviewQueue: state.reviewQueue,
         queueRepeatAll: state.queueRepeatAll,
+        queueLoopCount: state.queueLoopCount,
       }),
     }
   )

@@ -142,6 +142,8 @@ export default function ReviewQueuePanel({ chapters }: ReviewQueuePanelProps) {
   const queueRepeatAll = useQuranStore((s) => s.queueRepeatAll);
   const setQueueItemRepeat = useQuranStore((s) => s.setQueueItemRepeat);
   const setQueueRepeatAll = useQuranStore((s) => s.setQueueRepeatAll);
+  const queueLoopCount = useQuranStore((s) => s.queueLoopCount);
+  const setQueueLoopCount = useQuranStore((s) => s.setQueueLoopCount);
   const setReviewQueue = useQuranStore((s) => s.setReviewQueue);
 
   const { queueIsPlaying, activeItemIndex, playQueue, pauseQueue, stopQueue } =
@@ -387,7 +389,7 @@ export default function ReviewQueuePanel({ chapters }: ReviewQueuePanelProps) {
           </button>
         </div>
 
-        {/* Set all */}
+        {/* Set all per-item repeats */}
         {hasQueue && (
           <div className="flex items-center gap-2 px-3 py-2 border-b border-border flex-shrink-0 bg-muted/30">
             <span className="text-[10px] text-muted-foreground font-medium flex-1">
@@ -400,6 +402,30 @@ export default function ReviewQueuePanel({ chapters }: ReviewQueuePanelProps) {
                   onClick={() => setQueueRepeatAll(v)}
                   className={`min-w-[28px] h-[20px] rounded border text-[9px] font-bold transition-colors px-1.5 ${
                     queueRepeatAll === v
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  {repeatLabel(v)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Queue-level loop count */}
+        {hasQueue && (
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-border flex-shrink-0 bg-muted/30">
+            <span className="text-[10px] text-muted-foreground font-medium flex-1">
+              Queue loops
+            </span>
+            <div className="flex gap-1">
+              {REPEAT_OPTIONS.map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setQueueLoopCount(v)}
+                  className={`min-w-[28px] h-[20px] rounded border text-[9px] font-bold transition-colors px-1.5 ${
+                    queueLoopCount === v
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-border text-muted-foreground hover:border-primary hover:text-primary"
                   }`}

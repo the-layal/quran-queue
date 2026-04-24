@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuranStore } from "../store/quranStore";
 import { loadAudioData } from "../services/quranApi";
 import { computePlaybackRegions, type PlaybackRegion } from "../utils/audioRegions";
@@ -8,27 +8,40 @@ import type { ReviewQueueItem } from "../store/quranStore";
 export interface QueuePlaybackState {
   queueIsPlaying: boolean;
   activeItemIndex: number | null;
+  queueProgress: number;
+  queueTotalDurationSec: number;
+  queueCurrentRegions: PlaybackRegion[];
+  queueActiveLabel: string | null;
   playQueue: (startIndex?: number) => void;
   pauseQueue: () => void;
   stopQueue: () => void;
+  seekQueueTo: (fraction: number) => void;
 }
 
 interface PauseState {
   regionIndex: number;
-  offsetInRegion: number; // seconds from region start
+  offsetInRegion: number;
   elapsedBefore: number;
 }
 
 export function useQueuePlayback(): QueuePlaybackState {
   const reviewQueue = useQuranStore((s) => s.reviewQueue);
+  const queueLoopCount = useQuranStore((s) => s.queueLoopCount);
+
   const [queueIsPlaying, setQueueIsPlaying] = useState(false);
   const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
+  const [queueProgress, setQueueProgress] = useState(0);
+  const [queueTotalDurationSec, setQueueTotalDurationSec] = useState(0);
+  const [queueCurrentRegions, setQueueCurrentRegions] = useState<PlaybackRegion[]>([]);
 
   // ------------------------------------------------------------------
   // All mutable engine state in refs so closures never go stale.
   // ------------------------------------------------------------------
   const reviewQueueRef = useRef<ReviewQueueItem[]>(reviewQueue);
   reviewQueueRef.current = reviewQueue;
+
+  const queueLoopCountRef = useRef(queueLoopCount);
+  queueLoopCountRef.current = queueLoopCount;
 
   const audioDataRef = useRef<AudioDataMap | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -41,19 +54,32 @@ export function useQueuePlayback(): QueuePlaybackState {
   const regionIndexRef = useRef(0);
   const currentRegionsRef = useRef<PlaybackRegion[]>([]);
   const elapsedBeforeRef = useRef(0);
+  const queueTotalDurationSecRef = useRef(0);
+
+  // Queue-level loop tracking (how many full passes done so far)
+  const queueLoopNumRef = useRef(0);
 
   // Pause resume state (null when not paused)
   const pauseStateRef = useRef<PauseState | null>(null);
 
-  // React setter refs
+  // React setter refs (stable across renders, safe to call inside engine closures)
   const setQueueIsPlayingRef = useRef(setQueueIsPlaying);
   setQueueIsPlayingRef.current = setQueueIsPlaying;
   const setActiveItemIndexRef = useRef(setActiveItemIndex);
   setActiveItemIndexRef.current = setActiveItemIndex;
+  const setQueueProgressRef = useRef(setQueueProgress);
+  setQueueProgressRef.current = setQueueProgress;
+  const setQueueTotalDurationSecRef = useRef(setQueueTotalDurationSec);
+  setQueueTotalDurationSecRef.current = setQueueTotalDurationSec;
+  const setQueueCurrentRegionsRef = useRef(setQueueCurrentRegions);
+  setQueueCurrentRegionsRef.current = setQueueCurrentRegions;
 
   // Mutual-recursion refs (set in useEffect below)
   const playRegionRef = useRef<((ri: number, gapless?: boolean, seekOffsetSec?: number) => void) | null>(null);
   const advanceToCursorRef = useRef<((itemIndex: number, repeatNum: number) => void) | null>(null);
+
+  // Seek ref exposed to public API (set after engine useEffect)
+  const seekQueueToRef = useRef<((fraction: number) => void) | null>(null);
 
   // ------------------------------------------------------------------
   // Load audio data once
@@ -63,6 +89,29 @@ export function useQueuePlayback(): QueuePlaybackState {
       .then((data) => { audioDataRef.current = data; })
       .catch(() => {});
   }, []);
+
+  // ------------------------------------------------------------------
+  // Stop on queue cleared
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    if (reviewQueue.length === 0 && isPlayingRef.current) {
+      // Hard stop — cancel RAF, pause audio, reset all state
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      if (audioRef.current) {
+        audioRef.current.onended = null;
+        audioRef.current.pause();
+      }
+      pauseStateRef.current = null;
+      isPlayingRef.current = false;
+      setQueueIsPlayingRef.current(false);
+      setActiveItemIndexRef.current(null);
+      setQueueProgressRef.current(0);
+      useQuranStore.getState().setActiveQueueItemId(null);
+    }
+  }, [reviewQueue.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ------------------------------------------------------------------
   // Audio engine — set up once with empty deps; accesses all state via refs
@@ -92,7 +141,7 @@ export function useQueuePlayback(): QueuePlaybackState {
         return { itemIndex, repeatNum: rc === 0 ? 0 : repeatNum + 1 };
       }
       const next = itemIndex + 1;
-      if (next >= queue.length) return null;
+      if (next >= queue.length) return null; // end of queue — caller handles loop logic
       return { itemIndex: next, repeatNum: 0 };
     }
 
@@ -110,14 +159,24 @@ export function useQueuePlayback(): QueuePlaybackState {
       isPlayingRef.current = false;
       setQueueIsPlayingRef.current(false);
       setActiveItemIndexRef.current(null);
+      setQueueProgressRef.current(0);
       useQuranStore.getState().setActiveQueueItemId(null);
     }
 
     function advanceToCursor(itemIndex: number, repeatNum: number) {
       if (!isPlayingRef.current) return;
       const queue = reviewQueueRef.current;
+
+      // End of queue: check for queue-level loop
       if (itemIndex >= queue.length) {
-        finishIdle();
+        const lc = queueLoopCountRef.current;
+        const loopNum = queueLoopNumRef.current;
+        if (lc === 0 || loopNum < lc - 1) {
+          queueLoopNumRef.current = loopNum + 1;
+          advanceToCursorRef.current?.(0, 0);
+        } else {
+          finishIdle();
+        }
         return;
       }
 
@@ -130,15 +189,23 @@ export function useQueuePlayback(): QueuePlaybackState {
       if (!aData) { isPlayingRef.current = false; setQueueIsPlayingRef.current(false); return; }
 
       const regions = computePlaybackRegions(item.selectedWordIds, aData, item.brushFineness);
+
+      // Update total duration + regions state for the control bar
+      const totalDur = regions.reduce((sum, r) => sum + r.durationMs, 0) / 1000;
+      queueTotalDurationSecRef.current = totalDur;
+      setQueueTotalDurationSecRef.current(totalDur);
+      setQueueCurrentRegionsRef.current(regions);
+
       if (regions.length === 0) {
         const nc = getNextCursor(itemIndex, repeatNum);
         if (nc) advanceToCursorRef.current?.(nc.itemIndex, nc.repeatNum);
-        else finishIdle();
+        else advanceToCursorRef.current?.(queue.length, 0); // trigger end-of-queue logic
         return;
       }
 
       currentRegionsRef.current = regions;
       elapsedBeforeRef.current = 0;
+      setQueueProgressRef.current(0);
       playRegionRef.current?.(0, false);
     }
 
@@ -148,7 +215,11 @@ export function useQueuePlayback(): QueuePlaybackState {
       const allRegions = currentRegionsRef.current;
       if (regionIndex >= allRegions.length) {
         const nc = getNextCursor(itemIndexRef.current, repeatNumRef.current);
-        if (!nc) { finishIdle(); return; }
+        if (!nc) {
+          // Reached the natural end of this item's repeats → trigger end-of-queue logic
+          advanceToCursorRef.current?.(reviewQueueRef.current.length, 0);
+          return;
+        }
         advanceToCursorRef.current?.(nc.itemIndex, nc.repeatNum);
         return;
       }
@@ -158,6 +229,7 @@ export function useQueuePlayback(): QueuePlaybackState {
       const endSec = region.endMs / 1000;
       const regionDurSec = region.durationMs / 1000;
       const elapsedBefore = elapsedBeforeRef.current;
+      const totalDur = queueTotalDurationSecRef.current;
       regionIndexRef.current = regionIndex;
 
       cancelRaf();
@@ -168,6 +240,11 @@ export function useQueuePlayback(): QueuePlaybackState {
         const tick = () => {
           if (!isPlayingRef.current) return;
           const ct = audio.currentTime;
+
+          // Update progress for control bar
+          const regionElapsed = Math.max(0, ct - startSec);
+          const prog = totalDur > 0 ? Math.min((elapsedBefore + regionElapsed) / totalDur, 1) : 0;
+          setQueueProgressRef.current(prog);
 
           // Determine next region — may cross item/repeat boundaries for gapless
           let nextRegion: PlaybackRegion | null = null;
@@ -209,6 +286,10 @@ export function useQueuePlayback(): QueuePlaybackState {
                 const aData = audioDataRef.current!;
                 const nextItem = reviewQueueRef.current[nc.itemIndex];
                 const nextRegions = computePlaybackRegions(nextItem.selectedWordIds, aData, nextItem.brushFineness);
+                const nextTotalDur = nextRegions.reduce((s, r) => s + r.durationMs, 0) / 1000;
+                queueTotalDurationSecRef.current = nextTotalDur;
+                setQueueTotalDurationSecRef.current(nextTotalDur);
+                setQueueCurrentRegionsRef.current(nextRegions);
                 currentRegionsRef.current = nextRegions;
                 elapsedBeforeRef.current = 0;
                 playRegionRef.current?.(0, true);
@@ -229,7 +310,6 @@ export function useQueuePlayback(): QueuePlaybackState {
       const doSeekAndPlay = () => {
         if (!isPlayingRef.current) return;
         const PREROLL_SEC = 0.1;
-        // When resuming from pause, seek to the exact saved offset; otherwise use preroll
         const targetTime =
           seekOffsetSec !== undefined
             ? startSec + seekOffsetSec
@@ -257,8 +337,63 @@ export function useQueuePlayback(): QueuePlaybackState {
       }
     }
 
+    // ---- Seek within active queue item ----
+    function seekQueueTo(fraction: number) {
+      const allRegions = currentRegionsRef.current;
+      if (allRegions.length === 0) return;
+      const totalDur = queueTotalDurationSecRef.current;
+      if (totalDur <= 0) return;
+
+      const clamped = Math.max(0, Math.min(1, fraction));
+      const targetSec = clamped * totalDur;
+
+      let accumulated = 0;
+      let targetRegionIndex = allRegions.length - 1;
+      let offsetInRegion = 0;
+
+      for (let i = 0; i < allRegions.length; i++) {
+        const regionDurSec = allRegions[i].durationMs / 1000;
+        if (accumulated + regionDurSec > targetSec || i === allRegions.length - 1) {
+          targetRegionIndex = i;
+          offsetInRegion = Math.max(0, targetSec - accumulated);
+          break;
+        }
+        accumulated += regionDurSec;
+      }
+
+      cancelRaf();
+      if (audioRef.current) audioRef.current.pause();
+
+      elapsedBeforeRef.current = accumulated;
+      regionIndexRef.current = targetRegionIndex;
+      setQueueProgressRef.current(clamped);
+
+      if (isPlayingRef.current) {
+        playRegionRef.current?.(targetRegionIndex, false, offsetInRegion);
+      } else {
+        // Store as pause state so resume picks up from here
+        pauseStateRef.current = {
+          regionIndex: targetRegionIndex,
+          offsetInRegion,
+          elapsedBefore: accumulated,
+        };
+        // Pre-seek audio element for instant resume
+        const audio = getOrCreateAudio();
+        const region = allRegions[targetRegionIndex];
+        const targetTime = region.startMs / 1000 + offsetInRegion;
+        if (audio.src !== region.audioUrl) {
+          audio.src = region.audioUrl;
+          audio.load();
+          audio.addEventListener("canplay", () => { audio.currentTime = targetTime; }, { once: true });
+        } else {
+          audio.currentTime = targetTime;
+        }
+      }
+    }
+
     playRegionRef.current = playRegion;
     advanceToCursorRef.current = advanceToCursor;
+    seekQueueToRef.current = seekQueueTo;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ------------------------------------------------------------------
@@ -284,7 +419,6 @@ export function useQueuePlayback(): QueuePlaybackState {
       const currentItemIndex = activeItemIndex;
       const isPaused = !isPlayingRef.current && currentItemIndex !== null;
 
-      // Resume from paused position if caller doesn't specify a different index
       if (
         isPaused &&
         pauseStateRef.current &&
@@ -294,12 +428,11 @@ export function useQueuePlayback(): QueuePlaybackState {
         pauseStateRef.current = null;
         isPlayingRef.current = true;
         setQueueIsPlaying(true);
-        // Restore elapsed context and play from paused position
         elapsedBeforeRef.current = ps.elapsedBefore;
         playRegionRef.current?.(ps.regionIndex, false, ps.offsetInRegion);
       } else {
-        // Fresh start (or jump to a specific item)
         pauseStateRef.current = null;
+        queueLoopNumRef.current = 0; // reset queue-level loop counter on fresh start
         isPlayingRef.current = true;
         setQueueIsPlaying(true);
         advanceToCursorRef.current?.(startIndex ?? 0, 0);
@@ -341,12 +474,33 @@ export function useQueuePlayback(): QueuePlaybackState {
       audioRef.current.pause();
     }
     pauseStateRef.current = null;
+    queueLoopNumRef.current = 0;
     isPlayingRef.current = false;
     setQueueIsPlaying(false);
     setActiveItemIndex(null);
-    // Clear store active-item highlight for full idle reset
+    setQueueProgress(0);
     useQuranStore.getState().setActiveQueueItemId(null);
   }, []);
 
-  return { queueIsPlaying, activeItemIndex, playQueue, pauseQueue, stopQueue };
+  const seekQueueTo = useCallback((fraction: number) => {
+    seekQueueToRef.current?.(fraction);
+  }, []);
+
+  const queueActiveLabel = useMemo(
+    () => (activeItemIndex !== null ? (reviewQueue[activeItemIndex]?.label ?? null) : null),
+    [activeItemIndex, reviewQueue]
+  );
+
+  return {
+    queueIsPlaying,
+    activeItemIndex,
+    queueProgress,
+    queueTotalDurationSec,
+    queueCurrentRegions,
+    queueActiveLabel,
+    playQueue,
+    pauseQueue,
+    stopQueue,
+    seekQueueTo,
+  };
 }
