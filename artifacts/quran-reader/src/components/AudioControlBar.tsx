@@ -1,9 +1,10 @@
-import { useEffect, useCallback, useRef, useMemo } from "react";
-import { Play, Pause, Repeat, Music2, Highlighter } from "lucide-react";
+import { useEffect, useCallback, useRef, useMemo, useState } from "react";
+import { Play, Pause, Repeat, Music2, Highlighter, ListMusic, CheckCheck } from "lucide-react";
 import type { ChapterMap } from "../types/quran";
 import { useSelectionAudio } from "../hooks/useSelectionAudio";
 import { useQuranStore } from "../store/quranStore";
 import type { PlaybackHighlightMode } from "../store/quranStore";
+import { computeQueueItemLabel } from "../utils/queueLabel";
 
 function fmtTime(sec: number): string {
   const s = Math.floor(sec);
@@ -37,8 +38,6 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
 
   const elapsedSec = progress * totalDurationSec;
 
-  // Fractional positions (0–1) of each inter-ayah boundary on the progress bar.
-  // One tick per boundary between consecutive regions.
   const boundaryFractions = useMemo(() => {
     if (regions.length <= 1 || totalDurationSec <= 0) return [];
     const fracs: number[] = [];
@@ -97,7 +96,6 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
       if (!isDraggingRef.current) return;
       isDraggingRef.current = false;
       progressBarRef.current?.releasePointerCapture(e.pointerId);
-      // Do not seek on cancel — just end the drag at the last valid position.
     },
     []
   );
@@ -107,6 +105,15 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
   const playbackHighlightEnabled = useQuranStore((s) => s.playbackHighlightEnabled);
   const setPlaybackHighlightEnabled = useQuranStore((s) => s.setPlaybackHighlightEnabled);
 
+  const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
+  const brushFineness = useQuranStore((s) => s.brushFineness);
+  const addToQueue = useQuranStore((s) => s.addToQueue);
+  const queuePanelOpen = useQuranStore((s) => s.queuePanelOpen);
+  const setQueuePanelOpen = useQuranStore((s) => s.setQueuePanelOpen);
+  const reviewQueue = useQuranStore((s) => s.reviewQueue);
+
+  const [justAdded, setJustAdded] = useState(false);
+
   const handlePlayPause = useCallback(() => {
     if (isPlaying) {
       pause();
@@ -115,9 +122,41 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
     }
   }, [isPlaying, play, pause]);
 
+  const handleAddToQueue = useCallback(() => {
+    let lineRange: { first: number; last: number } | undefined;
+
+    if (brushFineness === "line") {
+      const lineNumbers: number[] = [];
+      selectedWordIds.forEach((id) => {
+        const [s, a, w] = id.split(":");
+        const el = document.querySelector(
+          `g[data-surah="${s.padStart(3, "0")}"][data-aya="${a.padStart(3, "0")}"][data-word-index-in-ayah="${w}"]`
+        );
+        const ln = el?.getAttribute("data-line-number");
+        if (ln) lineNumbers.push(parseInt(ln, 10));
+      });
+      if (lineNumbers.length > 0) {
+        lineRange = {
+          first: Math.min(...lineNumbers),
+          last: Math.max(...lineNumbers),
+        };
+      }
+    }
+
+    const label = computeQueueItemLabel(
+      selectedWordIds,
+      brushFineness,
+      chapters,
+      lineRange
+    );
+
+    addToQueue({ selectedWordIds, brushFineness, label, repeatCount: 1 });
+    setJustAdded(true);
+    setTimeout(() => setJustAdded(false), 1500);
+  }, [selectedWordIds, brushFineness, chapters, addToQueue]);
+
   useEffect(() => {
     if (!hasSelection) return;
-
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
       if (e.target instanceof HTMLTextAreaElement) return;
@@ -126,7 +165,6 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
         handlePlayPause();
       }
     };
-
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [hasSelection, handlePlayPause]);
@@ -145,6 +183,28 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
   const barBase =
     "fixed z-40 bottom-[8.5rem] left-1/2 -translate-x-1/2 sm:left-auto sm:right-6 sm:translate-x-0 sm:bottom-[8.5rem] flex items-center gap-3 rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-xl px-4 py-2.5 transition-all duration-200";
 
+  const queueToggleBtn = (
+    <button
+      onClick={() => setQueuePanelOpen(!queuePanelOpen)}
+      style={{ pointerEvents: "auto" }}
+      className={`relative w-7 h-7 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 border ${
+        queuePanelOpen
+          ? "bg-primary/15 border-primary text-primary"
+          : "border-border text-muted-foreground hover:bg-muted"
+      }`}
+      aria-label={queuePanelOpen ? "Close review queue" : "Open review queue"}
+      aria-pressed={queuePanelOpen}
+      title="Review queue"
+    >
+      <ListMusic className="w-3.5 h-3.5" />
+      {reviewQueue.length > 0 && (
+        <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-primary text-primary-foreground text-[8px] font-bold flex items-center justify-center leading-none tabular-nums">
+          {reviewQueue.length > 9 ? "9+" : reviewQueue.length}
+        </span>
+      )}
+    </button>
+  );
+
   if (!hasSelection) {
     return (
       <div
@@ -157,6 +217,7 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
         <span className="text-xs text-muted-foreground whitespace-nowrap">
           Select text to play
         </span>
+        {queueToggleBtn}
       </div>
     );
   }
@@ -173,6 +234,7 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
         <span className="text-xs text-muted-foreground whitespace-nowrap">
           No audio for selection
         </span>
+        {queueToggleBtn}
       </div>
     );
   }
@@ -247,6 +309,21 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
         )}
       </div>
 
+      {/* Add to queue */}
+      <button
+        onClick={handleAddToQueue}
+        style={{ pointerEvents: "auto" }}
+        className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all flex-shrink-0 border ${
+          justAdded
+            ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 scale-110"
+            : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+        }`}
+        aria-label="Add selection to review queue"
+        title="Add to review queue"
+      >
+        <CheckCheck className="w-3.5 h-3.5" />
+      </button>
+
       <button
         onClick={() => setPlaybackHighlightEnabled(!playbackHighlightEnabled)}
         style={{ pointerEvents: "auto" }}
@@ -299,6 +376,8 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
       >
         <Repeat className="w-3.5 h-3.5" />
       </button>
+
+      {queueToggleBtn}
     </div>
   );
 }

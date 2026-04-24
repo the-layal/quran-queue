@@ -4,6 +4,14 @@ import type { SurahData, MushafPageData, Settings, ViewMode, BrushFineness } fro
 
 export type PlaybackHighlightMode = "line" | "ayah";
 
+export interface ReviewQueueItem {
+  id: string;
+  selectedWordIds: string[];
+  brushFineness: BrushFineness;
+  label: string;
+  repeatCount: number;
+}
+
 interface QuranStore {
   currentSurah: number;
   currentPage: number;
@@ -22,6 +30,10 @@ interface QuranStore {
   playbackActiveIds: string[];
   playbackCurrentWordId: string | null;
 
+  reviewQueue: ReviewQueueItem[];
+  activeQueueItemId: string | null;
+  queuePanelOpen: boolean;
+
   setCurrentSurah: (surah: number) => void;
   setCurrentPage: (page: number) => void;
   setViewMode: (mode: ViewMode) => void;
@@ -38,6 +50,17 @@ interface QuranStore {
   setPlaybackHighlightEnabled: (enabled: boolean) => void;
   setPlaybackActiveIds: (ids: string[]) => void;
   setPlaybackCurrentWordId: (id: string | null) => void;
+
+  addToQueue: (item: Omit<ReviewQueueItem, "id">) => void;
+  removeFromQueue: (id: string) => void;
+  reorderQueue: (fromIndex: number, toIndex: number) => void;
+  clearReviewQueue: () => void;
+  setActiveQueueItemId: (id: string | null) => void;
+  setQueuePanelOpen: (open: boolean) => void;
+}
+
+function genId(): string {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
 export const useQuranStore = create<QuranStore>()(
@@ -63,6 +86,10 @@ export const useQuranStore = create<QuranStore>()(
       playbackHighlightEnabled: true,
       playbackActiveIds: [],
       playbackCurrentWordId: null,
+
+      reviewQueue: [],
+      activeQueueItemId: null,
+      queuePanelOpen: false,
 
       setCurrentSurah: (surah) =>
         set({ currentSurah: Math.max(1, Math.min(114, surah)) }),
@@ -105,6 +132,33 @@ export const useQuranStore = create<QuranStore>()(
       setPlaybackHighlightEnabled: (playbackHighlightEnabled) => set({ playbackHighlightEnabled }),
       setPlaybackActiveIds: (playbackActiveIds) => set({ playbackActiveIds }),
       setPlaybackCurrentWordId: (playbackCurrentWordId) => set({ playbackCurrentWordId }),
+
+      addToQueue: (item) =>
+        set((state) => ({
+          reviewQueue: [{ ...item, id: genId() }, ...state.reviewQueue],
+        })),
+
+      removeFromQueue: (id) =>
+        set((state) => ({
+          reviewQueue: state.reviewQueue.filter((item) => item.id !== id),
+          activeQueueItemId:
+            state.activeQueueItemId === id ? null : state.activeQueueItemId,
+        })),
+
+      reorderQueue: (fromIndex, toIndex) =>
+        set((state) => {
+          const q = [...state.reviewQueue];
+          const [moved] = q.splice(fromIndex, 1);
+          q.splice(toIndex, 0, moved);
+          return { reviewQueue: q };
+        }),
+
+      clearReviewQueue: () =>
+        set({ reviewQueue: [], activeQueueItemId: null }),
+
+      setActiveQueueItemId: (id) => set({ activeQueueItemId: id }),
+
+      setQueuePanelOpen: (open) => set({ queuePanelOpen: open }),
     }),
     {
       name: "quran-reader-store",
@@ -115,6 +169,7 @@ export const useQuranStore = create<QuranStore>()(
         settings: state.settings,
         brushFineness: state.brushFineness,
         playbackHighlightMode: state.playbackHighlightMode,
+        reviewQueue: state.reviewQueue,
       }),
     }
   )

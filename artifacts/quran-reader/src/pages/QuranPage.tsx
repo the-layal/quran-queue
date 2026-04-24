@@ -27,6 +27,7 @@ import SurahHeader from "../components/SurahHeader";
 import MushafSvgPage from "../components/MushafSvgPage";
 import BrushFinenessToggle from "../components/BrushFinenessToggle";
 import AudioControlBar from "../components/AudioControlBar";
+import ReviewQueuePanel from "../components/ReviewQueuePanel";
 import { useSmartBrush } from "../hooks/useSmartBrush";
 
 // ── Surah picker modal ────────────────────────────────────────────────────────
@@ -995,6 +996,7 @@ export default function QuranPage() {
         isMushafMode={isMushaf}
       />
 
+      <ReviewQueuePanel />
       <AudioControlBar chapters={chapters} />
     </div>
   );
