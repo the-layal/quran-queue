@@ -1,9 +1,134 @@
-import { useRef, useState } from "react";
-import { X, GripVertical, ListMusic } from "lucide-react";
+import { useRef, useState, useEffect } from "react";
+import {
+  X,
+  GripVertical,
+  ListMusic,
+  Play,
+  Pause,
+  Square,
+  Sparkles,
+  Music2,
+} from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
+import { useQueuePlayback } from "../hooks/useQueuePlayback";
+import { computeQueueItemLabel } from "../utils/queueLabel";
 import type { ReviewQueueItem } from "../store/quranStore";
+import type { ChapterMap, BrushFineness } from "../types/quran";
 
-export default function ReviewQueuePanel() {
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function genId(): string {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+const REPEAT_OPTIONS = [1, 3, 5, 0] as const;
+type RepeatOption = (typeof REPEAT_OPTIONS)[number];
+
+function nextRepeat(current: number): number {
+  const idx = REPEAT_OPTIONS.indexOf(current as RepeatOption);
+  return REPEAT_OPTIONS[idx === -1 ? 0 : (idx + 1) % REPEAT_OPTIONS.length];
+}
+
+function repeatLabel(count: number): string {
+  return count === 0 ? "∞" : `${count}×`;
+}
+
+// ── Preset generation ─────────────────────────────────────────────────────
+
+function buildAyahPreset(repeatCount: number, chapters: ChapterMap): ReviewQueueItem[] {
+  const ayahWordMap = new Map<string, string[]>();
+  document
+    .querySelectorAll<Element>("g[data-surah][data-aya][data-word-index-in-ayah]")
+    .forEach((el) => {
+      const s = el.getAttribute("data-surah");
+      const a = el.getAttribute("data-aya");
+      const w = el.getAttribute("data-word-index-in-ayah");
+      if (!s || !a || !w) return;
+      const surah = parseInt(s, 10);
+      const ayah = parseInt(a, 10);
+      const key = `${surah}:${ayah}`;
+      const wordId = `${surah}:${ayah}:${w}`;
+      if (!ayahWordMap.has(key)) ayahWordMap.set(key, []);
+      ayahWordMap.get(key)!.push(wordId);
+    });
+
+  return Array.from(ayahWordMap.entries())
+    .sort(([a], [b]) => {
+      const [as, aa] = a.split(":").map(Number);
+      const [bs, ba] = b.split(":").map(Number);
+      return as !== bs ? as - bs : aa - ba;
+    })
+    .map(([, wordIds]) => ({
+      id: genId(),
+      selectedWordIds: wordIds,
+      brushFineness: "ayah" as BrushFineness,
+      label: computeQueueItemLabel(wordIds, "ayah", chapters),
+      repeatCount,
+    }));
+}
+
+function buildLinePreset(repeatCount: number): ReviewQueueItem[] {
+  const lineWordMap = new Map<number, string[]>();
+  document
+    .querySelectorAll<Element>("g[data-line-number][data-surah][data-aya][data-word-index-in-ayah]")
+    .forEach((el) => {
+      const ln = el.getAttribute("data-line-number");
+      const s = el.getAttribute("data-surah");
+      const a = el.getAttribute("data-aya");
+      const w = el.getAttribute("data-word-index-in-ayah");
+      if (!ln || !s || !a || !w) return;
+      const lineNum = parseInt(ln, 10);
+      const surah = parseInt(s, 10);
+      const ayah = parseInt(a, 10);
+      const wordId = `${surah}:${ayah}:${w}`;
+      if (!lineWordMap.has(lineNum)) lineWordMap.set(lineNum, []);
+      lineWordMap.get(lineNum)!.push(wordId);
+    });
+
+  return Array.from(lineWordMap.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([lineNum, wordIds]) => ({
+      id: genId(),
+      selectedWordIds: wordIds,
+      brushFineness: "line" as BrushFineness,
+      label: computeQueueItemLabel(wordIds, "line", {}, {
+        first: lineNum,
+        last: lineNum,
+      }),
+      repeatCount,
+    }));
+}
+
+// ── Repeat badge ──────────────────────────────────────────────────────────
+
+function RepeatBadge({
+  count,
+  onCycle,
+}: {
+  count: number;
+  onCycle: () => void;
+}) {
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onCycle();
+      }}
+      className="flex-shrink-0 min-w-[26px] h-[18px] rounded-full border border-border text-[9px] font-bold tabular-nums text-muted-foreground hover:border-primary hover:text-primary transition-colors px-1.5 flex items-center justify-center"
+      title="Tap to change repeat count"
+    >
+      {repeatLabel(count)}
+    </button>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────
+
+interface ReviewQueuePanelProps {
+  chapters: ChapterMap;
+}
+
+export default function ReviewQueuePanel({ chapters }: ReviewQueuePanelProps) {
   const reviewQueue = useQuranStore((s) => s.reviewQueue);
   const activeQueueItemId = useQuranStore((s) => s.activeQueueItemId);
   const queuePanelOpen = useQuranStore((s) => s.queuePanelOpen);
@@ -14,9 +139,38 @@ export default function ReviewQueuePanel() {
   const setActiveQueueItemId = useQuranStore((s) => s.setActiveQueueItemId);
   const setSelectedWordIds = useQuranStore((s) => s.setSelectedWordIds);
   const setBrushFineness = useQuranStore((s) => s.setBrushFineness);
+  const setQueueItemRepeat = useQuranStore((s) => s.setQueueItemRepeat);
+  const setQueueRepeatAll = useQuranStore((s) => s.setQueueRepeatAll);
+  const setReviewQueue = useQuranStore((s) => s.setReviewQueue);
+
+  const { queueIsPlaying, activeItemIndex, playQueue, pauseQueue, stopQueue } =
+    useQueuePlayback();
 
   const dragFromRef = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  // Presets popover
+  const [showPresets, setShowPresets] = useState(false);
+  const [presetRepeat, setPresetRepeat] = useState<number>(3);
+  const presetsButtonRef = useRef<HTMLButtonElement>(null);
+  const presetsPopoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showPresets) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        presetsPopoverRef.current &&
+        !presetsPopoverRef.current.contains(e.target as Node) &&
+        !presetsButtonRef.current?.contains(e.target as Node)
+      ) {
+        setShowPresets(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showPresets]);
+
+  // ── Drag-to-reorder ──────────────────────────────────────────────────────
 
   const handleDragStart = (index: number) => (e: React.DragEvent) => {
     dragFromRef.current = index;
@@ -32,9 +186,7 @@ export default function ReviewQueuePanel() {
   const handleDrop = (index: number) => (e: React.DragEvent) => {
     e.preventDefault();
     const from = dragFromRef.current;
-    if (from !== null && from !== index) {
-      reorderQueue(from, index);
-    }
+    if (from !== null && from !== index) reorderQueue(from, index);
     dragFromRef.current = null;
     setDragOverIndex(null);
   };
@@ -44,11 +196,55 @@ export default function ReviewQueuePanel() {
     setDragOverIndex(null);
   };
 
+  // ── Item click ───────────────────────────────────────────────────────────
+
   const handleItemClick = (item: ReviewQueueItem) => {
-    setActiveQueueItemId(item.id);
-    setSelectedWordIds(item.selectedWordIds);
-    setBrushFineness(item.brushFineness);
+    if (queueIsPlaying) {
+      // Jump to this item while playing
+      const idx = reviewQueue.indexOf(item);
+      if (idx !== -1) playQueue(idx);
+    } else {
+      setActiveQueueItemId(item.id);
+      setSelectedWordIds(item.selectedWordIds);
+      setBrushFineness(item.brushFineness);
+    }
   };
+
+  // ── Preset apply ─────────────────────────────────────────────────────────
+
+  const applyPreset = (type: "ayah" | "line") => {
+    const items =
+      type === "ayah"
+        ? buildAyahPreset(presetRepeat, chapters)
+        : buildLinePreset(presetRepeat);
+
+    if (items.length > 0) {
+      setReviewQueue(items);
+    }
+    setShowPresets(false);
+  };
+
+  // ── Header play button logic ─────────────────────────────────────────────
+
+  const handleHeaderPlay = () => {
+    if (queueIsPlaying) {
+      pauseQueue();
+    } else if (activeItemIndex !== null) {
+      // Resume from current position
+      playQueue(activeItemIndex);
+    } else {
+      playQueue(0);
+    }
+  };
+
+  const handleHeaderStop = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    stopQueue();
+  };
+
+  const hasQueue = reviewQueue.length > 0;
+
+  // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -69,98 +265,240 @@ export default function ReviewQueuePanel() {
         role="complementary"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3.5 border-b border-border flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <ListMusic className="w-4 h-4 text-primary flex-shrink-0" />
-            <span className="text-sm font-semibold">Review Queue</span>
-            {reviewQueue.length > 0 && (
-              <span className="text-xs text-muted-foreground tabular-nums">
-                ({reviewQueue.length})
-              </span>
+        <div className="flex items-center gap-2 px-3 py-3 border-b border-border flex-shrink-0">
+          <ListMusic className="w-4 h-4 text-primary flex-shrink-0" />
+          <span className="text-sm font-semibold flex-1 min-w-0">Review Queue</span>
+          {reviewQueue.length > 0 && (
+            <span className="text-xs text-muted-foreground tabular-nums">
+              ({reviewQueue.length})
+            </span>
+          )}
+
+          {/* Play / Pause */}
+          {hasQueue && (
+            <button
+              onClick={handleHeaderPlay}
+              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors border ${
+                queueIsPlaying
+                  ? "bg-primary/15 border-primary text-primary"
+                  : "border-border text-muted-foreground hover:bg-muted"
+              }`}
+              aria-label={queueIsPlaying ? "Pause queue" : "Play queue"}
+              title={queueIsPlaying ? "Pause queue" : "Play queue"}
+            >
+              {queueIsPlaying ? (
+                <Pause className="w-3.5 h-3.5" />
+              ) : (
+                <Play className="w-3.5 h-3.5 ml-px" />
+              )}
+            </button>
+          )}
+
+          {/* Stop (visible when playing or paused with an active position) */}
+          {hasQueue && (activeItemIndex !== null) && (
+            <button
+              onClick={handleHeaderStop}
+              className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors border border-border text-muted-foreground hover:bg-muted"
+              aria-label="Stop queue"
+              title="Stop queue"
+            >
+              <Square className="w-3 h-3" />
+            </button>
+          )}
+
+          {/* Presets */}
+          <div className="relative">
+            <button
+              ref={presetsButtonRef}
+              onClick={() => setShowPresets((v) => !v)}
+              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors border ${
+                showPresets
+                  ? "bg-primary/15 border-primary text-primary"
+                  : "border-border text-muted-foreground hover:bg-muted"
+              }`}
+              aria-label="Queue presets"
+              title="Generate queue from page"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+            </button>
+
+            {showPresets && (
+              <div
+                ref={presetsPopoverRef}
+                className="absolute top-full right-0 mt-1.5 z-[60] bg-card border border-border rounded-xl shadow-xl p-3 w-52"
+              >
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  Repeats per segment
+                </p>
+                <div className="flex gap-1 mb-3">
+                  {REPEAT_OPTIONS.map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setPresetRepeat(v)}
+                      className={`flex-1 py-1 rounded-lg text-xs font-semibold transition-colors border ${
+                        presetRepeat === v
+                          ? "bg-primary/15 border-primary text-primary"
+                          : "border-border text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {repeatLabel(v)}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+                  Generate from page
+                </p>
+                <button
+                  onClick={() => applyPreset("ayah")}
+                  className="w-full text-left text-xs px-2.5 py-2 rounded-lg hover:bg-muted transition-colors flex items-center gap-2"
+                >
+                  <span className="text-base leading-none">🕌</span>
+                  <div>
+                    <div className="font-medium">Ayah-by-Ayah</div>
+                    <div className="text-[10px] text-muted-foreground">
+                      One segment per verse
+                    </div>
+                  </div>
+                </button>
+                <button
+                  onClick={() => applyPreset("line")}
+                  className="w-full text-left text-xs px-2.5 py-2 rounded-lg hover:bg-muted transition-colors flex items-center gap-2"
+                >
+                  <span className="text-base leading-none">📄</span>
+                  <div>
+                    <div className="font-medium">Line-by-Line</div>
+                    <div className="text-[10px] text-muted-foreground">
+                      One segment per visual line
+                    </div>
+                  </div>
+                </button>
+              </div>
             )}
           </div>
+
+          {/* Close */}
           <button
             onClick={() => setQueuePanelOpen(false)}
-            className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
+            className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-muted text-muted-foreground transition-colors"
             aria-label="Close queue panel"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
+        {/* Set all */}
+        {hasQueue && (
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-border flex-shrink-0 bg-muted/30">
+            <span className="text-[10px] text-muted-foreground font-medium flex-1">
+              Set all
+            </span>
+            <div className="flex gap-1">
+              {REPEAT_OPTIONS.map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setQueueRepeatAll(v)}
+                  className="min-w-[28px] h-[20px] rounded border border-border text-[9px] font-bold text-muted-foreground hover:border-primary hover:text-primary transition-colors px-1.5"
+                >
+                  {repeatLabel(v)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Empty state */}
-        {reviewQueue.length === 0 && (
+        {!hasQueue && (
           <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
             <ListMusic className="w-10 h-10 text-muted-foreground/25" />
             <p className="text-sm text-muted-foreground leading-relaxed">
               Select words and press{" "}
               <span className="font-medium text-foreground">✓</span> to add
-              segments here.
+              segments, or use{" "}
+              <span className="inline-flex items-center gap-0.5">
+                <Sparkles className="w-3 h-3" />
+                Presets
+              </span>{" "}
+              to generate from the current page.
             </p>
           </div>
         )}
 
         {/* Queue list */}
-        {reviewQueue.length > 0 && (
-          <div className="flex-1 overflow-y-auto py-2">
-            {reviewQueue.map((item, index) => (
-              <div
-                key={item.id}
-                draggable
-                onDragStart={handleDragStart(index)}
-                onDragOver={handleDragOver(index)}
-                onDrop={handleDrop(index)}
-                onDragEnd={handleDragEnd}
-                onClick={() => handleItemClick(item)}
-                className={`flex items-center gap-2 px-3 py-2.5 cursor-pointer select-none transition-colors group ${
-                  activeQueueItemId === item.id
-                    ? "bg-primary/10 border-l-2 border-primary pl-[10px]"
-                    : "hover:bg-muted/60 border-l-2 border-transparent"
-                } ${dragOverIndex === index ? "opacity-50" : ""}`}
-              >
-                {/* Drag handle */}
+        {hasQueue && (
+          <div className="flex-1 overflow-y-auto py-1">
+            {reviewQueue.map((item, index) => {
+              const isActive = activeQueueItemId === item.id;
+              const isPlaying = queueIsPlaying && activeItemIndex === index;
+
+              return (
                 <div
-                  className="text-muted-foreground/40 cursor-grab group-hover:text-muted-foreground/70 flex-shrink-0 transition-colors"
-                  onMouseDown={(e) => e.stopPropagation()}
+                  key={item.id}
+                  draggable
+                  onDragStart={handleDragStart(index)}
+                  onDragOver={handleDragOver(index)}
+                  onDrop={handleDrop(index)}
+                  onDragEnd={handleDragEnd}
+                  onClick={() => handleItemClick(item)}
+                  className={`flex items-center gap-1.5 px-2.5 py-2 cursor-pointer select-none transition-colors group ${
+                    isActive
+                      ? "bg-primary/10 border-l-2 border-primary"
+                      : "hover:bg-muted/60 border-l-2 border-transparent"
+                  } ${dragOverIndex === index ? "opacity-50" : ""}`}
                 >
-                  <GripVertical className="w-3.5 h-3.5" />
+                  {/* Drag handle */}
+                  <div
+                    className="text-muted-foreground/30 cursor-grab group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors"
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <GripVertical className="w-3 h-3" />
+                  </div>
+
+                  {/* Index or playing indicator */}
+                  <div className="w-4 flex-shrink-0 flex items-center justify-center">
+                    {isPlaying ? (
+                      <Music2 className="w-3 h-3 text-primary animate-pulse" />
+                    ) : (
+                      <span className="text-[10px] tabular-nums text-muted-foreground/50 font-medium">
+                        {index + 1}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Label */}
+                  <span
+                    className={`flex-1 text-xs leading-snug truncate min-w-0 ${
+                      isActive ? "font-semibold text-primary" : "text-foreground"
+                    }`}
+                  >
+                    {item.label}
+                  </span>
+
+                  {/* Repeat badge */}
+                  <RepeatBadge
+                    count={item.repeatCount}
+                    onCycle={() => setQueueItemRepeat(item.id, nextRepeat(item.repeatCount))}
+                  />
+
+                  {/* Delete */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeFromQueue(item.id);
+                    }}
+                    className="p-0.5 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground/30 group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors opacity-0 group-hover:opacity-100"
+                    aria-label={`Remove ${item.label} from queue`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
                 </div>
-
-                {/* Index */}
-                <span className="text-[10px] tabular-nums text-muted-foreground/50 w-4 text-right flex-shrink-0 font-medium">
-                  {index + 1}
-                </span>
-
-                {/* Label */}
-                <span
-                  className={`flex-1 text-xs leading-snug truncate ${
-                    activeQueueItemId === item.id
-                      ? "font-semibold text-primary"
-                      : "text-foreground"
-                  }`}
-                >
-                  {item.label}
-                </span>
-
-                {/* Delete */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeFromQueue(item.id);
-                  }}
-                  className="p-1 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground/30 group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors opacity-0 group-hover:opacity-100"
-                  aria-label={`Remove ${item.label} from queue`}
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
         {/* Footer */}
-        {reviewQueue.length > 0 && (
-          <div className="flex-shrink-0 border-t border-border px-4 py-3 flex items-center justify-between">
+        {hasQueue && (
+          <div className="flex-shrink-0 border-t border-border px-4 py-2.5 flex items-center justify-between">
             <span className="text-xs text-muted-foreground tabular-nums">
               {reviewQueue.length} segment{reviewQueue.length !== 1 ? "s" : ""}
             </span>

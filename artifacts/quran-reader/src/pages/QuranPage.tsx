@@ -996,7 +996,7 @@ export default function QuranPage() {
         isMushafMode={isMushaf}
       />
 
-      <ReviewQueuePanel />
+      <ReviewQueuePanel chapters={chapters} />
       <AudioControlBar chapters={chapters} />
     </div>
   );

@@ -57,6 +57,9 @@ interface QuranStore {
   clearReviewQueue: () => void;
   setActiveQueueItemId: (id: string | null) => void;
   setQueuePanelOpen: (open: boolean) => void;
+  setQueueItemRepeat: (id: string, count: number) => void;
+  setQueueRepeatAll: (count: number) => void;
+  setReviewQueue: (items: ReviewQueueItem[]) => void;
 }
 
 function genId(): string {
@@ -168,6 +171,21 @@ export const useQuranStore = create<QuranStore>()(
       setActiveQueueItemId: (id) => set({ activeQueueItemId: id }),
 
       setQueuePanelOpen: (open) => set({ queuePanelOpen: open }),
+
+      setQueueItemRepeat: (id, count) =>
+        set((state) => ({
+          reviewQueue: state.reviewQueue.map((item) =>
+            item.id === id ? { ...item, repeatCount: count } : item
+          ),
+        })),
+
+      setQueueRepeatAll: (count) =>
+        set((state) => ({
+          reviewQueue: state.reviewQueue.map((item) => ({ ...item, repeatCount: count })),
+        })),
+
+      setReviewQueue: (items) =>
+        set({ reviewQueue: items, activeQueueItemId: null }),
     }),
     {
       name: "quran-reader-store",
