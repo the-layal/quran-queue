@@ -139,6 +139,7 @@ export default function ReviewQueuePanel({ chapters }: ReviewQueuePanelProps) {
   const setActiveQueueItemId = useQuranStore((s) => s.setActiveQueueItemId);
   const setSelectedWordIds = useQuranStore((s) => s.setSelectedWordIds);
   const setBrushFineness = useQuranStore((s) => s.setBrushFineness);
+  const queueRepeatAll = useQuranStore((s) => s.queueRepeatAll);
   const setQueueItemRepeat = useQuranStore((s) => s.setQueueItemRepeat);
   const setQueueRepeatAll = useQuranStore((s) => s.setQueueRepeatAll);
   const setReviewQueue = useQuranStore((s) => s.setReviewQueue);
@@ -397,7 +398,11 @@ export default function ReviewQueuePanel({ chapters }: ReviewQueuePanelProps) {
                 <button
                   key={v}
                   onClick={() => setQueueRepeatAll(v)}
-                  className="min-w-[28px] h-[20px] rounded border border-border text-[9px] font-bold text-muted-foreground hover:border-primary hover:text-primary transition-colors px-1.5"
+                  className={`min-w-[28px] h-[20px] rounded border text-[9px] font-bold transition-colors px-1.5 ${
+                    queueRepeatAll === v
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:border-primary hover:text-primary"
+                  }`}
                 >
                   {repeatLabel(v)}
                 </button>
