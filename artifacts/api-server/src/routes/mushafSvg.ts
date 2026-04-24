@@ -1,21 +1,8 @@
 import { Router } from "express";
 import { openSync, readSync, fstatSync } from "fs";
 import { inflateRawSync } from "zlib";
-import path from "path";
 
 const router = Router();
-
-// The API server process starts from artifacts/api-server (two levels below workspace root).
-// Support an explicit env override for deployment flexibility.
-const WORKSPACE_ROOT =
-  process.env.WORKSPACE_ROOT ??
-  path.resolve(process.cwd(), "..", "..");
-
-const ZIP_PATH = path.join(
-  WORKSPACE_ROOT,
-  "attached_assets",
-  "ligature-basd-svg_1776916961528.zip"
-);
 
 interface ZipEntry {
   compMethod: number;
@@ -28,64 +15,71 @@ const zipEntries = new Map<string, ZipEntry>();
 const svgCache = new Map<number, string>();
 let zipFd = -1;
 let initError: string | null = null;
+let initialized = false;
 
 function readAt(buf: Buffer, fileOffset: number, length: number): void {
   readSync(zipFd, buf, 0, length, fileOffset);
 }
 
-function init(): void {
+function runInit(zipPath: string): void {
+  zipFd = openSync(zipPath, "r");
+  const { size } = fstatSync(zipFd);
+
+  const searchLen = Math.min(65_557, size);
+  const searchBuf = Buffer.allocUnsafe(searchLen);
+  readSync(zipFd, searchBuf, 0, searchLen, size - searchLen);
+
+  let eocdPos = -1;
+  for (let i = searchLen - 22; i >= 0; i--) {
+    if (
+      searchBuf[i] === 0x50 &&
+      searchBuf[i + 1] === 0x4b &&
+      searchBuf[i + 2] === 0x05 &&
+      searchBuf[i + 3] === 0x06
+    ) {
+      eocdPos = i;
+      break;
+    }
+  }
+  if (eocdPos < 0) throw new Error("EOCD record not found in ZIP");
+
+  const numEntries = searchBuf.readUInt16LE(eocdPos + 10);
+  const cdOffset = searchBuf.readUInt32LE(eocdPos + 16);
+  const cdSize = searchBuf.readUInt32LE(eocdPos + 12);
+
+  const cdBuf = Buffer.allocUnsafe(cdSize);
+  readSync(zipFd, cdBuf, 0, cdSize, cdOffset);
+
+  let pos = 0;
+  for (let i = 0; i < numEntries; i++) {
+    if (cdBuf.readUInt32LE(pos) !== 0x02014b50) break;
+    const compMethod = cdBuf.readUInt16LE(pos + 10);
+    const compSize = cdBuf.readUInt32LE(pos + 20);
+    const uncompSize = cdBuf.readUInt32LE(pos + 24);
+    const fnLen = cdBuf.readUInt16LE(pos + 28);
+    const extraLen = cdBuf.readUInt16LE(pos + 30);
+    const commentLen = cdBuf.readUInt16LE(pos + 32);
+    const localOffset = cdBuf.readUInt32LE(pos + 42);
+    const fn = cdBuf.subarray(pos + 46, pos + 46 + fnLen).toString("utf8");
+
+    if (fn.startsWith("ligature-basd-svg/") && fn.endsWith(".svg")) {
+      const basename = fn.replace("ligature-basd-svg/", "");
+      zipEntries.set(basename, { compMethod, compSize, uncompSize, localOffset });
+    }
+
+    pos += 46 + fnLen + extraLen + commentLen;
+  }
+
+  console.log(
+    `[mushaf-svg] Loaded ZIP directory: ${zipEntries.size} SVG pages indexed`
+  );
+}
+
+export async function initSvgRoute(zipPath: string): Promise<void> {
+  if (initialized) return;
+  initialized = true;
   try {
-    zipFd = openSync(ZIP_PATH, "r");
-    const { size } = fstatSync(zipFd);
-
-    const searchLen = Math.min(65_557, size);
-    const searchBuf = Buffer.allocUnsafe(searchLen);
-    readSync(zipFd, searchBuf, 0, searchLen, size - searchLen);
-
-    let eocdPos = -1;
-    for (let i = searchLen - 22; i >= 0; i--) {
-      if (
-        searchBuf[i] === 0x50 &&
-        searchBuf[i + 1] === 0x4b &&
-        searchBuf[i + 2] === 0x05 &&
-        searchBuf[i + 3] === 0x06
-      ) {
-        eocdPos = i;
-        break;
-      }
-    }
-    if (eocdPos < 0) throw new Error("EOCD record not found in ZIP");
-
-    const numEntries = searchBuf.readUInt16LE(eocdPos + 10);
-    const cdOffset = searchBuf.readUInt32LE(eocdPos + 16);
-    const cdSize = searchBuf.readUInt32LE(eocdPos + 12);
-
-    const cdBuf = Buffer.allocUnsafe(cdSize);
-    readSync(zipFd, cdBuf, 0, cdSize, cdOffset);
-
-    let pos = 0;
-    for (let i = 0; i < numEntries; i++) {
-      if (cdBuf.readUInt32LE(pos) !== 0x02014b50) break;
-      const compMethod = cdBuf.readUInt16LE(pos + 10);
-      const compSize = cdBuf.readUInt32LE(pos + 20);
-      const uncompSize = cdBuf.readUInt32LE(pos + 24);
-      const fnLen = cdBuf.readUInt16LE(pos + 28);
-      const extraLen = cdBuf.readUInt16LE(pos + 30);
-      const commentLen = cdBuf.readUInt16LE(pos + 32);
-      const localOffset = cdBuf.readUInt32LE(pos + 42);
-      const fn = cdBuf.subarray(pos + 46, pos + 46 + fnLen).toString("utf8");
-
-      if (fn.startsWith("ligature-basd-svg/") && fn.endsWith(".svg")) {
-        const basename = fn.replace("ligature-basd-svg/", "");
-        zipEntries.set(basename, { compMethod, compSize, uncompSize, localOffset });
-      }
-
-      pos += 46 + fnLen + extraLen + commentLen;
-    }
-
-    console.log(
-      `[mushaf-svg] Loaded ZIP directory: ${zipEntries.size} SVG pages indexed`
-    );
+    runInit(zipPath);
   } catch (err) {
     initError = err instanceof Error ? err.message : String(err);
     console.error("[mushaf-svg] Failed to initialise ZIP:", initError);
@@ -115,11 +109,14 @@ function extractSvg(pageNum: number): string {
   return svgStr;
 }
 
-init();
-
 router.get("/mushaf-svg/:page", (req, res) => {
   if (initError) {
     res.status(503).json({ error: `SVG service unavailable: ${initError}` });
+    return;
+  }
+
+  if (!initialized) {
+    res.status(503).json({ error: "SVG service is still initialising" });
     return;
   }
 

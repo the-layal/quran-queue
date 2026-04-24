@@ -1,19 +1,8 @@
 import { Router } from "express";
 import { openSync, readSync, fstatSync } from "fs";
 import { inflateRawSync } from "zlib";
-import path from "path";
 
 const router = Router();
-
-const WORKSPACE_ROOT =
-  process.env.WORKSPACE_ROOT ??
-  path.resolve(process.cwd(), "..", "..");
-
-const ZIP_PATH = path.join(
-  WORKSPACE_ROOT,
-  "attached_assets",
-  "QPC_V2_Font_1776923770512.ttf"
-);
 
 interface ZipEntry {
   compMethod: number;
@@ -26,63 +15,70 @@ const zipEntries = new Map<string, ZipEntry>();
 const fontCache = new Map<number, Buffer>();
 let zipFd = -1;
 let initError: string | null = null;
+let initialized = false;
 
 function readAt(buf: Buffer, fileOffset: number, length: number): void {
   readSync(zipFd, buf, 0, length, fileOffset);
 }
 
-function init(): void {
+function runInit(zipPath: string): void {
+  zipFd = openSync(zipPath, "r");
+  const { size } = fstatSync(zipFd);
+
+  const searchLen = Math.min(65_557, size);
+  const searchBuf = Buffer.allocUnsafe(searchLen);
+  readSync(zipFd, searchBuf, 0, searchLen, size - searchLen);
+
+  let eocdPos = -1;
+  for (let i = searchLen - 22; i >= 0; i--) {
+    if (
+      searchBuf[i] === 0x50 &&
+      searchBuf[i + 1] === 0x4b &&
+      searchBuf[i + 2] === 0x05 &&
+      searchBuf[i + 3] === 0x06
+    ) {
+      eocdPos = i;
+      break;
+    }
+  }
+  if (eocdPos < 0) throw new Error("EOCD record not found in QPC V2 ZIP");
+
+  const numEntries = searchBuf.readUInt16LE(eocdPos + 10);
+  const cdOffset = searchBuf.readUInt32LE(eocdPos + 16);
+  const cdSize = searchBuf.readUInt32LE(eocdPos + 12);
+
+  const cdBuf = Buffer.allocUnsafe(cdSize);
+  readSync(zipFd, cdBuf, 0, cdSize, cdOffset);
+
+  let pos = 0;
+  for (let i = 0; i < numEntries; i++) {
+    if (cdBuf.readUInt32LE(pos) !== 0x02014b50) break;
+    const compMethod = cdBuf.readUInt16LE(pos + 10);
+    const compSize = cdBuf.readUInt32LE(pos + 20);
+    const uncompSize = cdBuf.readUInt32LE(pos + 24);
+    const fnLen = cdBuf.readUInt16LE(pos + 28);
+    const extraLen = cdBuf.readUInt16LE(pos + 30);
+    const commentLen = cdBuf.readUInt16LE(pos + 32);
+    const localOffset = cdBuf.readUInt32LE(pos + 42);
+    const fn = cdBuf.subarray(pos + 46, pos + 46 + fnLen).toString("utf8");
+
+    if (fn.endsWith(".ttf")) {
+      zipEntries.set(fn, { compMethod, compSize, uncompSize, localOffset });
+    }
+
+    pos += 46 + fnLen + extraLen + commentLen;
+  }
+
+  console.log(
+    `[qpc-font] Loaded ZIP directory: ${zipEntries.size} font pages indexed`
+  );
+}
+
+export async function initFontRoute(zipPath: string): Promise<void> {
+  if (initialized) return;
+  initialized = true;
   try {
-    zipFd = openSync(ZIP_PATH, "r");
-    const { size } = fstatSync(zipFd);
-
-    const searchLen = Math.min(65_557, size);
-    const searchBuf = Buffer.allocUnsafe(searchLen);
-    readSync(zipFd, searchBuf, 0, searchLen, size - searchLen);
-
-    let eocdPos = -1;
-    for (let i = searchLen - 22; i >= 0; i--) {
-      if (
-        searchBuf[i] === 0x50 &&
-        searchBuf[i + 1] === 0x4b &&
-        searchBuf[i + 2] === 0x05 &&
-        searchBuf[i + 3] === 0x06
-      ) {
-        eocdPos = i;
-        break;
-      }
-    }
-    if (eocdPos < 0) throw new Error("EOCD record not found in QPC V2 ZIP");
-
-    const numEntries = searchBuf.readUInt16LE(eocdPos + 10);
-    const cdOffset = searchBuf.readUInt32LE(eocdPos + 16);
-    const cdSize = searchBuf.readUInt32LE(eocdPos + 12);
-
-    const cdBuf = Buffer.allocUnsafe(cdSize);
-    readSync(zipFd, cdBuf, 0, cdSize, cdOffset);
-
-    let pos = 0;
-    for (let i = 0; i < numEntries; i++) {
-      if (cdBuf.readUInt32LE(pos) !== 0x02014b50) break;
-      const compMethod = cdBuf.readUInt16LE(pos + 10);
-      const compSize = cdBuf.readUInt32LE(pos + 20);
-      const uncompSize = cdBuf.readUInt32LE(pos + 24);
-      const fnLen = cdBuf.readUInt16LE(pos + 28);
-      const extraLen = cdBuf.readUInt16LE(pos + 30);
-      const commentLen = cdBuf.readUInt16LE(pos + 32);
-      const localOffset = cdBuf.readUInt32LE(pos + 42);
-      const fn = cdBuf.subarray(pos + 46, pos + 46 + fnLen).toString("utf8");
-
-      if (fn.endsWith(".ttf")) {
-        zipEntries.set(fn, { compMethod, compSize, uncompSize, localOffset });
-      }
-
-      pos += 46 + fnLen + extraLen + commentLen;
-    }
-
-    console.log(
-      `[qpc-font] Loaded ZIP directory: ${zipEntries.size} font pages indexed`
-    );
+    runInit(zipPath);
   } catch (err) {
     initError = err instanceof Error ? err.message : String(err);
     console.error("[qpc-font] Failed to initialise ZIP:", initError);
@@ -111,11 +107,14 @@ function extractFont(pageNum: number): Buffer {
   return fontBuf;
 }
 
-init();
-
 router.get("/font/qpc-v2/:page.ttf", (req, res) => {
   if (initError) {
     res.status(503).json({ error: `Font service unavailable: ${initError}` });
+    return;
+  }
+
+  if (!initialized) {
+    res.status(503).json({ error: "Font service is still initialising" });
     return;
   }
 
