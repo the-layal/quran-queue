@@ -146,7 +146,7 @@ export const useQuranStore = create<QuranStore>()(
 
       addToQueue: (item) =>
         set((state) => ({
-          reviewQueue: [{ ...item, id: genId() }, ...state.reviewQueue],
+          reviewQueue: [...state.reviewQueue, { ...item, id: genId() }],
         })),
 
       removeFromQueue: (id) =>
