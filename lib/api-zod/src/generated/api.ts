@@ -14,3 +14,41 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * @summary Save a queue and get a shareable ID
+ */
+
+export const CreateSharedQueueBody = zod.object({
+  items: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        selectedWordIds: zod.array(zod.string()),
+        brushFineness: zod.string(),
+        label: zod.string(),
+        repeatCount: zod.number(),
+      }),
+    )
+    .min(1),
+});
+
+/**
+ * @summary Retrieve a shared queue by ID
+ */
+export const GetSharedQueueParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetSharedQueueResponse = zod.object({
+  id: zod.string(),
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      selectedWordIds: zod.array(zod.string()),
+      brushFineness: zod.string(),
+      label: zod.string(),
+      repeatCount: zod.number(),
+    }),
+  ),
+});

@@ -2,6 +2,7 @@ import { Switch, Route, Router as WouterRouter } from "wouter";
 import QuranPage from "@/pages/QuranPage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import NotFound from "@/pages/not-found";
+import { Toaster } from "@/components/ui/toaster";
 
 function Router() {
   return (
@@ -17,6 +18,7 @@ function App() {
   return (
     <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
       <Router />
+      <Toaster />
     </WouterRouter>
   );
 }

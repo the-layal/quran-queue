@@ -68,6 +68,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
   const reviewQueue = useQuranStore((s) => s.reviewQueue);
   const queueRepeatAll = useQuranStore((s) => s.queueRepeatAll);
   const setQueueRepeatAll = useQuranStore((s) => s.setQueueRepeatAll);
+  const isSharedQueue = useQuranStore((s) => s.isSharedQueue);
 
   const [justAdded, setJustAdded] = useState(false);
 
@@ -353,8 +354,8 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
         )}
       </div>
 
-      {/* Add to queue — hidden while queue mode is active so the bar stays compact */}
-      {!queueActive && (
+      {/* Add to queue — hidden while queue mode is active OR viewing a shared (read-only) queue */}
+      {!queueActive && !isSharedQueue && (
         <button
           onClick={handleAddToQueue}
           style={{ pointerEvents: "auto" }}

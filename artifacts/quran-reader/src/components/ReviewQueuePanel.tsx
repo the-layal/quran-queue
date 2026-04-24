@@ -8,10 +8,14 @@ import {
   Square,
   Sparkles,
   Music2,
+  Share2,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
 import type { QueuePlaybackState } from "../hooks/useQueuePlayback";
 import { computeQueueItemLabel } from "../utils/queueLabel";
+import { toast } from "../hooks/use-toast";
 import type { ReviewQueueItem } from "../store/quranStore";
 import type { ChapterMap, BrushFineness } from "../types/quran";
 
@@ -135,6 +139,7 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
   const reviewQueue = useQuranStore((s) => s.reviewQueue);
   const activeQueueItemId = useQuranStore((s) => s.activeQueueItemId);
   const queuePanelOpen = useQuranStore((s) => s.queuePanelOpen);
+  const isSharedQueue = useQuranStore((s) => s.isSharedQueue);
   const setQueuePanelOpen = useQuranStore((s) => s.setQueuePanelOpen);
   const removeFromQueue = useQuranStore((s) => s.removeFromQueue);
   const reorderQueue = useQuranStore((s) => s.reorderQueue);
@@ -148,12 +153,14 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
   const queueLoopCount = useQuranStore((s) => s.queueLoopCount);
   const setQueueLoopCount = useQuranStore((s) => s.setQueueLoopCount);
   const setReviewQueue = useQuranStore((s) => s.setReviewQueue);
+  const setIsSharedQueue = useQuranStore((s) => s.setIsSharedQueue);
 
   const { queueIsPlaying, activeItemIndex, playQueue, pauseQueue, stopQueue } =
     queuePlayback;
 
   const dragFromRef = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [isSharing, setIsSharing] = useState(false);
 
   // Presets popover
   const [showPresets, setShowPresets] = useState(false);
@@ -206,7 +213,6 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
 
   const handleItemClick = (item: ReviewQueueItem) => {
     if (queueIsPlaying) {
-      // Jump to this item while playing
       const idx = reviewQueue.indexOf(item);
       if (idx !== -1) playQueue(idx);
     } else {
@@ -236,7 +242,6 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
     if (queueIsPlaying) {
       pauseQueue();
     } else if (activeItemIndex !== null) {
-      // Resume from current position
       playQueue(activeItemIndex);
     } else {
       playQueue(0);
@@ -246,6 +251,36 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
   const handleHeaderStop = (e: React.MouseEvent) => {
     e.stopPropagation();
     stopQueue();
+  };
+
+  // ── Share ─────────────────────────────────────────────────────────────────
+
+  const handleShare = async () => {
+    if (reviewQueue.length === 0 || isSharing) return;
+    setIsSharing(true);
+    try {
+      const res = await fetch("/api/queues", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: reviewQueue }),
+      });
+      if (!res.ok) throw new Error("Failed to save queue");
+      const { id } = await res.json() as { id: string };
+      const url = `${window.location.origin}${window.location.pathname}?q=${id}`;
+      await navigator.clipboard.writeText(url);
+      toast({ title: "Link copied!", description: "Share this link to send your queue." });
+    } catch {
+      toast({ title: "Could not copy link", description: "Please try again." });
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  // ── Duplicate shared queue ────────────────────────────────────────────────
+
+  const handleDuplicate = () => {
+    setIsSharedQueue(false);
+    toast({ title: "Queue duplicated", description: "You can now edit this queue freely." });
   };
 
   const hasQueue = reviewQueue.length > 0;
@@ -312,75 +347,77 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
             </button>
           )}
 
-          {/* Presets */}
-          <div className="relative">
-            <button
-              ref={presetsButtonRef}
-              onClick={() => setShowPresets((v) => !v)}
-              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors border ${
-                showPresets
-                  ? "bg-primary/15 border-primary text-primary"
-                  : "border-border text-muted-foreground hover:bg-muted"
-              }`}
-              aria-label="Queue presets"
-              title="Generate queue from page"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-            </button>
-
-            {showPresets && (
-              <div
-                ref={presetsPopoverRef}
-                className="absolute top-full right-0 mt-1.5 z-[60] bg-card border border-border rounded-xl shadow-xl p-3 w-52"
+          {/* Presets — hidden for shared (read-only) queues */}
+          {!isSharedQueue && (
+            <div className="relative">
+              <button
+                ref={presetsButtonRef}
+                onClick={() => setShowPresets((v) => !v)}
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors border ${
+                  showPresets
+                    ? "bg-primary/15 border-primary text-primary"
+                    : "border-border text-muted-foreground hover:bg-muted"
+                }`}
+                aria-label="Queue presets"
+                title="Generate queue from page"
               >
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                  Repeats per segment
-                </p>
-                <div className="flex gap-1 mb-3">
-                  {REPEAT_OPTIONS.map((v) => (
-                    <button
-                      key={v}
-                      onClick={() => setPresetRepeat(v)}
-                      className={`flex-1 py-1 rounded-lg text-xs font-semibold transition-colors border ${
-                        presetRepeat === v
-                          ? "bg-primary/15 border-primary text-primary"
-                          : "border-border text-muted-foreground hover:bg-muted"
-                      }`}
-                    >
-                      {repeatLabel(v)}
-                    </button>
-                  ))}
+                <Sparkles className="w-3.5 h-3.5" />
+              </button>
+
+              {showPresets && (
+                <div
+                  ref={presetsPopoverRef}
+                  className="absolute top-full right-0 mt-1.5 z-[60] bg-card border border-border rounded-xl shadow-xl p-3 w-52"
+                >
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                    Repeats per segment
+                  </p>
+                  <div className="flex gap-1 mb-3">
+                    {REPEAT_OPTIONS.map((v) => (
+                      <button
+                        key={v}
+                        onClick={() => setPresetRepeat(v)}
+                        className={`flex-1 py-1 rounded-lg text-xs font-semibold transition-colors border ${
+                          presetRepeat === v
+                            ? "bg-primary/15 border-primary text-primary"
+                            : "border-border text-muted-foreground hover:bg-muted"
+                        }`}
+                      >
+                        {repeatLabel(v)}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+                    Generate from page
+                  </p>
+                  <button
+                    onClick={() => applyPreset("ayah")}
+                    className="w-full text-left text-xs px-2.5 py-2 rounded-lg hover:bg-muted transition-colors flex items-center gap-2"
+                  >
+                    <span className="text-base leading-none">🕌</span>
+                    <div>
+                      <div className="font-medium">Ayah-by-Ayah</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        One segment per verse
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => applyPreset("line")}
+                    className="w-full text-left text-xs px-2.5 py-2 rounded-lg hover:bg-muted transition-colors flex items-center gap-2"
+                  >
+                    <span className="text-base leading-none">📄</span>
+                    <div>
+                      <div className="font-medium">Line-by-Line</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        One segment per visual line
+                      </div>
+                    </div>
+                  </button>
                 </div>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
-                  Generate from page
-                </p>
-                <button
-                  onClick={() => applyPreset("ayah")}
-                  className="w-full text-left text-xs px-2.5 py-2 rounded-lg hover:bg-muted transition-colors flex items-center gap-2"
-                >
-                  <span className="text-base leading-none">🕌</span>
-                  <div>
-                    <div className="font-medium">Ayah-by-Ayah</div>
-                    <div className="text-[10px] text-muted-foreground">
-                      One segment per verse
-                    </div>
-                  </div>
-                </button>
-                <button
-                  onClick={() => applyPreset("line")}
-                  className="w-full text-left text-xs px-2.5 py-2 rounded-lg hover:bg-muted transition-colors flex items-center gap-2"
-                >
-                  <span className="text-base leading-none">📄</span>
-                  <div>
-                    <div className="font-medium">Line-by-Line</div>
-                    <div className="text-[10px] text-muted-foreground">
-                      One segment per visual line
-                    </div>
-                  </div>
-                </button>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           {/* Close */}
           <button
@@ -392,8 +429,29 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
           </button>
         </div>
 
-        {/* Set all per-item repeats */}
-        {hasQueue && (
+        {/* Shared queue banner */}
+        {isSharedQueue && hasQueue && (
+          <div className="flex-shrink-0 bg-blue-500/10 border-b border-blue-500/20 px-3 py-2.5">
+            <div className="flex items-start gap-2">
+              <ExternalLink className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-medium text-blue-600 dark:text-blue-400 leading-snug">
+                  Shared queue (read-only)
+                </p>
+                <button
+                  onClick={handleDuplicate}
+                  className="mt-1 flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-700 dark:hover:text-blue-300 transition-colors font-medium"
+                >
+                  <Copy className="w-2.5 h-2.5" />
+                  Duplicate to edit
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Set all per-item repeats — hidden for shared (read-only) queues */}
+        {hasQueue && !isSharedQueue && (
           <div className="flex items-center gap-2 px-3 py-2 border-b border-border flex-shrink-0 bg-muted/30">
             <span className="text-[10px] text-muted-foreground font-medium flex-1">
               Set all
@@ -467,11 +525,11 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
               return (
                 <div
                   key={item.id}
-                  draggable
-                  onDragStart={handleDragStart(index)}
-                  onDragOver={handleDragOver(index)}
-                  onDrop={handleDrop(index)}
-                  onDragEnd={handleDragEnd}
+                  draggable={!isSharedQueue}
+                  onDragStart={!isSharedQueue ? handleDragStart(index) : undefined}
+                  onDragOver={!isSharedQueue ? handleDragOver(index) : undefined}
+                  onDrop={!isSharedQueue ? handleDrop(index) : undefined}
+                  onDragEnd={!isSharedQueue ? handleDragEnd : undefined}
                   onClick={() => handleItemClick(item)}
                   className={`flex items-center gap-1.5 px-2.5 py-2 cursor-pointer select-none transition-colors group ${
                     isActive
@@ -479,13 +537,15 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
                       : "hover:bg-muted/60 border-l-2 border-transparent"
                   } ${dragOverIndex === index ? "opacity-50" : ""}`}
                 >
-                  {/* Drag handle */}
-                  <div
-                    className="text-muted-foreground/30 cursor-grab group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors"
-                    onMouseDown={(e) => e.stopPropagation()}
-                  >
-                    <GripVertical className="w-3 h-3" />
-                  </div>
+                  {/* Drag handle (hidden for shared queues) */}
+                  {!isSharedQueue && (
+                    <div
+                      className="text-muted-foreground/30 cursor-grab group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors"
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      <GripVertical className="w-3 h-3" />
+                    </div>
+                  )}
 
                   {/* Index or playing indicator */}
                   <div className="w-4 flex-shrink-0 flex items-center justify-center">
@@ -510,20 +570,22 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
                   {/* Repeat badge */}
                   <RepeatBadge
                     count={item.repeatCount}
-                    onCycle={() => setQueueItemRepeat(item.id, nextRepeat(item.repeatCount))}
+                    onCycle={() => !isSharedQueue && setQueueItemRepeat(item.id, nextRepeat(item.repeatCount))}
                   />
 
-                  {/* Delete */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeFromQueue(item.id);
-                    }}
-                    className="p-0.5 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground/30 group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors opacity-0 group-hover:opacity-100"
-                    aria-label={`Remove ${item.label} from queue`}
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
+                  {/* Delete (hidden for shared queues) */}
+                  {!isSharedQueue && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeFromQueue(item.id);
+                      }}
+                      className="p-0.5 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground/30 group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors opacity-0 group-hover:opacity-100"
+                      aria-label={`Remove ${item.label} from queue`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -536,12 +598,26 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
             <span className="text-xs text-muted-foreground tabular-nums">
               {reviewQueue.length} segment{reviewQueue.length !== 1 ? "s" : ""}
             </span>
-            <button
-              onClick={clearReviewQueue}
-              className="text-xs text-muted-foreground hover:text-destructive transition-colors"
-            >
-              Clear all
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Share button */}
+              <button
+                onClick={handleShare}
+                disabled={isSharing}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+                title="Copy shareable link"
+              >
+                <Share2 className="w-3 h-3" />
+                {isSharing ? "Saving…" : "Share"}
+              </button>
+              {!isSharedQueue && (
+                <button
+                  onClick={clearReviewQueue}
+                  className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

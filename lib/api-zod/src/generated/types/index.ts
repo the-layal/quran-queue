@@ -6,4 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./createQueueRequest";
+export * from "./createQueueResponse";
 export * from "./healthStatus";
+export * from "./queueItem";
+export * from "./sharedQueueResponse";

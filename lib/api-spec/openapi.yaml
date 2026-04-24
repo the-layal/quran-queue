@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: queues
+    description: Shared queue operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,46 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /queues:
+    post:
+      operationId: createSharedQueue
+      tags: [queues]
+      summary: Save a queue and get a shareable ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQueueRequest"
+      responses:
+        "201":
+          description: Queue saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateQueueResponse"
+        "400":
+          description: Invalid request
+  /queues/{id}:
+    get:
+      operationId: getSharedQueue
+      tags: [queues]
+      summary: Retrieve a shared queue by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Queue found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SharedQueueResponse"
+        "404":
+          description: Queue not found
 components:
   schemas:
     HealthStatus:
@@ -33,4 +75,53 @@ components:
           type: string
       required:
         - status
-
+    QueueItem:
+      type: object
+      properties:
+        id:
+          type: string
+        selectedWordIds:
+          type: array
+          items:
+            type: string
+        brushFineness:
+          type: string
+        label:
+          type: string
+        repeatCount:
+          type: integer
+      required:
+        - id
+        - selectedWordIds
+        - brushFineness
+        - label
+        - repeatCount
+    CreateQueueRequest:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QueueItem"
+          minItems: 1
+      required:
+        - items
+    CreateQueueResponse:
+      type: object
+      properties:
+        id:
+          type: string
+      required:
+        - id
+    SharedQueueResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QueueItem"
+      required:
+        - id
+        - items

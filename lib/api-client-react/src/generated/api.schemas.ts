@@ -8,3 +8,25 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface QueueItem {
+  id: string;
+  selectedWordIds: string[];
+  brushFineness: string;
+  label: string;
+  repeatCount: number;
+}
+
+export interface CreateQueueRequest {
+  /** @minItems 1 */
+  items: QueueItem[];
+}
+
+export interface CreateQueueResponse {
+  id: string;
+}
+
+export interface SharedQueueResponse {
+  id: string;
+  items: QueueItem[];
+}

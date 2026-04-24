@@ -625,6 +625,10 @@ export default function QuranPage() {
     clearSelection,
   } = useQuranStore();
 
+  const setReviewQueue = useQuranStore((s) => s.setReviewQueue);
+  const setIsSharedQueue = useQuranStore((s) => s.setIsSharedQueue);
+  const setQueuePanelOpen = useQuranStore((s) => s.setQueuePanelOpen);
+
   const [darkMode, setDarkMode] = useState(() =>
     document.documentElement.classList.contains("dark")
   );
@@ -641,6 +645,33 @@ export default function QuranPage() {
     loadChapters()
       .then(setChapters)
       .catch(() => {});
+  }, []);
+
+  // Ingest shared queue from URL param ?q=<id>
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const queueId = params.get("q");
+    if (!queueId) return;
+
+    // Remove the param from the URL so refresh doesn't re-trigger
+    params.delete("q");
+    const newSearch = params.toString();
+    const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : "") + window.location.hash;
+    window.history.replaceState(null, "", newUrl);
+
+    fetch(`/api/queues/${encodeURIComponent(queueId)}`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Queue not found");
+        return res.json() as Promise<{ id: string; items: unknown[] }>;
+      })
+      .then(({ items }) => {
+        if (!Array.isArray(items) || items.length === 0) return;
+        setReviewQueue(items as Parameters<typeof setReviewQueue>[0]);
+        setIsSharedQueue(true);
+        setQueuePanelOpen(true);
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Load surah in reading mode ────────────────────────────────────────────
