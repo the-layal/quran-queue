@@ -20,6 +20,7 @@ if (Number.isNaN(port) || port <= 0) {
 
 logger.info("Ensuring Mushaf assets are available…");
 const { svgZipPath, fontZipPath } = await ensureAssets();
+logger.info({ svgZipPath, fontZipPath }, "Asset ZIP paths resolved");
 
 await Promise.all([initSvgRoute(svgZipPath), initFontRoute(fontZipPath)]);
 

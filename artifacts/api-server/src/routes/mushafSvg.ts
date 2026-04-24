@@ -77,9 +77,9 @@ function runInit(zipPath: string): void {
 
 export async function initSvgRoute(zipPath: string): Promise<void> {
   if (initialized) return;
-  initialized = true;
   try {
     runInit(zipPath);
+    initialized = true;
   } catch (err) {
     initError = err instanceof Error ? err.message : String(err);
     console.error("[mushaf-svg] Failed to initialise ZIP:", initError);

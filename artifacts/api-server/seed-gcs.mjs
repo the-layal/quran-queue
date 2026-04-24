@@ -115,7 +115,10 @@ for (const { localPath, objectName, label } of assets) {
   console.log(`Uploading ${label} (${(statSync(localPath).size / 1e6).toFixed(0)} MB)…`);
   const t0 = Date.now();
   await uploadViaPut(localPath, signedUrl);
-  console.log(`✓ ${label} uploaded in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+  const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+  console.log(`✓ ${label} uploaded in ${elapsed}s`);
+  console.log(`  gs://${BUCKET_ID}/${objectName}`);
 }
 
-console.log("Done. GCS is seeded.");
+console.log(`\nGCS bucket: ${BUCKET_ID}`);
+console.log("Assets seeded. The API server will download from object storage when local files are absent.");

@@ -76,9 +76,9 @@ function runInit(zipPath: string): void {
 
 export async function initFontRoute(zipPath: string): Promise<void> {
   if (initialized) return;
-  initialized = true;
   try {
     runInit(zipPath);
+    initialized = true;
   } catch (err) {
     initError = err instanceof Error ? err.message : String(err);
     console.error("[qpc-font] Failed to initialise ZIP:", initError);
