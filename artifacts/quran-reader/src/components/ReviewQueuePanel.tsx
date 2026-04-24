@@ -25,7 +25,7 @@ function genId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-const REPEAT_OPTIONS = [1, 3, 5, 0] as const;
+const REPEAT_OPTIONS = [1, 2, 3, 4, 5, 0] as const;
 type RepeatOption = (typeof REPEAT_OPTIONS)[number];
 
 const LOOP_OPTIONS = [1, 2, 3, 0] as const;

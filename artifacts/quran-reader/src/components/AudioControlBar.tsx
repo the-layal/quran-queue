@@ -13,7 +13,7 @@ function fmtTime(sec: number): string {
   return `${m}:${String(s % 60).padStart(2, "0")}`;
 }
 
-const REPEAT_OPTIONS = [1, 3, 5, 0] as const;
+const REPEAT_OPTIONS = [1, 2, 3, 4, 5, 0] as const;
 type RepeatOption = (typeof REPEAT_OPTIONS)[number];
 
 function nextRepeat(current: number): number {
