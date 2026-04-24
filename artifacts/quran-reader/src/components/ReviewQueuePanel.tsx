@@ -10,7 +10,7 @@ import {
   Music2,
 } from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
-import { useQueuePlayback } from "../hooks/useQueuePlayback";
+import type { QueuePlaybackState } from "../hooks/useQueuePlayback";
 import { computeQueueItemLabel } from "../utils/queueLabel";
 import type { ReviewQueueItem } from "../store/quranStore";
 import type { ChapterMap, BrushFineness } from "../types/quran";
@@ -23,6 +23,8 @@ function genId(): string {
 
 const REPEAT_OPTIONS = [1, 3, 5, 0] as const;
 type RepeatOption = (typeof REPEAT_OPTIONS)[number];
+
+const LOOP_OPTIONS = [1, 2, 3, 0] as const;
 
 function nextRepeat(current: number): number {
   const idx = REPEAT_OPTIONS.indexOf(current as RepeatOption);
@@ -126,9 +128,10 @@ function RepeatBadge({
 
 interface ReviewQueuePanelProps {
   chapters: ChapterMap;
+  queuePlayback: QueuePlaybackState;
 }
 
-export default function ReviewQueuePanel({ chapters }: ReviewQueuePanelProps) {
+export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueuePanelProps) {
   const reviewQueue = useQuranStore((s) => s.reviewQueue);
   const activeQueueItemId = useQuranStore((s) => s.activeQueueItemId);
   const queuePanelOpen = useQuranStore((s) => s.queuePanelOpen);
@@ -147,7 +150,7 @@ export default function ReviewQueuePanel({ chapters }: ReviewQueuePanelProps) {
   const setReviewQueue = useQuranStore((s) => s.setReviewQueue);
 
   const { queueIsPlaying, activeItemIndex, playQueue, pauseQueue, stopQueue } =
-    useQueuePlayback();
+    queuePlayback;
 
   const dragFromRef = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -420,7 +423,7 @@ export default function ReviewQueuePanel({ chapters }: ReviewQueuePanelProps) {
               Queue loops
             </span>
             <div className="flex gap-1">
-              {REPEAT_OPTIONS.map((v) => (
+              {LOOP_OPTIONS.map((v) => (
                 <button
                   key={v}
                   onClick={() => setQueueLoopCount(v)}

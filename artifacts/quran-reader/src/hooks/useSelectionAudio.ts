@@ -6,7 +6,6 @@ import type { AudioDataMap } from "../types/quran";
 
 export interface SelectionAudioState {
   isPlaying: boolean;
-  isLooping: boolean;
   progress: number;
   currentAyahKey: string | null;
   hasSelection: boolean;
@@ -14,7 +13,6 @@ export interface SelectionAudioState {
   regions: PlaybackRegion[];
   play: () => void;
   pause: () => void;
-  toggleLoop: () => void;
   seekTo: (fraction: number) => void;
 }
 
@@ -129,9 +127,9 @@ export function useSelectionAudio(): SelectionAudioState {
   const playbackHighlightEnabled = useQuranStore((s) => s.playbackHighlightEnabled);
   const setPlaybackActiveIds = useQuranStore((s) => s.setPlaybackActiveIds);
   const setPlaybackCurrentWordId = useQuranStore((s) => s.setPlaybackCurrentWordId);
+  const queueRepeatAll = useQuranStore((s) => s.queueRepeatAll);
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isLooping, setIsLooping] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentAyahKey, setCurrentAyahKey] = useState<string | null>(null);
   const [audioData, setAudioData] = useState<AudioDataMap | null>(null);
@@ -139,7 +137,9 @@ export function useSelectionAudio(): SelectionAudioState {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const rafRef = useRef<number | null>(null);
-  const isLoopingRef = useRef(false);
+  const queueRepeatAllRef = useRef(queueRepeatAll);
+  queueRepeatAllRef.current = queueRepeatAll;
+  const repeatsDoneRef = useRef(0);
   const isPlayingRef = useRef(false);
   const regionsRef = useRef<PlaybackRegion[]>([]);
   const regionIndexRef = useRef(0);
@@ -165,7 +165,6 @@ export function useSelectionAudio(): SelectionAudioState {
   const selectedWordIdsRef = useRef<string[]>(selectedWordIds);
   selectedWordIdsRef.current = selectedWordIds;
 
-  isLoopingRef.current = isLooping;
   isPlayingRef.current = isPlaying;
   regionsRef.current = regions;
 
@@ -243,10 +242,14 @@ export function useSelectionAudio(): SelectionAudioState {
     const allRegions = regionsRef.current;
 
     if (regionIndex >= allRegions.length) {
-      if (isLoopingRef.current) {
+      const rc = queueRepeatAllRef.current; // 1=once, 3=3×, 5=5×, 0=∞
+      const done = repeatsDoneRef.current + 1;
+      if (rc === 0 || done < rc) {
+        repeatsDoneRef.current = done;
         elapsedBeforeSecRef.current = 0;
         playRegion(0);
       } else {
+        repeatsDoneRef.current = 0;
         cancelRaf();
         setIsPlaying(false);
         setProgress(1);
@@ -412,9 +415,6 @@ export function useSelectionAudio(): SelectionAudioState {
 
   const play = useCallback(() => {
     if (regions.length === 0) return;
-    // Keep totalDurSecRef in sync (it was already set when regions were
-    // computed, but update it here too in case regions changed without a
-    // re-render between compute and play).
     totalDurSecRef.current =
       regions.reduce((sum, r) => sum + r.durationMs, 0) / 1000;
 
@@ -423,11 +423,13 @@ export function useSelectionAudio(): SelectionAudioState {
 
     setIsPlaying(true);
     if (pending) {
-      // Resume from a position the user scrubbed to while paused.
+      // Resume from a position the user scrubbed to while paused — don't reset repeat counter.
       elapsedBeforeSecRef.current = pending.elapsedBefore;
       regionIndexRef.current = pending.regionIndex;
       playRegion(pending.regionIndex, false, pending.offsetInRegion);
     } else {
+      // Fresh start: reset repeat counter so the full repeat cycle runs from the top.
+      repeatsDoneRef.current = 0;
       elapsedBeforeSecRef.current = 0;
       regionIndexRef.current = 0;
       playRegion(0);
@@ -436,10 +438,6 @@ export function useSelectionAudio(): SelectionAudioState {
 
   const pause = useCallback(() => {
     stopPlayback();
-  }, []);
-
-  const toggleLoop = useCallback(() => {
-    setIsLooping((prev) => !prev);
   }, []);
 
   const seekTo = useCallback(
@@ -531,7 +529,6 @@ export function useSelectionAudio(): SelectionAudioState {
 
   return {
     isPlaying,
-    isLooping,
     progress,
     currentAyahKey,
     hasSelection,
@@ -539,7 +536,6 @@ export function useSelectionAudio(): SelectionAudioState {
     regions,
     play,
     pause,
-    toggleLoop,
     seekTo,
   };
 }

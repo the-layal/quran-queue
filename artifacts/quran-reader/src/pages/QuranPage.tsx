@@ -29,6 +29,7 @@ import BrushFinenessToggle from "../components/BrushFinenessToggle";
 import AudioControlBar from "../components/AudioControlBar";
 import ReviewQueuePanel from "../components/ReviewQueuePanel";
 import { useSmartBrush } from "../hooks/useSmartBrush";
+import { useQueuePlayback } from "../hooks/useQueuePlayback";
 
 // ── Surah picker modal ────────────────────────────────────────────────────────
 
@@ -604,6 +605,8 @@ function PageInput({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function QuranPage() {
+  const queuePlayback = useQueuePlayback();
+
   const {
     currentSurah,
     currentPage,
@@ -996,8 +999,8 @@ export default function QuranPage() {
         isMushafMode={isMushaf}
       />
 
-      <ReviewQueuePanel chapters={chapters} />
-      <AudioControlBar chapters={chapters} />
+      <ReviewQueuePanel chapters={chapters} queuePlayback={queuePlayback} />
+      <AudioControlBar chapters={chapters} queuePlayback={queuePlayback} />
     </div>
   );
 }

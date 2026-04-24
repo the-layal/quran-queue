@@ -2,7 +2,7 @@ import { useEffect, useCallback, useRef, useMemo, useState } from "react";
 import { Play, Pause, Repeat, Music2, Highlighter, ListMusic, CheckCheck } from "lucide-react";
 import type { ChapterMap } from "../types/quran";
 import { useSelectionAudio } from "../hooks/useSelectionAudio";
-import { useQueuePlayback } from "../hooks/useQueuePlayback";
+import type { QueuePlaybackState } from "../hooks/useQueuePlayback";
 import { useQuranStore } from "../store/quranStore";
 import type { PlaybackHighlightMode } from "../store/quranStore";
 import { computeQueueItemLabel } from "../utils/queueLabel";
@@ -27,10 +27,10 @@ function repeatLabel(count: number): string {
 
 interface AudioControlBarProps {
   chapters: ChapterMap;
+  queuePlayback: QueuePlaybackState;
 }
 
-export default function AudioControlBar({ chapters }: AudioControlBarProps) {
-  const selectionAudio = useSelectionAudio();
+export default function AudioControlBar({ chapters, queuePlayback }: AudioControlBarProps) {
   const {
     isPlaying: selIsPlaying,
     progress: selProgress,
@@ -41,7 +41,7 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
     play: selPlay,
     pause: selPause,
     seekTo: selSeekTo,
-  } = selectionAudio;
+  } = useSelectionAudio();
 
   const {
     queueIsPlaying,
@@ -53,7 +53,7 @@ export default function AudioControlBar({ chapters }: AudioControlBarProps) {
     playQueue,
     pauseQueue,
     seekQueueTo,
-  } = useQueuePlayback();
+  } = queuePlayback;
 
   // ── Store state ───────────────────────────────────────────────────────────
   const playbackHighlightMode = useQuranStore((s) => s.playbackHighlightMode);
