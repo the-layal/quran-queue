@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useCallback, type RefObje
 import { Loader2, AlertCircle } from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
 import { useSmartBrush } from "../hooks/useSmartBrush";
+import { hasArabicLetter } from "../utils/arabicUtils";
 
 interface MushafSvgPageProps {
   pageNumber: number;
@@ -512,7 +513,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       const alignJsonToSvg: Record<string, Record<number, number[]>> = {};
 
       // Collect and group word groups by ayah key.
-      const ayahGroups = new Map<string, { svgIdx: number; isWaw: boolean }[]>();
+      const ayahGroups = new Map<string, { svgIdx: number; isWaw: boolean; isWaqf: boolean }[]>();
       container.querySelectorAll<SVGGElement>('g[data-word-index-in-ayah][data-type="text"]').forEach((wordEl) => {
         const s = wordEl.getAttribute("data-surah");
         const a = wordEl.getAttribute("data-aya");
@@ -522,9 +523,14 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
         const ayahNum  = parseInt(a, 10);
         const key = `${surahNum}:${ayahNum}`;
         if (!ayahGroups.has(key)) ayahGroups.set(key, []);
+        // Waqf/pause marks (ۚ ۖ ۗ ۘ ۛ) are tagged data-type="text" but have no Arabic
+        // letter codepoints in data-hafs — they have no JSON audio segments.
+        const hafs = wordEl.getAttribute("data-hafs") ?? "";
+        const isWaqf = hafs !== "" && !hasArabicLetter(hafs);
         ayahGroups.get(key)!.push({
           svgIdx: parseInt(wi, 10),
           isWaw: wordEl.getAttribute("data-waw-alatf") === "true",
+          isWaqf,
         });
       });
 
@@ -537,9 +543,13 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
         //     text words to SVG index 2+ while the JSON audio segments still start
         //     at index 1.  Without a correction map these ayahs play the wrong audio
         //     segment for every word and the final word has no audio at all.
+        // (c) Ayahs with at least one waqf mark — waqf marks (ۚ ۖ ۗ ۘ ۛ) appear in
+        //     the SVG with their own word index but have no JSON audio segment, so all
+        //     words after a waqf mark would map to the wrong segment without remapping.
         const minSvgIdx = Math.min(...words.map((w) => w.svgIdx));
         const hasWaw = words.some((w) => w.isWaw);
-        if (!hasWaw && minSvgIdx === 1) return;
+        const hasWaqf = words.some((w) => w.isWaqf);
+        if (!hasWaw && !hasWaqf && minSvgIdx === 1) return;
 
         // Sort ascending by SVG word index so we process left-to-right (RTL
         // Arabic is stored right-to-left in SVG indices, but the index still
@@ -548,36 +558,50 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
 
         const svgToJson: Record<number, number> = {};
         const jsonToSvg: Record<number, number[]> = {};
-        // JSON segments are 1-based consecutive indices covering only non-waw words.
-        // SVG word indices include waw groups (data-waw-alatf="true"), so each waw
-        // that precedes a non-waw word causes the SVG index to be higher than the
-        // JSON index by the number of preceding waw groups.  We start at 1 to match
+        // JSON segments are 1-based consecutive indices covering only real words
+        // (not waw al-atf groups and not waqf marks).  We start at 1 to match
         // the JSON's 1-based numbering.
         let jsonIdx = 1;
         const pendingWaws: number[] = [];
+        // Waqf marks accumulated between words — attached to the preceding word.
+        const pendingWaqfs: number[] = [];
 
-        for (const { svgIdx, isWaw } of words) {
-          if (isWaw) {
+        for (const { svgIdx, isWaw, isWaqf } of words) {
+          if (isWaqf) {
+            // Waqf marks have no JSON segment — collect them to attach to the
+            // preceding real word (or the next one if they appear at the start).
+            pendingWaqfs.push(svgIdx);
+          } else if (isWaw) {
             pendingWaws.push(svgIdx);
           } else {
-            // This non-waw word takes the current jsonIdx.
+            // This non-waw, non-waqf word takes the current jsonIdx.
             // All preceding pending waws share this same jsonIdx.
+            // Waqf marks that appeared before this word also map to this jsonIdx.
             svgToJson[svgIdx] = jsonIdx;
             jsonToSvg[jsonIdx] = [...pendingWaws, svgIdx];
             for (const wawIdx of pendingWaws) {
               svgToJson[wawIdx] = jsonIdx;
             }
+            for (const waqfIdx of pendingWaqfs) {
+              svgToJson[waqfIdx] = jsonIdx;
+              // Do NOT add waqf indices to jsonToSvg — they are not real words
+              // and should not trigger playback highlighting.
+            }
             pendingWaws.length = 0;
+            pendingWaqfs.length = 0;
             jsonIdx++;
           }
         }
 
-        // Trailing waws (unusual but handle gracefully): attach to previous segment.
-        if (pendingWaws.length > 0 && jsonIdx > 0) {
+        // Trailing waws or waqf marks: attach to previous segment.
+        if ((pendingWaws.length > 0 || pendingWaqfs.length > 0) && jsonIdx > 1) {
           const lastJsonIdx = jsonIdx - 1;
           for (const wawIdx of pendingWaws) {
             svgToJson[wawIdx] = lastJsonIdx;
             jsonToSvg[lastJsonIdx].push(wawIdx);
+          }
+          for (const waqfIdx of pendingWaqfs) {
+            svgToJson[waqfIdx] = lastJsonIdx;
           }
         }
 
