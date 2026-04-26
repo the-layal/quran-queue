@@ -529,8 +529,17 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       });
 
       ayahGroups.forEach((words, key) => {
-        // Only process ayahs that have at least one waw al-atf word.
-        if (!words.some((w) => w.isWaw)) return;
+        // Process ayahs that need SVG→JSON index remapping:
+        // (a) Ayahs with at least one waw al-atf word — the bundled waw groups cause
+        //     the SVG word count to exceed the JSON segment count.
+        // (b) Ayahs where the first TEXT word has SVG index > 1 — a non-text element
+        //     (juz-star ۞ or hizb-quarter marker) consumes word index 1, pushing all
+        //     text words to SVG index 2+ while the JSON audio segments still start
+        //     at index 1.  Without a correction map these ayahs play the wrong audio
+        //     segment for every word and the final word has no audio at all.
+        const minSvgIdx = Math.min(...words.map((w) => w.svgIdx));
+        const hasWaw = words.some((w) => w.isWaw);
+        if (!hasWaw && minSvgIdx === 1) return;
 
         // Sort ascending by SVG word index so we process left-to-right (RTL
         // Arabic is stored right-to-left in SVG indices, but the index still
