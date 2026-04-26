@@ -52,7 +52,7 @@ interface LineHeightInfo { normY: number; normHeight: number; }
 function buildLineHeightMap(container: Element): Map<number, LineHeightInfo> {
   const buckets = new Map<number, { minY: number; maxBottom: number }>();
 
-  container.querySelectorAll<SVGGElement>("g[data-word-index-in-ayah]").forEach((wordEl) => {
+  container.querySelectorAll<SVGGElement>('g[data-word-index-in-ayah][data-type="text"]').forEach((wordEl) => {
     try {
       const bbox = wordEl.getBBox();
       if (bbox.width === 0 && bbox.height === 0) return;
@@ -119,7 +119,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const svgWordQuery = (nid: string, container: Element) => {
     const [s, a, w] = nid.split(":");
     return container.querySelector<Element>(
-      `g[data-surah="${s.padStart(3, "0")}"][data-aya="${a.padStart(3, "0")}"][data-word-index-in-ayah="${w}"]`
+      `g[data-surah="${s.padStart(3, "0")}"][data-aya="${a.padStart(3, "0")}"][data-word-index-in-ayah="${w}"][data-type="text"]`
     );
   };
 
@@ -434,7 +434,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       let minX = Infinity;
       let maxX = -Infinity;
 
-      const wordGroups = container.querySelectorAll<SVGGElement>("g[data-word-index-in-ayah]");
+      const wordGroups = container.querySelectorAll<SVGGElement>('g[data-word-index-in-ayah][data-type="text"]');
       wordGroups.forEach((wordEl) => {
         try {
           const bbox = wordEl.getBBox();
@@ -513,7 +513,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
 
       // Collect and group word groups by ayah key.
       const ayahGroups = new Map<string, { svgIdx: number; isWaw: boolean }[]>();
-      container.querySelectorAll<SVGGElement>("g[data-word-index-in-ayah]").forEach((wordEl) => {
+      container.querySelectorAll<SVGGElement>('g[data-word-index-in-ayah][data-type="text"]').forEach((wordEl) => {
         const s = wordEl.getAttribute("data-surah");
         const a = wordEl.getAttribute("data-aya");
         const wi = wordEl.getAttribute("data-word-index-in-ayah");
@@ -617,7 +617,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     (target: Element, currentTarget: Element): Element | null => {
       let el: Element | null = target;
       while (el && el !== currentTarget) {
-        if (el.hasAttribute("data-word-index-in-ayah")) return el;
+        if (el.hasAttribute("data-word-index-in-ayah") && el.getAttribute("data-type") === "text") return el;
         el = el.parentElement;
       }
       return null;
@@ -697,7 +697,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     (clientX: number, clientY: number) => {
       const el = document.elementFromPoint(clientX, clientY);
       if (!el) return;
-      const wordGroup = el.closest("[data-word-index-in-ayah]");
+      const wordGroup = el.closest('[data-word-index-in-ayah][data-type="text"]');
       if (!wordGroup) return;
       const wordId = (wordGroup as HTMLElement).id;
       if (activeWordIdRef.current === wordId) {

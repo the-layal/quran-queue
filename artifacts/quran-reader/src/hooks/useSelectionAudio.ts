@@ -21,7 +21,7 @@ function getWordElement(wordId: string): Element | null {
   if (el) return el;
   const [s, a, w] = wordId.split(":");
   return document.querySelector(
-    `g[data-surah="${s.padStart(3, "0")}"][data-aya="${a.padStart(3, "0")}"][data-word-index-in-ayah="${w}"]`
+    `g[data-surah="${s.padStart(3, "0")}"][data-aya="${a.padStart(3, "0")}"][data-word-index-in-ayah="${w}"][data-type="text"]`
   );
 }
 
@@ -39,7 +39,7 @@ function getAllAyahWordIds(ayahKey: string): string[] {
   });
 
   const svgWords = document.querySelectorAll<Element>(
-    `g[data-surah="${String(surah).padStart(3, "0")}"][data-aya="${String(ayah).padStart(3, "0")}"][data-word-index-in-ayah]`
+    `g[data-surah="${String(surah).padStart(3, "0")}"][data-aya="${String(ayah).padStart(3, "0")}"][data-word-index-in-ayah][data-type="text"]`
   );
   svgWords.forEach((el) => {
     const wi = el.getAttribute("data-word-index-in-ayah");
@@ -64,7 +64,7 @@ function getAllLineWordIds(activeKey: string, currentWordIndex: number): string[
   if (lineNumber) {
     const ids: string[] = [];
     const lineWords = document.querySelectorAll<Element>(
-      `g[data-line-number="${lineNumber}"][data-word-index-in-ayah]`
+      `g[data-line-number="${lineNumber}"][data-word-index-in-ayah][data-type="text"]`
     );
     lineWords.forEach((el) => {
       const s = el.getAttribute("data-surah");

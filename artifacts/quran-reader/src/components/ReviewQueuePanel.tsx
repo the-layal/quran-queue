@@ -44,7 +44,7 @@ function repeatLabel(count: number): string {
 function buildAyahPreset(repeatCount: number, chapters: ChapterMap): ReviewQueueItem[] {
   const ayahWordMap = new Map<string, string[]>();
   document
-    .querySelectorAll<Element>("g[data-surah][data-aya][data-word-index-in-ayah]")
+    .querySelectorAll<Element>('g[data-surah][data-aya][data-word-index-in-ayah][data-type="text"]')
     .forEach((el) => {
       const s = el.getAttribute("data-surah");
       const a = el.getAttribute("data-aya");
@@ -76,7 +76,7 @@ function buildAyahPreset(repeatCount: number, chapters: ChapterMap): ReviewQueue
 function buildLinePreset(repeatCount: number): ReviewQueueItem[] {
   const lineWordMap = new Map<number, string[]>();
   document
-    .querySelectorAll<Element>("g[data-line-number][data-surah][data-aya][data-word-index-in-ayah]")
+    .querySelectorAll<Element>('g[data-line-number][data-surah][data-aya][data-word-index-in-ayah][data-type="text"]')
     .forEach((el) => {
       const ln = el.getAttribute("data-line-number");
       const s = el.getAttribute("data-surah");

@@ -178,7 +178,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
       selectedWordIds.forEach((id) => {
         const [s, a, w] = id.split(":");
         const el = document.querySelector(
-          `g[data-surah="${s.padStart(3, "0")}"][data-aya="${a.padStart(3, "0")}"][data-word-index-in-ayah="${w}"]`
+          `g[data-surah="${s.padStart(3, "0")}"][data-aya="${a.padStart(3, "0")}"][data-word-index-in-ayah="${w}"][data-type="text"]`
         );
         const ln = el?.getAttribute("data-line-number");
         if (ln) lineNumbers.push(parseInt(ln, 10));

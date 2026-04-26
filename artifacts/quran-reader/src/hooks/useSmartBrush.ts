@@ -39,7 +39,7 @@ function findSvgWordAtPoint(
 ): SvgInfo | null {
   const el = document.elementFromPoint(clientX, clientY);
   if (!el) return null;
-  const wordGroup = el.closest("[data-word-index-in-ayah]");
+  const wordGroup = el.closest('[data-word-index-in-ayah][data-type="text"]');
   if (!wordGroup) return null;
   if (container && !container.contains(wordGroup)) return null;
   return extractSvgInfo(wordGroup);
@@ -68,7 +68,7 @@ function applySvgClass(nid: string, add: boolean, container: Element) {
   const [s, a, w] = nid.split(":");
   const surahPad = s.padStart(3, "0");
   const ayaPad = a.padStart(3, "0");
-  const sel = `g[data-surah="${surahPad}"][data-aya="${ayaPad}"][data-word-index-in-ayah="${w}"]`;
+  const sel = `g[data-surah="${surahPad}"][data-aya="${ayaPad}"][data-word-index-in-ayah="${w}"][data-type="text"]`;
   const el = container.querySelector<Element>(sel);
   if (!el) return;
   if (add) {
@@ -151,7 +151,7 @@ function buildReadingUnits(container: Element, fineness: BrushFineness): Unit[] 
 function buildSvgUnits(container: Element, fineness: BrushFineness): Unit[] {
   const allGroups = Array.from(
     container.querySelectorAll<Element>(
-      "g[data-surah][data-aya][data-word-index-in-ayah]"
+      'g[data-surah][data-aya][data-word-index-in-ayah][data-type="text"]'
     )
   );
 
