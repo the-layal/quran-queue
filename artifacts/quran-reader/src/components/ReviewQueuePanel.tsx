@@ -524,15 +524,13 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
           </div>
         )}
 
-        {/* Playback speed */}
-        {hasQueue && (
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-border flex-shrink-0 bg-muted/30">
-            <span className="text-[10px] text-muted-foreground font-medium flex-1">
-              Speed
-            </span>
-            <SpeedSelector />
-          </div>
-        )}
+        {/* Playback speed — always visible so user can set it before adding items */}
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-border flex-shrink-0 bg-muted/30">
+          <span className="text-[10px] text-muted-foreground font-medium flex-1">
+            Speed
+          </span>
+          <SpeedSelector />
+        </div>
 
         {/* Queue-level loop count */}
         {hasQueue && (
