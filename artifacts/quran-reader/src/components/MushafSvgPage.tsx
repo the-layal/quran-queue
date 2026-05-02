@@ -112,6 +112,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const playbackActiveIds = useQuranStore((s) => s.playbackActiveIds);
   const playbackCurrentWordId = useQuranStore((s) => s.playbackCurrentWordId);
   const setSvgWordAlignmentMaps = useQuranStore((s) => s.setSvgWordAlignmentMaps);
+  const setAyahLastSelectableIdx = useQuranStore((s) => s.setAyahLastSelectableIdx);
   const jsonToSvgWordsMap = useQuranStore((s) => s.jsonToSvgWordsMap);
   const jsonToSvgWordsMapRef = useRef(jsonToSvgWordsMap);
   jsonToSvgWordsMapRef.current = jsonToSvgWordsMap;
@@ -614,10 +615,23 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       });
 
       setSvgWordAlignmentMaps(alignSvgToJson, alignJsonToSvg);
+
+      // Record the last *selectable* SVG word index per ayah for every ayah
+      // visible on this page.  "Selectable" means not a waqf mark — waqf
+      // marks are excluded from brush units but still have SVG word indices.
+      // This data drives the exact cross-page adjacency check in useSmartBrush.
+      const lastSelectableMap: Record<string, number> = {};
+      ayahGroups.forEach((words, key) => {
+        const lastSelectable = words
+          .filter((w) => !w.isWaqf)
+          .reduce((max, w) => Math.max(max, w.svgIdx), 0);
+        if (lastSelectable > 0) lastSelectableMap[key] = lastSelectable;
+      });
+      setAyahLastSelectableIdx(lastSelectableMap);
     });
 
     return () => cancelAnimationFrame(rafId);
-  }, [svgText, scale, pageNumber, setSvgWordAlignmentMaps]);
+  }, [svgText, scale, pageNumber, setSvgWordAlignmentMaps, setAyahLastSelectableIdx]);
 
   // ── Word-state helpers ──────────────────────────────────────────────────
   const clearActiveWord = useCallback(() => {

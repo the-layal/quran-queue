@@ -37,6 +37,14 @@ interface QuranStore {
     jsonToSvg: Record<string, Record<number, number[]>>
   ) => void;
 
+  // Maps "S:A" → last selectable SVG word index for each ayah on loaded pages.
+  // Populated by MushafSvgPage when a page is rendered so that cross-page
+  // adjacency checks can determine whether a selected word is truly the final
+  // word of its ayah (SVG indices diverge from JSON segment counts for ayahs
+  // with waw al-atf groups, waqf marks, or juz-star markers).
+  ayahLastSelectableIdx: Record<string, number>;
+  setAyahLastSelectableIdx: (map: Record<string, number>) => void;
+
   reviewQueue: ReviewQueueItem[];
   activeQueueItemId: string | null;
   queuePanelOpen: boolean;
@@ -108,6 +116,12 @@ export const useQuranStore = create<QuranStore>()(
         set((state) => ({
           svgToJsonWordMap:  { ...state.svgToJsonWordMap,  ...svgToJson  },
           jsonToSvgWordsMap: { ...state.jsonToSvgWordsMap, ...jsonToSvg  },
+        })),
+
+      ayahLastSelectableIdx: {},
+      setAyahLastSelectableIdx: (map) =>
+        set((state) => ({
+          ayahLastSelectableIdx: { ...state.ayahLastSelectableIdx, ...map },
         })),
 
       reviewQueue: [],
