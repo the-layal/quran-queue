@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef, useMemo, useState } from "react";
-import { Play, Pause, Repeat, Music2, Highlighter, ListMusic, CheckCheck } from "lucide-react";
+import { Play, Pause, Repeat, Music2, Highlighter, ListMusic, CheckCheck, Loader2 } from "lucide-react";
 import SpeedSelector from "./SpeedSelector";
 import ReciterSelector from "./ReciterSelector";
 import type { ChapterMap } from "../types/quran";
@@ -28,6 +28,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
     currentAyahKey,
     hasSelection,
     hasAudio,
+    isAudioLoading,
     regions: selRegions,
     play: selPlay,
     pause: selPause,
@@ -195,6 +196,9 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
       if (e.target instanceof HTMLTextAreaElement) return;
+      // Align with the visually-disabled play button: don't toggle playback
+      // while the new reciter's audio is still loading.
+      if (isAudioLoading && !queueActive) return;
       if (e.key === " ") {
         e.preventDefault();
         handlePlayPause();
@@ -202,7 +206,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [hasSelection, queueActive, handlePlayPause]);
+  }, [hasSelection, queueActive, handlePlayPause, isAudioLoading]);
 
   // ── Label text ────────────────────────────────────────────────────────────
   let displayLabel: string | null = null;
@@ -259,7 +263,11 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
     );
   }
 
-  if (!hasAudio && !queueActive) {
+  // Genuine empty state: the selected reciter has no timing data for this
+  // selection. Suppressed while audio is still loading so a reciter switch
+  // shows the spinner on the play button instead of momentarily flashing
+  // "No audio for selection".
+  if (!hasAudio && !queueActive && !isAudioLoading) {
     return (
       <div
         className={`${barBase} opacity-60`}
@@ -292,19 +300,36 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
       role="region"
       aria-label="Audio playback controls"
     >
-      {/* Play / Pause */}
-      <button
-        onClick={handlePlayPause}
-        style={{ pointerEvents: "auto" }}
-        className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-colors flex-shrink-0"
-        aria-label={isCurrentlyPlaying ? "Pause" : "Play"}
-      >
-        {isCurrentlyPlaying ? (
-          <Pause className="w-4 h-4" />
-        ) : (
-          <Play className="w-4 h-4 ml-0.5" />
-        )}
-      </button>
+      {/* Play / Pause (or loading spinner while reciter audio is fetching) */}
+      {(() => {
+        const showLoading = isAudioLoading && !queueActive;
+        return (
+          <button
+            onClick={handlePlayPause}
+            disabled={showLoading}
+            style={{ pointerEvents: "auto" }}
+            className={`w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center transition-colors flex-shrink-0 ${
+              showLoading ? "cursor-wait opacity-70" : "hover:bg-primary/90"
+            }`}
+            aria-label={
+              showLoading
+                ? "Loading reciter audio"
+                : isCurrentlyPlaying
+                ? "Pause"
+                : "Play"
+            }
+            aria-busy={showLoading}
+          >
+            {showLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : isCurrentlyPlaying ? (
+              <Pause className="w-4 h-4" />
+            ) : (
+              <Play className="w-4 h-4 ml-0.5" />
+            )}
+          </button>
+        );
+      })()}
 
       {/* Progress area */}
       <div className="flex flex-col gap-1 min-w-0">

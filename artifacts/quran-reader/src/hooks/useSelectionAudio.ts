@@ -16,6 +16,7 @@ export interface SelectionAudioState {
   currentAyahKey: string | null;
   hasSelection: boolean;
   hasAudio: boolean;
+  isAudioLoading: boolean;
   regions: PlaybackRegion[];
   play: () => void;
   pause: () => void;
@@ -44,6 +45,10 @@ export function useSelectionAudio(): SelectionAudioState {
   const [currentAyahKey, setCurrentAyahKey] = useState<string | null>(null);
   const [audioData, setAudioData] = useState<AudioDataMap | null>(null);
   const [regions, setRegions] = useState<PlaybackRegion[]>([]);
+  // True while the selected reciter's audio data is being fetched. Used by
+  // AudioControlBar to render a loading spinner on the play button instead
+  // of momentarily flashing the "No audio for selection" empty state.
+  const [isAudioLoading, setIsAudioLoading] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   // rafRef kept for legacy cancel sites but no longer used for timing
@@ -106,20 +111,31 @@ export function useSelectionAudio(): SelectionAudioState {
 
   // Load (or reload) audio data whenever the selected reciter changes.
   // Stop any in-flight playback first so the user never hears the old reciter
-  // bleed into the new one.
+  // bleed into the new one. Flips isAudioLoading on/off so the control bar
+  // can show a spinner on the play button rather than the "No audio" empty
+  // state during the manifest fetch.
   useEffect(() => {
     stopPlayback();
     setAudioData(null);
     setRegions([]);
     setProgress(0);
     setCurrentAyahKey(null);
+    setIsAudioLoading(true);
 
     let cancelled = false;
     loadAudioData(selectedReciterId)
       .then((data) => {
-        if (!cancelled) setAudioData(data);
+        if (cancelled) return;
+        setAudioData(data);
+        setIsAudioLoading(false);
       })
-      .catch(() => {});
+      .catch(() => {
+        // On rapid switches, only the most recent run clears the flag — the
+        // newer effect run will have already set isAudioLoading back to true,
+        // and its own resolution/rejection will be the one to clear it.
+        if (cancelled) return;
+        setIsAudioLoading(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -527,6 +543,7 @@ export function useSelectionAudio(): SelectionAudioState {
     currentAyahKey,
     hasSelection,
     hasAudio,
+    isAudioLoading,
     regions,
     play,
     pause,
