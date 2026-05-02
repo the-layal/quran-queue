@@ -340,9 +340,12 @@ function buildSvgUnits(container: Element, fineness: BrushFineness): Unit[] {
   const parsed = allGroups
     .map((g) => {
       const info = extractSvgInfo(g);
-      return info ? { info } : null;
+      if (!info) return null;
+      // Capture the waw al-atf flag so word-fineness can bundle waw+host pairs.
+      const isWaw = g.getAttribute("data-waw-alatf") === "true";
+      return { info, isWaw };
     })
-    .filter(Boolean) as { info: SvgInfo }[];
+    .filter(Boolean) as { info: SvgInfo; isWaw: boolean }[];
 
   // Stable numeric sort: surah → aya → wordIndex
   parsed.sort((a, b) => {
@@ -354,7 +357,32 @@ function buildSvgUnits(container: Element, fineness: BrushFineness): Unit[] {
   });
 
   if (fineness === "word") {
-    return parsed.map((p) => [p.info.normalizedId]);
+    // Bundle each waw al-atf with the host word that immediately follows it.
+    // The JSON audio already treats waw+host as one segment; the visual selection
+    // should match so that tapping either the waw or the host highlights both.
+    //
+    // Walk in Quran order (ascending SVG index).  When a waw is encountered,
+    // defer it into pendingWawIds.  When the next non-waw word arrives, emit a
+    // single unit containing all pending waws followed by the host word id.
+    // Words with no adjacent waw are emitted as single-element units as before.
+    const units: Unit[] = [];
+    const pendingWawIds: string[] = [];
+    for (const { info, isWaw } of parsed) {
+      if (isWaw) {
+        pendingWawIds.push(info.normalizedId);
+      } else {
+        units.push(
+          pendingWawIds.length > 0
+            ? [...pendingWawIds, info.normalizedId]
+            : [info.normalizedId]
+        );
+        pendingWawIds.length = 0;
+      }
+    }
+    // Trailing waws with no host on this page (rare: exact page-break after waw).
+    // Emit each as its own unit so they remain selectable.
+    for (const wawId of pendingWawIds) units.push([wawId]);
+    return units;
   }
 
   if (fineness === "line") {
