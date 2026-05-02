@@ -2,6 +2,10 @@ import { useCallback, useRef, type RefObject } from "react";
 import { useQuranStore } from "../store/quranStore";
 import type { BrushFineness } from "../types/quran";
 import { hasArabicLetter } from "../utils/arabicUtils";
+import { preloadWordCounts, getAyahWordCount } from "../utils/quranWordCounts";
+
+// Start fetching word-count data immediately so it is ready before any gesture.
+preloadWordCounts();
 
 // ── SVG helper types & utilities ─────────────────────────────────────────────
 
@@ -132,21 +136,37 @@ function getFirstWordId(unit: Unit): string | null {
 
 /**
  * Returns true iff `candidateId` is the direct next word after `lastId` in
- * the Quran word sequence.  We check three cases:
- *  1. Same ayah, next word index (w2 === w1 + 1).
- *  2. Next ayah of the same surah, word index 1 — we accept this as adjacent
- *     without knowing the exact word count of the previous ayah, because in
- *     practice the first word of the next ayah is always what appears after a
- *     page-turn boundary.
- *  3. First word of the first ayah of the next surah.
+ * the Quran word sequence.  Two cases are supported:
+ *
+ *  1. Same ayah, consecutive word (w2 === w1 + 1) — exact, no extra data needed.
+ *
+ *  2. Candidate is the first word of the next ayah in the same surah
+ *     (a2 === a1 + 1, w2 === 1) — confirmed only when `lastId` is provably the
+ *     final word of its ayah, i.e. w1 === getAyahWordCount(s1, a1).  If the
+ *     word-count data has not loaded yet, we conservatively return false rather
+ *     than risk incorrectly merging unrelated selections.
+ *
+ *  Cross-surah boundaries are treated as non-adjacent (return false) because
+ *  verifying that the last ayah of surah S1 was fully selected would require
+ *  surah verse-count data that is not worth loading for this rare edge case.
+ *  A fresh selection starting at the next surah is always safe.
  */
 function isDirectlyAdjacentInQuran(lastId: string, candidateId: string): boolean {
   const p1 = parseWordId(lastId);
   const p2 = parseWordId(candidateId);
   if (!p1 || !p2) return false;
+
+  // Case 1: same ayah, next word — exact
   if (p1.s === p2.s && p1.a === p2.a && p2.w === p1.w + 1) return true;
-  if (p1.s === p2.s && p2.a === p1.a + 1 && p2.w === 1) return true;
-  if (p2.s === p1.s + 1 && p2.a === 1 && p2.w === 1) return true;
+
+  // Case 2: first word of the next ayah in the same surah — requires word count
+  if (p1.s === p2.s && p2.a === p1.a + 1 && p2.w === 1) {
+    const wordCount = getAyahWordCount(p1.s, p1.a);
+    // wordCount === null means the data hasn't loaded; return false (safe default).
+    return wordCount !== null && p1.w === wordCount;
+  }
+
+  // Cross-surah and all other cases: not adjacent
   return false;
 }
 
