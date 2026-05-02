@@ -178,13 +178,22 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
   // Duration map: item.id → duration in seconds
   const [durationMap, setDurationMap] = useState<Record<string, number>>({});
   const audioDataRef = useRef<AudioDataMap | null>(null);
+  const audioDataReciterIdRef = useRef<string | null>(null);
+  const selectedReciterId = useQuranStore((s) => s.selectedReciterId);
 
   useEffect(() => {
     let cancelled = false;
     async function computeDurations() {
-      if (!audioDataRef.current) {
+      // Reload audio data whenever the reciter changes — different reciters
+      // have different per-ayah durations, so cached Alafasy data would
+      // produce stale numbers after a switch.
+      if (
+        !audioDataRef.current ||
+        audioDataReciterIdRef.current !== selectedReciterId
+      ) {
         try {
-          audioDataRef.current = await loadAudioData();
+          audioDataRef.current = await loadAudioData(selectedReciterId);
+          audioDataReciterIdRef.current = selectedReciterId;
         } catch {
           return;
         }
@@ -199,7 +208,7 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
     }
     computeDurations();
     return () => { cancelled = true; };
-  }, [reviewQueue, svgToJsonWordMap]);
+  }, [reviewQueue, svgToJsonWordMap, selectedReciterId]);
 
   // Presets popover
   const [showPresets, setShowPresets] = useState(false);

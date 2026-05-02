@@ -74,6 +74,10 @@ export function useQueuePlayback(): QueuePlaybackState {
   const rafRef = useRef<number | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timeupdateListenerRef = useRef<(() => void) | null>(null);
+  // AbortController for any pending "canplay" listener attached after a
+  // src change. cancelTimers() / hard-stop paths abort it so a delayed
+  // canplay from an old reciter cannot resume playback after a switch.
+  const canplayAbortRef = useRef<AbortController | null>(null);
   const regionEndedRef = useRef(false);
   const isPlayingRef = useRef(false);
 
@@ -128,6 +132,10 @@ export function useQueuePlayback(): QueuePlaybackState {
     if (timeupdateListenerRef.current && audioRef.current) {
       audioRef.current.removeEventListener("timeupdate", timeupdateListenerRef.current);
       timeupdateListenerRef.current = null;
+    }
+    if (canplayAbortRef.current) {
+      canplayAbortRef.current.abort();
+      canplayAbortRef.current = null;
     }
     if (audioRef.current) {
       audioRef.current.onended = null;
@@ -244,6 +252,10 @@ export function useQueuePlayback(): QueuePlaybackState {
       if (timeupdateListenerRef.current && audioRef.current) {
         audioRef.current.removeEventListener("timeupdate", timeupdateListenerRef.current);
         timeupdateListenerRef.current = null;
+      }
+      if (canplayAbortRef.current) {
+        canplayAbortRef.current.abort();
+        canplayAbortRef.current = null;
       }
     }
 
@@ -540,7 +552,14 @@ export function useQueuePlayback(): QueuePlaybackState {
       if (audio.src !== region.audioUrl) {
         audio.src = region.audioUrl;
         audio.load();
-        audio.addEventListener("canplay", doSeekAndPlay, { once: true });
+        // Abort any previous pending canplay so only the most recent src
+        // change can resume playback. cancelTimers() also aborts on stop.
+        canplayAbortRef.current?.abort();
+        canplayAbortRef.current = new AbortController();
+        audio.addEventListener("canplay", doSeekAndPlay, {
+          once: true,
+          signal: canplayAbortRef.current.signal,
+        });
       } else if (gapless) {
         startTicking();
       } else {
@@ -595,7 +614,16 @@ export function useQueuePlayback(): QueuePlaybackState {
         if (audio.src !== region.audioUrl) {
           audio.src = region.audioUrl;
           audio.load();
-          audio.addEventListener("canplay", () => { audio.currentTime = targetTime; }, { once: true });
+          // Same abort pattern as playRegion: cancelTimers / stopQueue can
+          // cancel this preload-seek if the user switches reciter or
+          // re-seeks before this canplay fires.
+          canplayAbortRef.current?.abort();
+          canplayAbortRef.current = new AbortController();
+          audio.addEventListener(
+            "canplay",
+            () => { audio.currentTime = targetTime; },
+            { once: true, signal: canplayAbortRef.current.signal }
+          );
         } else {
           audio.currentTime = targetTime;
         }
