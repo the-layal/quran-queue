@@ -7,29 +7,12 @@ import type { QueuePlaybackState } from "../hooks/useQueuePlayback";
 import { useQuranStore } from "../store/quranStore";
 import type { PlaybackHighlightMode } from "../store/quranStore";
 import { computeQueueItemLabel } from "../utils/queueLabel";
+import { clampRepeat, nextRepeat, repeatLabel } from "../utils/repeatOptions";
 
 function fmtTime(sec: number): string {
   const s = Math.floor(sec);
   const m = Math.floor(s / 60);
   return `${m}:${String(s % 60).padStart(2, "0")}`;
-}
-
-const REPEAT_OPTIONS = [1, 2, 3, 0] as const;
-type RepeatOption = (typeof REPEAT_OPTIONS)[number];
-
-function nextRepeat(current: number): number {
-  const idx = REPEAT_OPTIONS.indexOf(current as RepeatOption);
-  return REPEAT_OPTIONS[idx === -1 ? 0 : (idx + 1) % REPEAT_OPTIONS.length];
-}
-
-function clampRepeat(current: number): number {
-  if ((REPEAT_OPTIONS as readonly number[]).includes(current)) return current;
-  if (current > 3) return 3;
-  return 1;
-}
-
-function repeatLabel(count: number): string {
-  return count === 0 ? "∞" : `${count}×`;
 }
 
 interface AudioControlBarProps {
@@ -172,10 +155,15 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
     }
   }, [queueActive, queueIsPlaying, pauseQueue, playQueue, activeItemIndex, selIsPlaying, selPause, selPlay]);
 
+  // Hoisted above all useCallback hooks so they can reference it safely.
+  const clampedRepeat = clampRepeat(queueRepeatAll);
+
   // ── Repeat button (cycles queueRepeatAll; applies to queue + selection) ───
+  // Always cycle from the clamped display value so a stale persisted 4/5
+  // advances to ∞ (0) rather than falling back to 1× unexpectedly.
   const handleRepeatCycle = useCallback(() => {
-    setQueueRepeatAll(nextRepeat(queueRepeatAll));
-  }, [queueRepeatAll, setQueueRepeatAll]);
+    setQueueRepeatAll(nextRepeat(clampedRepeat));
+  }, [clampedRepeat, setQueueRepeatAll]);
 
   // ── Add to queue ──────────────────────────────────────────────────────────
   const handleAddToQueue = useCallback(() => {
@@ -287,7 +275,6 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
   }
 
   const isCurrentlyPlaying = queueActive ? queueIsPlaying : selIsPlaying;
-  const clampedRepeat = clampRepeat(queueRepeatAll);
   const repeatIsActive = clampedRepeat !== 1;
 
   const modeOptions: { value: PlaybackHighlightMode; label: string }[] = [

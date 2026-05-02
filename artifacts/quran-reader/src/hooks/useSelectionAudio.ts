@@ -4,6 +4,7 @@ import { loadAudioData } from "../services/quranApi";
 import { computePlaybackRegions, type PlaybackRegion } from "../utils/audioRegions";
 import type { AudioDataMap } from "../types/quran";
 import { hasArabicLetter } from "../utils/arabicUtils";
+import { clampRepeat } from "../utils/repeatOptions";
 
 export interface SelectionAudioState {
   isPlaying: boolean;
@@ -280,7 +281,7 @@ export function useSelectionAudio(): SelectionAudioState {
     const allRegions = regionsRef.current;
 
     if (regionIndex >= allRegions.length) {
-      const rc = queueRepeatAllRef.current; // 1=once, 3=3×, 5=5×, 0=∞
+      const rc = clampRepeat(queueRepeatAllRef.current); // 1=once, 2=2×, 3=3×, 0=∞
       const done = repeatsDoneRef.current + 1;
       if (rc === 0 || done < rc) {
         repeatsDoneRef.current = done;

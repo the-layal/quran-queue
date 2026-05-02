@@ -4,6 +4,7 @@ import { loadAudioData } from "../services/quranApi";
 import { computePlaybackRegions, type PlaybackRegion } from "../utils/audioRegions";
 import type { AudioDataMap } from "../types/quran";
 import type { ReviewQueueItem } from "../store/quranStore";
+import { clampRepeat } from "../utils/repeatOptions";
 
 export interface QueuePlaybackState {
   queueIsPlaying: boolean;
@@ -166,7 +167,7 @@ export function useQueuePlayback(): QueuePlaybackState {
       const queue = reviewQueueRef.current;
       const item = queue[itemIndex];
       if (!item) return null;
-      const rc = item.repeatCount;
+      const rc = clampRepeat(item.repeatCount); // guard against stale persisted 4/5
       if (rc === 0 || repeatNum < rc - 1) {
         return { itemIndex, repeatNum: rc === 0 ? 0 : repeatNum + 1 };
       }

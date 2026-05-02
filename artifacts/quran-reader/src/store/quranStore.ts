@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { SurahData, MushafPageData, Settings, ViewMode, BrushFineness } from "../types/quran";
+import { clampRepeat } from "../utils/repeatOptions";
 
 export type PlaybackHighlightMode = "line" | "ayah";
 export type BlindReviewMode = "default" | "word-by-word" | "blind" | "context-only";
@@ -270,6 +271,15 @@ export const useQuranStore = create<QuranStore>()(
         isSharedQueue: state.isSharedQueue,
         playbackRate: state.playbackRate,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        // Clamp any stale persisted repeat values (e.g. old 4× or 5× options).
+        state.queueRepeatAll = clampRepeat(state.queueRepeatAll);
+        state.reviewQueue = state.reviewQueue.map((item) => ({
+          ...item,
+          repeatCount: clampRepeat(item.repeatCount),
+        }));
+      },
     }
   )
 );
