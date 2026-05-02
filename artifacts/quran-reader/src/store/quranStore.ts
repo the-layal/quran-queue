@@ -37,16 +37,16 @@ interface QuranStore {
     jsonToSvg: Record<string, Record<number, number[]>>
   ) => void;
 
-  // Maps "S:A" → last selectable SVG word index for each ayah on loaded pages.
-  // Maps "S:A" → first selectable SVG word index for each ayah on loaded pages.
-  // Both populated by MushafSvgPage when a page is rendered so that cross-page
-  // adjacency checks can determine whether a selected word is truly the first or
-  // final word of its ayah.  SVG word indices diverge from JSON segment counts
-  // for ayahs with waw al-atf groups, waqf marks, or juz-star markers.
-  ayahLastSelectableIdx: Record<string, number>;
-  setAyahLastSelectableIdx: (map: Record<string, number>) => void;
-  ayahFirstSelectableIdx: Record<string, number>;
-  setAyahFirstSelectableIdx: (map: Record<string, number>) => void;
+  // Maps "S:A" → sorted ascending list of selectable SVG word indices for each
+  // ayah on loaded pages.  Populated by MushafSvgPage from the real SVG DOM
+  // when each page renders.  Drives cross-page adjacency checks in useSmartBrush:
+  //   first selectable  = indices[0]
+  //   last  selectable  = indices[indices.length - 1]
+  //   next  neighbor    = indices[indexOf(w) + 1]
+  // Handles ayahs with waw al-atf, waqf marks, or leading juz-star/hizb markers
+  // where SVG word indices diverge from JSON segment counts or have gaps.
+  ayahSelectableIndices: Record<string, number[]>;
+  setAyahSelectableIndices: (map: Record<string, number[]>) => void;
 
   reviewQueue: ReviewQueueItem[];
   activeQueueItemId: string | null;
@@ -121,16 +121,10 @@ export const useQuranStore = create<QuranStore>()(
           jsonToSvgWordsMap: { ...state.jsonToSvgWordsMap, ...jsonToSvg  },
         })),
 
-      ayahLastSelectableIdx: {},
-      setAyahLastSelectableIdx: (map) =>
+      ayahSelectableIndices: {},
+      setAyahSelectableIndices: (map) =>
         set((state) => ({
-          ayahLastSelectableIdx: { ...state.ayahLastSelectableIdx, ...map },
-        })),
-
-      ayahFirstSelectableIdx: {},
-      setAyahFirstSelectableIdx: (map) =>
-        set((state) => ({
-          ayahFirstSelectableIdx: { ...state.ayahFirstSelectableIdx, ...map },
+          ayahSelectableIndices: { ...state.ayahSelectableIndices, ...map },
         })),
 
       reviewQueue: [],

@@ -146,96 +146,117 @@ function getFirstWordId(unit: Unit): string | null {
 }
 
 /**
- * Returns the last *selectable* SVG word index for an ayah.
+ * Derives first/last selectable word and the next-neighbor relation from the
+ * sorted selectable-indices list for an ayah.
  *
- * Priority:
- *  1. `ayahLastMap` (from MushafSvgPage DOM scan) — exact for all mushaf ayahs
- *     including those with waw al-atf, waqf marks, or leading juz-star markers.
- *  2. `getAyahWordCount` (JSON segment count) — accurate for reading mode and
- *     simple mushaf ayahs; used as fallback for pages not yet rendered.
+ * `indicesMap` maps "S:A" → sorted ascending array of selectable SVG word
+ * indices (populated by MushafSvgPage from the real DOM).  This data is exact
+ * for all mushaf ayahs including those with waw al-atf, waqf marks, or leading
+ * juz-star/hizb markers.
  *
- * Returns null when neither source has data (conservative "unknown" sentinel —
- * callers treat this as "cannot confirm, do not preserve continuation").
+ * Three query helpers are derived from this single structure:
+ *
+ *  getFirstIdx  — first  selectable word in an ayah (indices[0])
+ *                 Fallback: 1 (reading mode has no leading markers; safe for
+ *                 mushaf ayahs whose page has not yet rendered)
+ *
+ *  getLastIdx   — last selectable word in an ayah (indices[length-1])
+ *                 Fallback: getAyahWordCount() — accurate for reading mode and
+ *                 simple mushaf ayahs; null when data unavailable
+ *
+ *  getNextIdx   — next selectable word after a given index in an ayah
+ *                 Handles waqf-mark gaps (e.g. 5 → 7 when index 6 is a waqf)
+ *                 Returns null when `idx` is not in the list, or is the last
+ *                 element (no next exists), or when indices data is absent
  */
-function resolveLastWordIdx(
+function getFirstIdx(
   surah: number,
   ayah: number,
-  ayahLastMap: Record<string, number>
+  indicesMap: Record<string, number[]>
+): number {
+  const arr = indicesMap[`${surah}:${ayah}`];
+  return arr && arr.length > 0 ? arr[0] : 1;
+}
+
+function getLastIdx(
+  surah: number,
+  ayah: number,
+  indicesMap: Record<string, number[]>
 ): number | null {
-  const stored = ayahLastMap[`${surah}:${ayah}`];
-  if (stored !== undefined) return stored;
+  const arr = indicesMap[`${surah}:${ayah}`];
+  if (arr && arr.length > 0) return arr[arr.length - 1];
+  // Fallback for reading mode or pages not yet rendered
   return getAyahWordCount(surah, ayah);
 }
 
-/**
- * Returns the first *selectable* SVG word index for an ayah.
- *
- * Priority:
- *  1. `ayahFirstMap` (from MushafSvgPage DOM scan) — exact for mushaf ayahs
- *     where the first text element is a non-selectable juz-star or leading waqf
- *     mark (those consume earlier SVG indices, so the first selectable word is
- *     at index > 1).
- *  2. Fallback to 1 — correct for reading mode (no leading markers) and for
- *     mushaf ayahs where the first word truly is at SVG index 1.
- *
- * Never returns null: 1 is always a safe lower bound, and the cross-page check
- * only uses this value to confirm a candidate word is at the ayah boundary.
- */
-function resolveFirstWordIdx(
+function getNextIdx(
   surah: number,
   ayah: number,
-  ayahFirstMap: Record<string, number>
-): number {
-  return ayahFirstMap[`${surah}:${ayah}`] ?? 1;
+  currentIdx: number,
+  indicesMap: Record<string, number[]>
+): number | null {
+  const arr = indicesMap[`${surah}:${ayah}`];
+  if (!arr || arr.length === 0) return null;
+  const pos = arr.indexOf(currentIdx);
+  if (pos === -1 || pos + 1 >= arr.length) return null;
+  return arr[pos + 1];
 }
 
 /**
  * Returns true iff `candidateId` is the direct next selectable word after
  * `lastId` in the Quran word sequence.  Three cases are handled:
  *
- *  1. Same ayah, next consecutive SVG index (w2 === w1 + 1) — exact.
- *     Note: waqf marks in between cause a gap > 1, so this catches only the
- *     common case without an intervening non-selectable element.
+ *  1. Same ayah — candidate is the immediate next selectable word after lastId.
+ *     Uses `getNextIdx` from the stored selectable-indices list so that waqf
+ *     marks creating index gaps (e.g. 5 → 7 instead of 5 → 6) are handled
+ *     correctly.  Falls back to `w + 1` only when the page has not yet loaded
+ *     its selectable-index data (conservative; safe because the cross-page check
+ *     only fires after the user is actively looking at and gesturing on a page).
  *
- *  2. Candidate is the first selectable word of the next ayah in the same surah
- *     (a2 === a1+1, w2 === resolveFirstWordIdx(s2,a2)):
- *     confirmed only when p1.w === resolveLastWordIdx(s1,a1), i.e. lastId is
- *     truly the final selectable word of its ayah.
+ *  2. Candidate is the first selectable word of the next ayah in the same surah.
+ *     Confirmed when p1.w is the last selectable word of its ayah AND p2.w is
+ *     the first selectable word of the next ayah.
  *
- *  3. Candidate is the first selectable word of ayah 1 of the next surah
- *     (s2 === s1+1, a2 === 1, w2 === resolveFirstWordIdx(s2,1)):
- *     confirmed when a1 is the last ayah of surah s1 (SURAH_AYAH_COUNTS) AND
- *     p1.w === resolveLastWordIdx(s1,a1).
+ *  3. Candidate is the first selectable word of ayah 1 of the next surah.
+ *     Confirmed when a1 is the final ayah of surah s1 (SURAH_AYAH_COUNTS) AND
+ *     p1.w is the last selectable word of that ayah AND p2.w is the first
+ *     selectable word of (s1+1, 1).
  *
- * Returns false when required word-count data is unavailable — this conservatively
- * clears the old selection rather than incorrectly extending it.
+ * Returns false when data is unavailable — conservative fallback that clears the
+ * old selection rather than silently extending it with unrelated words.
  */
 function isDirectlyAdjacentInQuran(
   lastId: string,
   candidateId: string,
-  ayahLastMap: Record<string, number>,
-  ayahFirstMap: Record<string, number>
+  indicesMap: Record<string, number[]>
 ): boolean {
   const p1 = parseWordId(lastId);
   const p2 = parseWordId(candidateId);
   if (!p1 || !p2) return false;
 
-  // Case 1: same ayah, immediately adjacent SVG index
-  if (p1.s === p2.s && p1.a === p2.a && p2.w === p1.w + 1) return true;
+  // Case 1: same ayah — exact next selectable word (handles waqf gaps)
+  if (p1.s === p2.s && p1.a === p2.a) {
+    const next = getNextIdx(p1.s, p1.a, p1.w, indicesMap);
+    if (next !== null) return p2.w === next;
+    // Data not yet loaded for this ayah — fall back to simple +1 (reading mode
+    // or page just starting to render; conservative but generally fine here
+    // because cross-page cases within the same ayah are rare without data)
+    return p2.w === p1.w + 1;
+  }
 
   // Case 2: first selectable word of the next ayah in the same surah
   if (p1.s === p2.s && p2.a === p1.a + 1) {
-    if (p2.w !== resolveFirstWordIdx(p2.s, p2.a, ayahFirstMap)) return false;
-    const lastIdx = resolveLastWordIdx(p1.s, p1.a, ayahLastMap);
+    if (p2.w !== getFirstIdx(p2.s, p2.a, indicesMap)) return false;
+    const lastIdx = getLastIdx(p1.s, p1.a, indicesMap);
     return lastIdx !== null && p1.w === lastIdx;
   }
 
   // Case 3: first selectable word of ayah 1 of the next surah
   if (p2.s === p1.s + 1 && p2.a === 1) {
-    if (p2.w !== resolveFirstWordIdx(p2.s, 1, ayahFirstMap)) return false;
-    const lastAyahOfSurah = SURAH_AYAH_COUNTS[p1.s - 1]; // 1-indexed
+    if (p2.w !== getFirstIdx(p2.s, 1, indicesMap)) return false;
+    const lastAyahOfSurah = SURAH_AYAH_COUNTS[p1.s - 1]; // 1-indexed array
     if (p1.a !== lastAyahOfSurah) return false;
-    const lastIdx = resolveLastWordIdx(p1.s, p1.a, ayahLastMap);
+    const lastIdx = getLastIdx(p1.s, p1.a, indicesMap);
     return lastIdx !== null && p1.w === lastIdx;
   }
 
@@ -384,15 +405,11 @@ export function useSmartBrush(
   const brushFineness = useQuranStore((s) => s.brushFineness);
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
   const setSelectedWordIds = useQuranStore((s) => s.setSelectedWordIds);
-  // Synchronously available first/last selectable SVG word index per ayah,
-  // built from the real SVG DOM when each page loads.
-  // Used for exact cross-page adjacency checks (no async involved).
-  const ayahLastSelectableIdx = useQuranStore((s) => s.ayahLastSelectableIdx);
-  const ayahLastSelectableRef = useRef(ayahLastSelectableIdx);
-  ayahLastSelectableRef.current = ayahLastSelectableIdx;
-  const ayahFirstSelectableIdx = useQuranStore((s) => s.ayahFirstSelectableIdx);
-  const ayahFirstSelectableRef = useRef(ayahFirstSelectableIdx);
-  ayahFirstSelectableRef.current = ayahFirstSelectableIdx;
+  // Sorted selectable SVG word indices per ayah, built from the real SVG DOM
+  // when each page loads.  Used for exact cross-page adjacency checks.
+  const ayahSelectableIndices = useQuranStore((s) => s.ayahSelectableIndices);
+  const ayahSelectableRef = useRef(ayahSelectableIndices);
+  ayahSelectableRef.current = ayahSelectableIndices;
 
   const isDragging = useRef(false);
   // True when the drag gesture should remove words (pointer started on a selected word)
@@ -580,8 +597,7 @@ export function useSmartBrush(
             isDirectlyAdjacentInQuran(
               lastExistingId,
               firstAnchorId,
-              ayahLastSelectableRef.current,
-              ayahFirstSelectableRef.current
+              ayahSelectableRef.current
             );
 
           if (!isContinuation) {
