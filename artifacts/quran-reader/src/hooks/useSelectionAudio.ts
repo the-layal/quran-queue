@@ -3,6 +3,7 @@ import { useQuranStore } from "../store/quranStore";
 import { loadAudioData } from "../services/quranApi";
 import { computePlaybackRegions, type PlaybackRegion } from "../utils/audioRegions";
 import type { AudioDataMap } from "../types/quran";
+import { hasArabicLetter } from "../utils/arabicUtils";
 
 export interface SelectionAudioState {
   isPlaying: boolean;
@@ -42,6 +43,9 @@ function getAllAyahWordIds(ayahKey: string): string[] {
     `g[data-surah="${String(surah).padStart(3, "0")}"][data-aya="${String(ayah).padStart(3, "0")}"][data-word-index-in-ayah][data-type="text"]`
   );
   svgWords.forEach((el) => {
+    // Skip waqf/pause marks — they have no Arabic letters and no audio segment.
+    const hafs = el.getAttribute("data-hafs");
+    if (hafs !== null && hafs !== "" && !hasArabicLetter(hafs)) return;
     const wi = el.getAttribute("data-word-index-in-ayah");
     if (wi) ids.push(`${surah}:${ayah}:${wi}`);
   });
@@ -67,6 +71,9 @@ function getAllLineWordIds(activeKey: string, currentWordIndex: number): string[
       `g[data-line-number="${lineNumber}"][data-word-index-in-ayah][data-type="text"]`
     );
     lineWords.forEach((el) => {
+      // Skip waqf/pause marks — they have no Arabic letters and no audio segment.
+      const hafs = el.getAttribute("data-hafs");
+      if (hafs !== null && hafs !== "" && !hasArabicLetter(hafs)) return;
       const s = el.getAttribute("data-surah");
       const a = el.getAttribute("data-aya");
       const w = el.getAttribute("data-word-index-in-ayah");

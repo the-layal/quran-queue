@@ -1,6 +1,7 @@
 import { useCallback, useRef, type RefObject } from "react";
 import { useQuranStore } from "../store/quranStore";
 import type { BrushFineness } from "../types/quran";
+import { hasArabicLetter } from "../utils/arabicUtils";
 
 // ── SVG helper types & utilities ─────────────────────────────────────────────
 
@@ -153,7 +154,12 @@ function buildSvgUnits(container: Element, fineness: BrushFineness): Unit[] {
     container.querySelectorAll<Element>(
       'g[data-surah][data-aya][data-word-index-in-ayah][data-type="text"]'
     )
-  );
+  ).filter((g) => {
+    // Exclude waqf/pause marks (ۚ ۖ ۗ ۘ ۛ) — they have data-type="text" but
+    // contain no Arabic letter codepoints and have no audio segments.
+    const hafs = g.getAttribute("data-hafs");
+    return hafs === null || hafs === "" || hasArabicLetter(hafs);
+  });
 
   const parsed = allGroups
     .map((g) => {
