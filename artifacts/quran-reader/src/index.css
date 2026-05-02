@@ -481,6 +481,11 @@ input[type="number"]::-webkit-outer-spin-button {
   fill: hsl(var(--foreground));
 }
 
+/* Blind review — word hidden (color transparent preserves layout) */
+.quran-word.word-hidden {
+  color: transparent;
+}
+
 /* Hover highlight rect injected via JS (visual only, no pointer events) */
 .mushaf-svg-container .md-hover-rect {
   fill: hsl(var(--accent) / 0.45);

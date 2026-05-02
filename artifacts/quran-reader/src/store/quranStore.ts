@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import type { SurahData, MushafPageData, Settings, ViewMode, BrushFineness } from "../types/quran";
 
 export type PlaybackHighlightMode = "line" | "ayah";
+export type BlindReviewMode = "default" | "word-by-word" | "blind" | "context-only";
 
 export interface ReviewQueueItem {
   id: string;
@@ -86,6 +87,12 @@ interface QuranStore {
 
   playbackRate: number;
   setPlaybackRate: (rate: number) => void;
+
+  blindReviewMode: BlindReviewMode;
+  manuallyRevealedIds: string[];
+  setBlindReviewMode: (mode: BlindReviewMode) => void;
+  revealWords: (ids: string[]) => void;
+  clearManualReveals: () => void;
 }
 
 function genId(): string {
@@ -138,6 +145,15 @@ export const useQuranStore = create<QuranStore>()(
       isSharedQueue: false,
 
       playbackRate: 1,
+
+      blindReviewMode: "default",
+      manuallyRevealedIds: [],
+      setBlindReviewMode: (blindReviewMode) => set({ blindReviewMode }),
+      revealWords: (ids) =>
+        set((state) => ({
+          manuallyRevealedIds: Array.from(new Set([...state.manuallyRevealedIds, ...ids])),
+        })),
+      clearManualReveals: () => set({ manuallyRevealedIds: [] }),
 
       setCurrentSurah: (surah) =>
         set({ currentSurah: Math.max(1, Math.min(114, surah)) }),

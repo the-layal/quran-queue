@@ -13,6 +13,8 @@ import {
   ChevronDown,
   Search,
   X,
+  Eye,
+  RotateCcw,
 } from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
 import {
@@ -25,6 +27,7 @@ import type { QuranAyah, ChapterMap, ChapterInfo } from "../types/quran";
 import SurahHeader from "../components/SurahHeader";
 import MushafSvgPage from "../components/MushafSvgPage";
 import BrushFinenessToggle from "../components/BrushFinenessToggle";
+import BlindReviewToggle from "../components/BlindReviewToggle";
 import AudioControlBar from "../components/AudioControlBar";
 import ReviewQueuePanel from "../components/ReviewQueuePanel";
 import { useSmartBrush } from "../hooks/useSmartBrush";
@@ -195,6 +198,35 @@ function toEasternArabic(n: number): string {
   return String(n).replace(/\d/g, (d) => "٠١٢٣٤٥٦٧٨٩"[parseInt(d)]);
 }
 
+// ── Blind review helpers ──────────────────────────────────────────────────────
+
+// Returns word IDs in Quran order for the currently visible view.
+// Reading mode: span IDs from .quran-word elements (JSON "S:A:W" format).
+// Mushaf mode:  "S:A:W" built from SVG data-attributes (SVG word indices).
+function getOrderedWordIds(isMushaf: boolean): string[] {
+  if (!isMushaf) {
+    return Array.from(document.querySelectorAll<HTMLElement>(".quran-word[id]"))
+      .map((el) => el.id)
+      .filter(Boolean);
+  }
+  return Array.from(
+    document.querySelectorAll<SVGGElement>('g[data-word-index-in-ayah][data-type="text"]')
+  )
+    .map((el) => {
+      const s = parseInt(el.getAttribute("data-surah") || "0", 10);
+      const a = parseInt(el.getAttribute("data-aya") || "0", 10);
+      const w = parseInt(el.getAttribute("data-word-index-in-ayah") || "0", 10);
+      const hafs = el.getAttribute("data-hafs") ?? "";
+      // Skip waqf/pause marks (hafs present but contains no Arabic letter)
+      if (hafs && !/[\u0600-\u06FF]/.test(hafs)) return null;
+      if (!s || !a || !w) return null;
+      return { id: `${s}:${a}:${w}`, s, a, w };
+    })
+    .filter((x): x is { id: string; s: number; a: number; w: number } => x !== null)
+    .sort((x, y) => x.s - y.s || x.a - y.a || x.w - y.w)
+    .map((x) => x.id);
+}
+
 const loadedQpcPages = new Set<number>();
 
 function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number): boolean {
@@ -342,6 +374,8 @@ function SurahReadingView({
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
   const playbackActiveIds = useQuranStore((s) => s.playbackActiveIds);
   const playbackCurrentWordId = useQuranStore((s) => s.playbackCurrentWordId);
+  const blindReviewMode = useQuranStore((s) => s.blindReviewMode);
+  const manuallyRevealedIds = useQuranStore((s) => s.manuallyRevealedIds);
 
   // Brush pointer handlers — must be called before any early return
   const brush = useSmartBrush("reading", containerRef as RefObject<HTMLElement | null>);
@@ -392,6 +426,35 @@ function SurahReadingView({
     }
     prevCurrentWordRef.current = playbackCurrentWordId;
   }, [playbackCurrentWordId]);
+
+  // Blind review visibility: apply/remove .word-hidden class per mode.
+  // surahNumber is included so the effect re-runs when the surah changes
+  // (words re-render but blindReviewMode may not have changed).
+  useEffect(() => {
+    const allWords = Array.from(document.querySelectorAll<HTMLElement>(".quran-word"));
+
+    if (blindReviewMode === "default") {
+      allWords.forEach((el) => el.classList.remove("word-hidden"));
+      return;
+    }
+
+    const revealedSet = new Set(manuallyRevealedIds);
+    const activeSet = new Set(playbackActiveIds);
+
+    allWords.forEach((el) => {
+      const wordId = el.id;
+      if (!wordId) return;
+      let hide = false;
+      if (blindReviewMode === "word-by-word") {
+        hide = wordId !== playbackCurrentWordId;
+      } else if (blindReviewMode === "blind") {
+        hide = !revealedSet.has(wordId);
+      } else if (blindReviewMode === "context-only") {
+        hide = activeSet.has(wordId);
+      }
+      el.classList.toggle("word-hidden", hide);
+    });
+  }, [blindReviewMode, manuallyRevealedIds, playbackCurrentWordId, playbackActiveIds, surahNumber]);
 
   const surahInfo = chapter
     ? {
@@ -628,6 +691,10 @@ export default function QuranPage() {
   const setIsSharedQueue = useQuranStore((s) => s.setIsSharedQueue);
   const queuePanelOpen = useQuranStore((s) => s.queuePanelOpen);
   const setQueuePanelOpen = useQuranStore((s) => s.setQueuePanelOpen);
+  const blindReviewMode = useQuranStore((s) => s.blindReviewMode);
+  const manuallyRevealedIds = useQuranStore((s) => s.manuallyRevealedIds);
+  const clearManualReveals = useQuranStore((s) => s.clearManualReveals);
+  const revealWords = useQuranStore((s) => s.revealWords);
 
   const [darkMode, setDarkMode] = useState(() =>
     document.documentElement.classList.contains("dark")
@@ -792,6 +859,72 @@ export default function QuranPage() {
     return () => window.removeEventListener("keydown", handler);
   });
 
+  // Clear manual reveals on page/surah navigation and when leaving blind mode
+  useEffect(() => {
+    clearManualReveals();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, currentSurah]);
+
+  useEffect(() => {
+    if (blindReviewMode !== "blind") clearManualReveals();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blindReviewMode]);
+
+  // ── Manual reveal handlers (Mode C) ──────────────────────────────────────
+  const handleRevealWord = useCallback(() => {
+    const ids = getOrderedWordIds(isMushaf);
+    const revealedSet = new Set(manuallyRevealedIds);
+    const next = ids.find((id) => !revealedSet.has(id));
+    if (next) revealWords([next]);
+  }, [isMushaf, manuallyRevealedIds, revealWords]);
+
+  const handleRevealAyah = useCallback(() => {
+    const ids = getOrderedWordIds(isMushaf);
+    if (ids.length === 0) return;
+    const revealedSet = new Set(manuallyRevealedIds);
+
+    // Find the ayah of the last revealed word
+    let lastRevealedAyah: string | null = null;
+    for (let i = ids.length - 1; i >= 0; i--) {
+      if (revealedSet.has(ids[i])) {
+        const parts = ids[i].split(":");
+        lastRevealedAyah = `${parts[0]}:${parts[1]}`;
+        break;
+      }
+    }
+
+    let targetAyah: string | null = null;
+    if (lastRevealedAyah === null) {
+      // Nothing revealed yet — start from the first ayah
+      const parts = ids[0].split(":");
+      targetAyah = `${parts[0]}:${parts[1]}`;
+    } else {
+      const ayahWords = ids.filter((id) => {
+        const parts = id.split(":");
+        return `${parts[0]}:${parts[1]}` === lastRevealedAyah;
+      });
+      const allRevealed = ayahWords.every((id) => revealedSet.has(id));
+      if (allRevealed) {
+        // Current ayah fully revealed — advance to next unrevealed ayah
+        const firstUnrevealed = ids.find((id) => !revealedSet.has(id));
+        if (firstUnrevealed) {
+          const parts = firstUnrevealed.split(":");
+          targetAyah = `${parts[0]}:${parts[1]}`;
+        }
+      } else {
+        targetAyah = lastRevealedAyah;
+      }
+    }
+
+    if (targetAyah) {
+      const toReveal = ids.filter((id) => {
+        const parts = id.split(":");
+        return `${parts[0]}:${parts[1]}` === targetAyah;
+      });
+      revealWords(toReveal);
+    }
+  }, [isMushaf, manuallyRevealedIds, revealWords]);
+
   const toggleDark = () => {
     const isDark = !darkMode;
     setDarkMode(isDark);
@@ -904,10 +1037,42 @@ export default function QuranPage() {
 
       {/* ── Footer navigation ───────────────────────────────────────────── */}
       <footer className="sticky bottom-0 z-30 bg-background/90 backdrop-blur-sm border-t border-border">
-        {/* ── Brush fineness toggle — shown in both modes ── */}
-        <div className="flex items-center justify-center py-1.5 border-b border-border/40">
+        {/* ── Controls row: Brush fineness + Visibility mode toggle ── */}
+        <div className="flex items-center justify-center gap-3 py-1.5 border-b border-border/40">
           <BrushFinenessToggle />
+          <div className="w-px h-4 bg-border/60" aria-hidden />
+          <BlindReviewToggle />
         </div>
+
+        {/* ── Manual reveal row (Mode C — Blind only) ── */}
+        {blindReviewMode === "blind" && (
+          <div className="flex items-center justify-center gap-2 py-1 border-b border-border/40">
+            <button
+              onClick={handleRevealWord}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors"
+              title="Reveal the next hidden word"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              Word
+            </button>
+            <button
+              onClick={handleRevealAyah}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors"
+              title="Reveal all words in the next ayah"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              Ayah
+            </button>
+            <button
+              onClick={clearManualReveals}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+              title="Hide all revealed words"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Reset
+            </button>
+          </div>
+        )}
 
         {isMushaf ? (
           <div className="max-w-lg mx-auto">

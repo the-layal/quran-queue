@@ -114,6 +114,8 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const setSvgWordAlignmentMaps = useQuranStore((s) => s.setSvgWordAlignmentMaps);
   const setAyahSelectableIndices = useQuranStore((s) => s.setAyahSelectableIndices);
   const jsonToSvgWordsMap = useQuranStore((s) => s.jsonToSvgWordsMap);
+  const blindReviewMode = useQuranStore((s) => s.blindReviewMode);
+  const manuallyRevealedIds = useQuranStore((s) => s.manuallyRevealedIds);
   const jsonToSvgWordsMapRef = useRef(jsonToSvgWordsMap);
   jsonToSvgWordsMapRef.current = jsonToSvgWordsMap;
   const brush = useSmartBrush("mushaf", containerRef as RefObject<HTMLElement | null>);
@@ -338,6 +340,63 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       }
     }
   }, [playbackCurrentWordId, expandJsonIdToSvgIds]);
+
+  // Apply blind review visibility: set opacity on SVG word group elements.
+  // Runs after every relevant state change AND after svgText changes
+  // (fresh innerHTML resets all styles; this effect re-applies them).
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const wordGroups = Array.from(
+      container.querySelectorAll<SVGGElement>('g[data-word-index-in-ayah][data-type="text"]')
+    );
+
+    if (blindReviewMode === "default") {
+      wordGroups.forEach((el) => { el.style.opacity = ""; });
+      return;
+    }
+
+    if (blindReviewMode === "context-only") {
+      const hiddenSet = new Set(playbackActiveIds);
+      wordGroups.forEach((wordEl) => {
+        const s = parseInt(wordEl.getAttribute("data-surah") || "0", 10);
+        const a = parseInt(wordEl.getAttribute("data-aya") || "0", 10);
+        const w = parseInt(wordEl.getAttribute("data-word-index-in-ayah") || "0", 10);
+        wordEl.style.opacity = hiddenSet.has(`${s}:${a}:${w}`) ? "0" : "";
+      });
+      return;
+    }
+
+    // word-by-word or blind: derive visible SVG ID set
+    let visibleSvgIds: Set<string>;
+    if (blindReviewMode === "word-by-word") {
+      visibleSvgIds = new Set<string>();
+      if (playbackCurrentWordId) {
+        const [s, a, w] = playbackCurrentWordId.split(":");
+        const ayahKey = `${parseInt(s, 10)}:${parseInt(a, 10)}`;
+        const jsonIdx = parseInt(w, 10);
+        const svgIndices = jsonToSvgWordsMap[ayahKey]?.[jsonIdx];
+        if (svgIndices && svgIndices.length > 0) {
+          svgIndices.forEach((svgIdx) =>
+            visibleSvgIds.add(`${parseInt(s, 10)}:${parseInt(a, 10)}:${svgIdx}`)
+          );
+        } else {
+          visibleSvgIds.add(`${parseInt(s, 10)}:${parseInt(a, 10)}:${parseInt(w, 10)}`);
+        }
+      }
+    } else {
+      // blind — manually revealed words only
+      visibleSvgIds = new Set(manuallyRevealedIds);
+    }
+
+    wordGroups.forEach((wordEl) => {
+      const s = parseInt(wordEl.getAttribute("data-surah") || "0", 10);
+      const a = parseInt(wordEl.getAttribute("data-aya") || "0", 10);
+      const w = parseInt(wordEl.getAttribute("data-word-index-in-ayah") || "0", 10);
+      wordEl.style.opacity = visibleSvgIds.has(`${s}:${a}:${w}`) ? "" : "0";
+    });
+  }, [blindReviewMode, manuallyRevealedIds, playbackCurrentWordId, playbackActiveIds, svgText, jsonToSvgWordsMap]);
 
   // Clear SVG classes and cached viewBox when page changes.
   // Alignment maps (svgToJsonWordMap / jsonToSvgWordsMap) are NOT reset here —
