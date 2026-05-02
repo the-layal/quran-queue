@@ -5,6 +5,11 @@ import { computePlaybackRegions, type PlaybackRegion } from "../utils/audioRegio
 import type { AudioDataMap } from "../types/quran";
 import type { ReviewQueueItem } from "../store/quranStore";
 import { clampRepeat } from "../utils/repeatOptions";
+import {
+  getAllAyahWordIds,
+  getAllLineWordIds,
+  computeCurrentWordIndex,
+} from "../utils/playbackHighlight";
 
 export interface QueuePlaybackState {
   queueIsPlaying: boolean;
@@ -30,8 +35,20 @@ export function useQueuePlayback(): QueuePlaybackState {
   const queueLoopCount = useQuranStore((s) => s.queueLoopCount);
   const svgToJsonWordMap = useQuranStore((s) => s.svgToJsonWordMap);
   const playbackRate = useQuranStore((s) => s.playbackRate);
+  const playbackHighlightMode = useQuranStore((s) => s.playbackHighlightMode);
+  const playbackHighlightEnabled = useQuranStore((s) => s.playbackHighlightEnabled);
+
   const playbackRateRef = useRef(playbackRate);
   playbackRateRef.current = playbackRate;
+
+  const playbackHighlightModeRef = useRef(playbackHighlightMode);
+  playbackHighlightModeRef.current = playbackHighlightMode;
+
+  const playbackHighlightEnabledRef = useRef(playbackHighlightEnabled);
+  playbackHighlightEnabledRef.current = playbackHighlightEnabled;
+
+  const prevActiveIdsRef = useRef<string[]>([]);
+  const prevCurrentWordIdRef = useRef<string | null>(null);
 
   const [queueIsPlaying, setQueueIsPlaying] = useState(false);
   const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
@@ -186,12 +203,20 @@ export function useQueuePlayback(): QueuePlaybackState {
       useQuranStore.getState().setBrushFineness(item.brushFineness);
     }
 
+    function clearHighlights() {
+      prevActiveIdsRef.current = [];
+      prevCurrentWordIdRef.current = null;
+      useQuranStore.getState().setPlaybackActiveIds([]);
+      useQuranStore.getState().setPlaybackCurrentWordId(null);
+    }
+
     function finishIdle() {
       isPlayingRef.current = false;
       setQueueIsPlayingRef.current(false);
       setActiveItemIndexRef.current(null);
       setQueueProgressRef.current(0);
       useQuranStore.getState().setActiveQueueItemId(null);
+      clearHighlights();
     }
 
     function advanceToCursor(itemIndex: number, repeatNum: number) {
@@ -352,6 +377,61 @@ export function useQueuePlayback(): QueuePlaybackState {
           const regionElapsed = Math.max(0, ct - startSec);
           const prog = totalDur > 0 ? Math.min((elapsedBefore + regionElapsed) / totalDur, 1) : 0;
           setQueueProgressRef.current(prog);
+
+          // Word highlight tracking — mirrors useSelectionAudio's onTimeUpdate logic.
+          if (playbackHighlightEnabledRef.current) {
+            const mode = playbackHighlightModeRef.current;
+            const aData = audioDataRef.current;
+            const activeKey = region.ayahKey;
+            const audioRelativeMs = region.playFullAyah
+              ? regionElapsed * 1000
+              : region.startMs + regionElapsed * 1000;
+
+            const item = reviewQueueRef.current[itemIndexRef.current];
+            const selectionSet = new Set(item?.selectedWordIds ?? []);
+
+            let newActiveIds: string[] = [];
+            let currentWordIndex: number | null = null;
+
+            if (mode === "ayah") {
+              newActiveIds = getAllAyahWordIds(activeKey);
+              currentWordIndex = aData
+                ? computeCurrentWordIndex(audioRelativeMs, aData, activeKey)
+                : null;
+            } else {
+              currentWordIndex = aData
+                ? computeCurrentWordIndex(audioRelativeMs, aData, activeKey)
+                : null;
+              if (currentWordIndex !== null) {
+                newActiveIds = getAllLineWordIds(activeKey, currentWordIndex).filter(
+                  (id) => selectionSet.has(id)
+                );
+              } else {
+                newActiveIds = getAllAyahWordIds(activeKey).filter(
+                  (id) => selectionSet.has(id)
+                );
+              }
+            }
+
+            const prev = prevActiveIdsRef.current;
+            const changed =
+              newActiveIds.length !== prev.length ||
+              newActiveIds.some((id, i) => id !== prev[i]);
+            if (changed) {
+              prevActiveIdsRef.current = newActiveIds;
+              useQuranStore.getState().setPlaybackActiveIds(newActiveIds);
+            }
+
+            const [surahStr, ayahStr] = activeKey.split(":");
+            const newCurrentWordId =
+              currentWordIndex !== null
+                ? `${parseInt(surahStr, 10)}:${parseInt(ayahStr, 10)}:${currentWordIndex}`
+                : null;
+            if (newCurrentWordId !== prevCurrentWordIdRef.current) {
+              prevCurrentWordIdRef.current = newCurrentWordId;
+              useQuranStore.getState().setPlaybackCurrentWordId(newCurrentWordId);
+            }
+          }
 
           if (ct >= endThreshold || audio.ended) {
             handleRegionEnd();
@@ -543,6 +623,10 @@ export function useQueuePlayback(): QueuePlaybackState {
     }
     isPlayingRef.current = false;
     setQueueIsPlaying(false);
+    prevActiveIdsRef.current = [];
+    prevCurrentWordIdRef.current = null;
+    useQuranStore.getState().setPlaybackActiveIds([]);
+    useQuranStore.getState().setPlaybackCurrentWordId(null);
   }, []);
 
   const stopQueue = useCallback(() => {
@@ -571,6 +655,10 @@ export function useQueuePlayback(): QueuePlaybackState {
     setQueueCurrentRegions([]);
     setQueueTotalDurationSec(0);
     useQuranStore.getState().setActiveQueueItemId(null);
+    prevActiveIdsRef.current = [];
+    prevCurrentWordIdRef.current = null;
+    useQuranStore.getState().setPlaybackActiveIds([]);
+    useQuranStore.getState().setPlaybackCurrentWordId(null);
   }, []);
 
   const seekQueueTo = useCallback((fraction: number) => {
