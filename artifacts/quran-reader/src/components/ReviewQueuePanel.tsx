@@ -48,7 +48,7 @@ function computeItemDurationSec(
   return regions.reduce((sum, r) => sum + r.durationMs, 0) / 1000;
 }
 
-const REPEAT_OPTIONS = [1, 2, 3, 4, 5, 0] as const;
+const REPEAT_OPTIONS = [1, 2, 3, 0] as const;
 type RepeatOption = (typeof REPEAT_OPTIONS)[number];
 
 const LOOP_OPTIONS = [1, 2, 3, 0] as const;
@@ -56,6 +56,12 @@ const LOOP_OPTIONS = [1, 2, 3, 0] as const;
 function nextRepeat(current: number): number {
   const idx = REPEAT_OPTIONS.indexOf(current as RepeatOption);
   return REPEAT_OPTIONS[idx === -1 ? 0 : (idx + 1) % REPEAT_OPTIONS.length];
+}
+
+function clampRepeat(current: number): number {
+  if ((REPEAT_OPTIONS as readonly number[]).includes(current)) return current;
+  if (current > 3) return 3;
+  return 1;
 }
 
 function repeatLabel(count: number): string {
@@ -428,7 +434,7 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
                         key={v}
                         onClick={() => setPresetRepeat(v)}
                         className={`flex-1 py-1 rounded-lg text-xs font-semibold transition-colors border ${
-                          presetRepeat === v
+                          clampRepeat(presetRepeat) === v
                             ? "bg-primary/15 border-primary text-primary"
                             : "border-border text-muted-foreground hover:bg-muted"
                         }`}
@@ -512,7 +518,7 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
                   key={v}
                   onClick={() => setQueueRepeatAll(v)}
                   className={`min-w-[28px] h-[20px] rounded border text-[9px] font-bold transition-colors px-1.5 ${
-                    queueRepeatAll === v
+                    clampRepeat(queueRepeatAll) === v
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-border text-muted-foreground hover:border-primary hover:text-primary"
                   }`}
@@ -634,8 +640,8 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
 
                   {/* Repeat badge */}
                   <RepeatBadge
-                    count={item.repeatCount}
-                    onCycle={() => !isSharedQueue && setQueueItemRepeat(item.id, nextRepeat(item.repeatCount))}
+                    count={clampRepeat(item.repeatCount)}
+                    onCycle={() => !isSharedQueue && setQueueItemRepeat(item.id, nextRepeat(clampRepeat(item.repeatCount)))}
                   />
 
                   {/* Delete (hidden for shared queues) */}

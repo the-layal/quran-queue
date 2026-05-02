@@ -14,12 +14,18 @@ function fmtTime(sec: number): string {
   return `${m}:${String(s % 60).padStart(2, "0")}`;
 }
 
-const REPEAT_OPTIONS = [1, 2, 3, 4, 5, 0] as const;
+const REPEAT_OPTIONS = [1, 2, 3, 0] as const;
 type RepeatOption = (typeof REPEAT_OPTIONS)[number];
 
 function nextRepeat(current: number): number {
   const idx = REPEAT_OPTIONS.indexOf(current as RepeatOption);
   return REPEAT_OPTIONS[idx === -1 ? 0 : (idx + 1) % REPEAT_OPTIONS.length];
+}
+
+function clampRepeat(current: number): number {
+  if ((REPEAT_OPTIONS as readonly number[]).includes(current)) return current;
+  if (current > 3) return 3;
+  return 1;
 }
 
 function repeatLabel(count: number): string {
@@ -281,7 +287,8 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
   }
 
   const isCurrentlyPlaying = queueActive ? queueIsPlaying : selIsPlaying;
-  const repeatIsActive = queueRepeatAll !== 1;
+  const clampedRepeat = clampRepeat(queueRepeatAll);
+  const repeatIsActive = clampedRepeat !== 1;
 
   const modeOptions: { value: PlaybackHighlightMode; label: string }[] = [
     { value: "line", label: "Line" },
@@ -428,12 +435,12 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
             ? "bg-primary/15 border-primary text-primary"
             : "border-border text-muted-foreground hover:bg-muted"
         }`}
-        aria-label={`Repeat: ${repeatLabel(queueRepeatAll)}`}
-        title={`Repeat: ${repeatLabel(queueRepeatAll)} — click to change`}
+        aria-label={`Repeat: ${repeatLabel(clampedRepeat)}`}
+        title={`Repeat: ${repeatLabel(clampedRepeat)} — click to change`}
       >
         <Repeat className="w-3.5 h-3.5" />
         <span className="text-[10px] font-bold tabular-nums leading-none">
-          {repeatLabel(queueRepeatAll)}
+          {repeatLabel(clampedRepeat)}
         </span>
       </button>
 
