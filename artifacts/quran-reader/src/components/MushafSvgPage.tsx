@@ -563,45 +563,49 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
         // the JSON's 1-based numbering.
         let jsonIdx = 1;
         const pendingWaws: number[] = [];
-        // Waqf marks accumulated between words — attached to the preceding word.
-        const pendingWaqfs: number[] = [];
+        // Waqf marks that appear before the very first real word — deferred to
+        // map onto word 1 (no preceding segment exists yet).
+        const leadingWaqfs: number[] = [];
 
         for (const { svgIdx, isWaw, isWaqf } of words) {
           if (isWaqf) {
-            // Waqf marks have no JSON segment — collect them to attach to the
-            // preceding real word (or the next one if they appear at the start).
-            pendingWaqfs.push(svgIdx);
+            if (jsonIdx > 1) {
+              // Interior or trailing waqf: map immediately to the preceding
+              // real word's JSON index. Do NOT push into jsonToSvg — waqf marks
+              // are not spoken words and must not trigger playback highlighting.
+              svgToJson[svgIdx] = jsonIdx - 1;
+            } else {
+              // Leading waqf (appears before the first real word): defer until
+              // the first real word is assigned so we can map forward to it.
+              leadingWaqfs.push(svgIdx);
+            }
           } else if (isWaw) {
             pendingWaws.push(svgIdx);
           } else {
             // This non-waw, non-waqf word takes the current jsonIdx.
-            // All preceding pending waws share this same jsonIdx.
-            // Waqf marks that appeared before this word also map to this jsonIdx.
+            // Preceding waw groups share this same jsonIdx.
+            // Leading waqfs (if any) also map here (no preceding word exists).
             svgToJson[svgIdx] = jsonIdx;
             jsonToSvg[jsonIdx] = [...pendingWaws, svgIdx];
             for (const wawIdx of pendingWaws) {
               svgToJson[wawIdx] = jsonIdx;
             }
-            for (const waqfIdx of pendingWaqfs) {
+            for (const waqfIdx of leadingWaqfs) {
               svgToJson[waqfIdx] = jsonIdx;
-              // Do NOT add waqf indices to jsonToSvg — they are not real words
-              // and should not trigger playback highlighting.
+              // Not added to jsonToSvg — waqf marks are not real words.
             }
             pendingWaws.length = 0;
-            pendingWaqfs.length = 0;
+            leadingWaqfs.length = 0;
             jsonIdx++;
           }
         }
 
-        // Trailing waws or waqf marks: attach to previous segment.
-        if ((pendingWaws.length > 0 || pendingWaqfs.length > 0) && jsonIdx > 1) {
+        // Trailing waws: attach to previous segment.
+        if (pendingWaws.length > 0 && jsonIdx > 1) {
           const lastJsonIdx = jsonIdx - 1;
           for (const wawIdx of pendingWaws) {
             svgToJson[wawIdx] = lastJsonIdx;
             jsonToSvg[lastJsonIdx].push(wawIdx);
-          }
-          for (const waqfIdx of pendingWaqfs) {
-            svgToJson[waqfIdx] = lastJsonIdx;
           }
         }
 
