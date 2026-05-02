@@ -12,6 +12,7 @@ import {
   Copy,
   ExternalLink,
 } from "lucide-react";
+import SpeedSelector from "./SpeedSelector";
 import { useQuranStore } from "../store/quranStore";
 import type { QueuePlaybackState } from "../hooks/useQueuePlayback";
 import { computeQueueItemLabel } from "../utils/queueLabel";

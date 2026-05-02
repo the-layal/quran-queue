@@ -28,6 +28,9 @@ export function useQueuePlayback(): QueuePlaybackState {
   const reviewQueue = useQuranStore((s) => s.reviewQueue);
   const queueLoopCount = useQuranStore((s) => s.queueLoopCount);
   const svgToJsonWordMap = useQuranStore((s) => s.svgToJsonWordMap);
+  const playbackRate = useQuranStore((s) => s.playbackRate);
+  const playbackRateRef = useRef(playbackRate);
+  playbackRateRef.current = playbackRate;
 
   const [queueIsPlaying, setQueueIsPlaying] = useState(false);
   const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
@@ -125,6 +128,7 @@ export function useQueuePlayback(): QueuePlaybackState {
   useEffect(() => {
     function getOrCreateAudio(): HTMLAudioElement {
       if (!audioRef.current) audioRef.current = new Audio();
+      audioRef.current.playbackRate = playbackRateRef.current;
       return audioRef.current;
     }
 
@@ -401,6 +405,13 @@ export function useQueuePlayback(): QueuePlaybackState {
     advanceToCursorRef.current = advanceToCursor;
     seekQueueToRef.current = seekQueueTo;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Apply rate changes to the audio element mid-playback
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
 
   // ------------------------------------------------------------------
   // Cleanup on unmount

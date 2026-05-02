@@ -139,6 +139,10 @@ export function useSelectionAudio(): SelectionAudioState {
   const svgToJsonWordMapRef = useRef(svgToJsonWordMap);
   svgToJsonWordMapRef.current = svgToJsonWordMap;
 
+  const playbackRate = useQuranStore((s) => s.playbackRate);
+  const playbackRateRef = useRef(playbackRate);
+  playbackRateRef.current = playbackRate;
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentAyahKey, setCurrentAyahKey] = useState<string | null>(null);
@@ -223,8 +227,15 @@ export function useSelectionAudio(): SelectionAudioState {
     if (!audioRef.current) {
       audioRef.current = new Audio();
     }
+    audioRef.current.playbackRate = playbackRateRef.current;
     return audioRef.current;
   }
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
 
   function clearActiveHighlight() {
     prevActiveIdsRef.current = [];

@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useRef, useMemo, useState } from "react";
 import { Play, Pause, Repeat, Music2, Highlighter, ListMusic, CheckCheck } from "lucide-react";
+import SpeedSelector from "./SpeedSelector";
 import type { ChapterMap } from "../types/quran";
 import { useSelectionAudio } from "../hooks/useSelectionAudio";
 import type { QueuePlaybackState } from "../hooks/useQueuePlayback";

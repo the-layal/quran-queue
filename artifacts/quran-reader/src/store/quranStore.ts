@@ -83,6 +83,9 @@ interface QuranStore {
   setQueueLoopCount: (count: number) => void;
   setReviewQueue: (items: ReviewQueueItem[]) => void;
   setIsSharedQueue: (shared: boolean) => void;
+
+  playbackRate: number;
+  setPlaybackRate: (rate: number) => void;
 }
 
 function genId(): string {
@@ -133,6 +136,8 @@ export const useQuranStore = create<QuranStore>()(
       queueRepeatAll: 1,
       queueLoopCount: 1,
       isSharedQueue: false,
+
+      playbackRate: 1,
 
       setCurrentSurah: (surah) =>
         set({ currentSurah: Math.max(1, Math.min(114, surah)) }),
@@ -231,6 +236,8 @@ export const useQuranStore = create<QuranStore>()(
         set({ reviewQueue: items, activeQueueItemId: null, isSharedQueue: false }),
 
       setIsSharedQueue: (shared) => set({ isSharedQueue: shared }),
+
+      setPlaybackRate: (rate) => set({ playbackRate: rate }),
     }),
     {
       name: "quran-reader-store",
@@ -245,6 +252,7 @@ export const useQuranStore = create<QuranStore>()(
         queueRepeatAll: state.queueRepeatAll,
         queueLoopCount: state.queueLoopCount,
         isSharedQueue: state.isSharedQueue,
+        playbackRate: state.playbackRate,
       }),
     }
   )
