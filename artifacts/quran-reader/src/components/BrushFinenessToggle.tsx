@@ -26,13 +26,16 @@ export default function BrushFinenessToggle() {
             key={value}
             onClick={() => setBrushFineness(value)}
             title={title}
+            aria-label={title}
             className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
               brushFineness === value
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {label}
+            {/* Full label at xs+; initial only below xs so the pill stays compact */}
+            <span className="hidden xs:inline">{label}</span>
+            <span className="xs:hidden">{label[0]}</span>
           </button>
         ))}
       </div>

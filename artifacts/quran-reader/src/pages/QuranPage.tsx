@@ -1039,40 +1039,54 @@ export default function QuranPage() {
 
       {/* ── Footer navigation ───────────────────────────────────────────── */}
       <footer className="sticky bottom-0 z-30 bg-background/90 backdrop-blur-sm border-t border-border">
-        {/* ── Controls row: Brush fineness + Visibility mode toggle + contextual reveal ── */}
-        <div className="flex items-center justify-center gap-2 py-1.5 border-b border-border/40">
-          <BrushFinenessToggle />
-          <div className="w-px h-4 bg-border/60 flex-shrink-0" aria-hidden />
-          <BlindReviewToggle />
-          {blindReviewMode === "blind" && (
-            <>
-              <div className="w-px h-4 bg-border/60 flex-shrink-0" aria-hidden />
-              <button
-                onClick={handleRevealWord}
-                className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                title="Reveal the next hidden word"
-              >
-                <Eye className="w-3.5 h-3.5 flex-shrink-0" />
-                Word
-              </button>
-              <button
-                onClick={handleRevealAyah}
-                className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                title="Reveal all words in the next ayah"
-              >
-                <Eye className="w-3.5 h-3.5 flex-shrink-0" />
-                Ayah
-              </button>
-              <button
-                onClick={clearManualReveals}
-                className="flex items-center justify-center w-6 h-6 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                title="Hide all revealed words"
-                aria-label="Reset reveals"
-              >
-                <RotateCcw className="w-3 h-3" />
-              </button>
-            </>
-          )}
+        {/* Controls row — three-slot grid keeps the center toggle anchored */}
+        <div
+          className="grid items-center py-1.5 border-b border-border/40 px-2"
+          style={{ gridTemplateColumns: "minmax(0,1fr) auto minmax(0,1fr)" }}
+        >
+          {/* Left slot */}
+          <div className="flex items-center min-w-0">
+            <BrushFinenessToggle />
+          </div>
+          {/* Center slot — always at the grid midpoint */}
+          <div className="flex items-center gap-1.5">
+            <div className="w-px h-4 bg-border/60 flex-shrink-0" aria-hidden />
+            <BlindReviewToggle />
+            <div className="w-px h-4 bg-border/60 flex-shrink-0" aria-hidden />
+          </div>
+          {/* Right slot — reveal controls; labels hidden below xs to stay compact */}
+          <div className="flex items-center gap-1 min-w-0">
+            {blindReviewMode === "blind" && (
+              <>
+                <button
+                  onClick={handleRevealWord}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                  title="Reveal the next hidden word"
+                  aria-label="Reveal word"
+                >
+                  <Eye className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="hidden xs:inline" aria-hidden>Word</span>
+                </button>
+                <button
+                  onClick={handleRevealAyah}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                  title="Reveal all words in the next ayah"
+                  aria-label="Reveal ayah"
+                >
+                  <Eye className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="hidden xs:inline" aria-hidden>Ayah</span>
+                </button>
+                <button
+                  onClick={clearManualReveals}
+                  className="flex items-center justify-center w-6 h-6 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                  title="Hide all revealed words"
+                  aria-label="Reset reveals"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         {isMushaf ? (
