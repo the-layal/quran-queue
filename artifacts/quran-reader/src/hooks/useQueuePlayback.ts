@@ -119,6 +119,20 @@ export function useQueuePlayback(): QueuePlaybackState {
   }, []);
 
   // ------------------------------------------------------------------
+  // Clear highlights immediately when word highlighting is disabled mid-playback.
+  // Without this, stale highlights linger until the next timeupdate tick (or
+  // forever, if currently paused). Mirrors useSelectionAudio's behavior.
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    if (!playbackHighlightEnabled) {
+      prevActiveIdsRef.current = [];
+      prevCurrentWordIdRef.current = null;
+      useQuranStore.getState().setPlaybackActiveIds([]);
+      useQuranStore.getState().setPlaybackCurrentWordId(null);
+    }
+  }, [playbackHighlightEnabled]);
+
+  // ------------------------------------------------------------------
   // Stop on queue cleared (whether playing or paused at a position)
   // ------------------------------------------------------------------
   useEffect(() => {
@@ -149,6 +163,10 @@ export function useQueuePlayback(): QueuePlaybackState {
       setQueueCurrentRegionsRef.current([]);
       setQueueTotalDurationSecRef.current(0);
       useQuranStore.getState().setActiveQueueItemId(null);
+      prevActiveIdsRef.current = [];
+      prevCurrentWordIdRef.current = null;
+      useQuranStore.getState().setPlaybackActiveIds([]);
+      useQuranStore.getState().setPlaybackCurrentWordId(null);
     }
   }, [reviewQueue.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
