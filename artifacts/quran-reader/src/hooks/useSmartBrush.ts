@@ -4,6 +4,17 @@ import type { BrushFineness } from "../types/quran";
 import { hasArabicLetter } from "../utils/arabicUtils";
 import { preloadWordCounts, getAyahWordCount } from "../utils/quranWordCounts";
 
+// Canonical verse counts per surah (1-indexed), used for cross-surah boundary detection.
+// These are fixed constants of the Quran and will never change.
+const SURAH_AYAH_COUNTS: readonly number[] = [
+  7, 286, 200, 176, 120, 165, 206, 75, 129, 109, 123, 111, 43, 52, 99, 128,
+  111, 110, 98, 135, 112, 78, 118, 64, 77, 227, 93, 88, 69, 60, 34, 30, 73,
+  54, 45, 83, 182, 88, 75, 85, 54, 53, 89, 59, 37, 35, 38, 29, 18, 45, 60, 49,
+  62, 55, 78, 96, 29, 22, 24, 13, 14, 11, 11, 18, 12, 12, 30, 52, 52, 44, 28,
+  28, 20, 56, 40, 31, 50, 40, 46, 42, 29, 19, 36, 25, 22, 17, 19, 26, 30, 20,
+  15, 21, 11, 8, 8, 19, 5, 8, 8, 11, 11, 8, 3, 9, 5, 4, 7, 3, 6, 3, 5, 4, 5, 6,
+];
+
 // Start fetching word-count data immediately so it is ready before any gesture.
 preloadWordCounts();
 
@@ -136,20 +147,19 @@ function getFirstWordId(unit: Unit): string | null {
 
 /**
  * Returns true iff `candidateId` is the direct next word after `lastId` in
- * the Quran word sequence.  Two cases are supported:
+ * the Quran word sequence.  Three cases are handled:
  *
- *  1. Same ayah, consecutive word (w2 === w1 + 1) — exact, no extra data needed.
+ *  1. Same ayah, consecutive word (w2 === w1 + 1) — exact, no extra data.
  *
- *  2. Candidate is the first word of the next ayah in the same surah
- *     (a2 === a1 + 1, w2 === 1) — confirmed only when `lastId` is provably the
- *     final word of its ayah, i.e. w1 === getAyahWordCount(s1, a1).  If the
- *     word-count data has not loaded yet, we conservatively return false rather
- *     than risk incorrectly merging unrelated selections.
+ *  2. First word of the next ayah in the same surah (a2 === a1+1, w2 === 1):
+ *     exact — confirmed only when w1 === getAyahWordCount(s1, a1), proving
+ *     lastId is the final word of its ayah.  Returns false if word-count data
+ *     has not loaded yet (safe conservative fallback).
  *
- *  Cross-surah boundaries are treated as non-adjacent (return false) because
- *  verifying that the last ayah of surah S1 was fully selected would require
- *  surah verse-count data that is not worth loading for this rare edge case.
- *  A fresh selection starting at the next surah is always safe.
+ *  3. First word of ayah 1 of the next surah (s2 === s1+1, a2 === 1, w2 === 1):
+ *     exact — confirmed when a1 is the last ayah of surah s1 (via the canonical
+ *     SURAH_AYAH_COUNTS table) AND w1 is the last word of that ayah (via
+ *     getAyahWordCount).  Returns false if word-count data not loaded.
  */
 function isDirectlyAdjacentInQuran(lastId: string, candidateId: string): boolean {
   const p1 = parseWordId(lastId);
@@ -159,14 +169,20 @@ function isDirectlyAdjacentInQuran(lastId: string, candidateId: string): boolean
   // Case 1: same ayah, next word — exact
   if (p1.s === p2.s && p1.a === p2.a && p2.w === p1.w + 1) return true;
 
-  // Case 2: first word of the next ayah in the same surah — requires word count
+  // Case 2: first word of the next ayah in the same surah
   if (p1.s === p2.s && p2.a === p1.a + 1 && p2.w === 1) {
     const wordCount = getAyahWordCount(p1.s, p1.a);
-    // wordCount === null means the data hasn't loaded; return false (safe default).
     return wordCount !== null && p1.w === wordCount;
   }
 
-  // Cross-surah and all other cases: not adjacent
+  // Case 3: first word of the first ayah of the next surah
+  if (p2.s === p1.s + 1 && p2.a === 1 && p2.w === 1) {
+    const lastAyahOfSurah = SURAH_AYAH_COUNTS[p1.s - 1]; // 1-indexed
+    if (p1.a !== lastAyahOfSurah) return false;           // not the final ayah
+    const wordCount = getAyahWordCount(p1.s, p1.a);
+    return wordCount !== null && p1.w === wordCount;
+  }
+
   return false;
 }
 

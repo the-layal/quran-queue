@@ -13,7 +13,9 @@ let wordCountCache: Map<string, number> | null = null;
 let loadPromise: Promise<void> | null = null;
 
 function doLoad(): Promise<void> {
-  return fetch("/quran-segments-data.json")
+  const base = import.meta.env.BASE_URL;
+  const url = `${base}quran-segments-data.json`.replace(/\/\//g, "/");
+  return fetch(url)
     .then((r) => r.json())
     .then(
       (data: Record<string, { segments: [number, number, number][] }>) => {
