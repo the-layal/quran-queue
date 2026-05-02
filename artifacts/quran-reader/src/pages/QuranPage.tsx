@@ -1,10 +1,9 @@
 import { useEffect, useCallback, useState, useRef, type RefObject } from "react";
-import { Link } from "wouter";
 import {
   ChevronLeft,
   ChevronRight,
   Settings,
-  BarChart2,
+  ListMusic,
   Moon,
   Sun,
   Loader2,
@@ -627,6 +626,7 @@ export default function QuranPage() {
 
   const setReviewQueue = useQuranStore((s) => s.setReviewQueue);
   const setIsSharedQueue = useQuranStore((s) => s.setIsSharedQueue);
+  const queuePanelOpen = useQuranStore((s) => s.queuePanelOpen);
   const setQueuePanelOpen = useQuranStore((s) => s.setQueuePanelOpen);
 
   const [darkMode, setDarkMode] = useState(() =>
@@ -807,14 +807,19 @@ export default function QuranPage() {
     >
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 bg-background/90 backdrop-blur-sm border-b border-border grid grid-cols-[auto_1fr_auto] items-center px-4 py-2.5">
-        <Link href="/analytics">
-          <button
-            className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-            aria-label="Analytics"
-          >
-            <BarChart2 className="w-5 h-5" />
-          </button>
-        </Link>
+        <button
+          onClick={() => setQueuePanelOpen(!queuePanelOpen)}
+          className={`p-2 rounded-lg transition-colors ${
+            queuePanelOpen
+              ? "bg-primary/15 text-primary"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+          }`}
+          aria-label={queuePanelOpen ? "Close review queue" : "Open review queue"}
+          aria-pressed={queuePanelOpen}
+          title="Review queue"
+        >
+          <ListMusic className="w-5 h-5" />
+        </button>
 
         <SurahSelectorButton
           chapter={chapter}
