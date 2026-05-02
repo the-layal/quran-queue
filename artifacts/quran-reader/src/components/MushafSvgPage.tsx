@@ -113,6 +113,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const playbackCurrentWordId = useQuranStore((s) => s.playbackCurrentWordId);
   const setSvgWordAlignmentMaps = useQuranStore((s) => s.setSvgWordAlignmentMaps);
   const setAyahLastSelectableIdx = useQuranStore((s) => s.setAyahLastSelectableIdx);
+  const setAyahFirstSelectableIdx = useQuranStore((s) => s.setAyahFirstSelectableIdx);
   const jsonToSvgWordsMap = useQuranStore((s) => s.jsonToSvgWordsMap);
   const jsonToSvgWordsMapRef = useRef(jsonToSvgWordsMap);
   jsonToSvgWordsMapRef.current = jsonToSvgWordsMap;
@@ -616,22 +617,25 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
 
       setSvgWordAlignmentMaps(alignSvgToJson, alignJsonToSvg);
 
-      // Record the last *selectable* SVG word index per ayah for every ayah
-      // visible on this page.  "Selectable" means not a waqf mark — waqf
-      // marks are excluded from brush units but still have SVG word indices.
-      // This data drives the exact cross-page adjacency check in useSmartBrush.
-      const lastSelectableMap: Record<string, number> = {};
+      // Record the first and last *selectable* SVG word index per ayah for
+      // every ayah visible on this page.  "Selectable" means not a waqf mark
+      // (waqf marks are excluded from brush units but still occupy SVG word
+      // indices).  Both maps are used by the cross-page adjacency check in
+      // useSmartBrush to identify exact continuation points.
+      const lastSelectableMap:  Record<string, number> = {};
+      const firstSelectableMap: Record<string, number> = {};
       ayahGroups.forEach((words, key) => {
-        const lastSelectable = words
-          .filter((w) => !w.isWaqf)
-          .reduce((max, w) => Math.max(max, w.svgIdx), 0);
-        if (lastSelectable > 0) lastSelectableMap[key] = lastSelectable;
+        const selectableWords = words.filter((w) => !w.isWaqf);
+        if (selectableWords.length === 0) return;
+        lastSelectableMap[key]  = selectableWords.reduce((max, w) => Math.max(max, w.svgIdx), 0);
+        firstSelectableMap[key] = selectableWords.reduce((min, w) => Math.min(min, w.svgIdx), Infinity);
       });
       setAyahLastSelectableIdx(lastSelectableMap);
+      setAyahFirstSelectableIdx(firstSelectableMap);
     });
 
     return () => cancelAnimationFrame(rafId);
-  }, [svgText, scale, pageNumber, setSvgWordAlignmentMaps, setAyahLastSelectableIdx]);
+  }, [svgText, scale, pageNumber, setSvgWordAlignmentMaps, setAyahLastSelectableIdx, setAyahFirstSelectableIdx]);
 
   // ── Word-state helpers ──────────────────────────────────────────────────
   const clearActiveWord = useCallback(() => {

@@ -38,12 +38,15 @@ interface QuranStore {
   ) => void;
 
   // Maps "S:A" → last selectable SVG word index for each ayah on loaded pages.
-  // Populated by MushafSvgPage when a page is rendered so that cross-page
-  // adjacency checks can determine whether a selected word is truly the final
-  // word of its ayah (SVG indices diverge from JSON segment counts for ayahs
-  // with waw al-atf groups, waqf marks, or juz-star markers).
+  // Maps "S:A" → first selectable SVG word index for each ayah on loaded pages.
+  // Both populated by MushafSvgPage when a page is rendered so that cross-page
+  // adjacency checks can determine whether a selected word is truly the first or
+  // final word of its ayah.  SVG word indices diverge from JSON segment counts
+  // for ayahs with waw al-atf groups, waqf marks, or juz-star markers.
   ayahLastSelectableIdx: Record<string, number>;
   setAyahLastSelectableIdx: (map: Record<string, number>) => void;
+  ayahFirstSelectableIdx: Record<string, number>;
+  setAyahFirstSelectableIdx: (map: Record<string, number>) => void;
 
   reviewQueue: ReviewQueueItem[];
   activeQueueItemId: string | null;
@@ -122,6 +125,12 @@ export const useQuranStore = create<QuranStore>()(
       setAyahLastSelectableIdx: (map) =>
         set((state) => ({
           ayahLastSelectableIdx: { ...state.ayahLastSelectableIdx, ...map },
+        })),
+
+      ayahFirstSelectableIdx: {},
+      setAyahFirstSelectableIdx: (map) =>
+        set((state) => ({
+          ayahFirstSelectableIdx: { ...state.ayahFirstSelectableIdx, ...map },
         })),
 
       reviewQueue: [],
