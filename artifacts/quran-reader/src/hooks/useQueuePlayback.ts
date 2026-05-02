@@ -51,7 +51,11 @@ export function useQueuePlayback(): QueuePlaybackState {
   const svgToJsonWordMapRef = useRef(svgToJsonWordMap);
   svgToJsonWordMapRef.current = svgToJsonWordMap;
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // rafRef kept for legacy cancel sites but no longer used for timing
   const rafRef = useRef<number | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timeupdateListenerRef = useRef<(() => void) | null>(null);
+  const regionEndedRef = useRef(false);
   const isPlayingRef = useRef(false);
 
   // Playback cursor
@@ -101,11 +105,19 @@ export function useQueuePlayback(): QueuePlaybackState {
   // ------------------------------------------------------------------
   useEffect(() => {
     if (reviewQueue.length === 0) {
-      // Hard stop — cancel RAF, pause audio, reset all state regardless of
+      // Hard stop — cancel timers, pause audio, reset all state regardless of
       // playing/paused so stale "queue-active" visuals never persist.
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
+      }
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      if (timeupdateListenerRef.current && audioRef.current) {
+        audioRef.current.removeEventListener("timeupdate", timeupdateListenerRef.current);
+        timeupdateListenerRef.current = null;
       }
       if (audioRef.current) {
         audioRef.current.onended = null;
@@ -132,10 +144,18 @@ export function useQueuePlayback(): QueuePlaybackState {
       return audioRef.current;
     }
 
-    function cancelRaf() {
+    function cancelTimers() {
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
+      }
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      if (timeupdateListenerRef.current && audioRef.current) {
+        audioRef.current.removeEventListener("timeupdate", timeupdateListenerRef.current);
+        timeupdateListenerRef.current = null;
       }
     }
 
@@ -242,79 +262,109 @@ export function useQueuePlayback(): QueuePlaybackState {
       const totalDur = queueTotalDurationSecRef.current;
       regionIndexRef.current = regionIndex;
 
-      cancelRaf();
+      cancelTimers();
       const audio = getOrCreateAudio();
       audio.onended = null;
 
+      // Precompute the static part of gapless eligibility up-front.
+      // (audio.ended is checked at fire-time to handle natural track end.)
+      let nextRegion: PlaybackRegion | null = null;
+      if (regionIndex + 1 < allRegions.length) {
+        nextRegion = allRegions[regionIndex + 1];
+      } else {
+        const nc = getNextCursor(itemIndexRef.current, repeatNumRef.current);
+        if (nc) {
+          const aData = audioDataRef.current;
+          const nextItem = reviewQueueRef.current[nc.itemIndex];
+          if (aData && nextItem) {
+            const nr = computePlaybackRegions(nextItem.selectedWordIds, aData, nextItem.brushFineness, svgToJsonWordMapRef.current);
+            nextRegion = nr[0] ?? null;
+          }
+        }
+      }
+
+      const gaplessStaticOk =
+        nextRegion != null &&
+        nextRegion.audioUrl === region.audioUrl &&
+        nextRegion.surahNumber === region.surahNumber &&
+        nextRegion.ayahNumber === region.ayahNumber + 1;
+
+      const endThreshold = gaplessStaticOk ? endSec - 0.01 : endSec - 0.08;
+
       const startTicking = () => {
-        const tick = () => {
+        // Reset the double-fire guard for this new region.
+        regionEndedRef.current = false;
+
+        const handleRegionEnd = () => {
+          if (regionEndedRef.current) return;
+          regionEndedRef.current = true;
+
+          // Clean up both mechanisms.
+          if (timeupdateListenerRef.current) {
+            audio.removeEventListener("timeupdate", timeupdateListenerRef.current);
+            timeupdateListenerRef.current = null;
+          }
+          if (timeoutRef.current !== null) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+          }
+
+          if (!isPlayingRef.current) return;
+
+          elapsedBeforeRef.current = elapsedBefore + regionDurSec;
+
+          const gaplessOk = gaplessStaticOk && !audio.ended;
+
+          if (gaplessOk) {
+            if (regionIndex + 1 < allRegions.length) {
+              playRegionRef.current?.(regionIndex + 1, true);
+            } else {
+              // Cross-item/repeat gapless: update cursor without pausing audio
+              const nc = getNextCursor(itemIndexRef.current, repeatNumRef.current)!;
+              itemIndexRef.current = nc.itemIndex;
+              repeatNumRef.current = nc.repeatNum;
+              updateVisualState(nc.itemIndex);
+              const aData = audioDataRef.current!;
+              const nextItem = reviewQueueRef.current[nc.itemIndex];
+              const nextRegions = computePlaybackRegions(nextItem.selectedWordIds, aData, nextItem.brushFineness, svgToJsonWordMapRef.current);
+              const nextTotalDur = nextRegions.reduce((s, r) => s + r.durationMs, 0) / 1000;
+              queueTotalDurationSecRef.current = nextTotalDur;
+              setQueueTotalDurationSecRef.current(nextTotalDur);
+              setQueueCurrentRegionsRef.current(nextRegions);
+              currentRegionsRef.current = nextRegions;
+              elapsedBeforeRef.current = 0;
+              playRegionRef.current?.(0, true);
+            }
+          } else {
+            audio.pause();
+            audio.onended = null;
+            playRegionRef.current?.(regionIndex + 1, false);
+          }
+        };
+
+        // Primary mechanism: timeupdate fires ~4× per second even in background tabs.
+        const onTimeUpdate = () => {
           if (!isPlayingRef.current) return;
           const ct = audio.currentTime;
 
-          // Update progress for control bar
+          // Update progress for the control bar.
           const regionElapsed = Math.max(0, ct - startSec);
           const prog = totalDur > 0 ? Math.min((elapsedBefore + regionElapsed) / totalDur, 1) : 0;
           setQueueProgressRef.current(prog);
 
-          // Determine next region — may cross item/repeat boundaries for gapless
-          let nextRegion: PlaybackRegion | null = null;
-          if (regionIndex + 1 < allRegions.length) {
-            nextRegion = allRegions[regionIndex + 1];
-          } else {
-            const nc = getNextCursor(itemIndexRef.current, repeatNumRef.current);
-            if (nc) {
-              const aData = audioDataRef.current;
-              const nextItem = reviewQueueRef.current[nc.itemIndex];
-              if (aData && nextItem) {
-                const nr = computePlaybackRegions(nextItem.selectedWordIds, aData, nextItem.brushFineness, svgToJsonWordMapRef.current);
-                nextRegion = nr[0] ?? null;
-              }
-            }
-          }
-
-          const gaplessOk =
-            !audio.ended &&
-            nextRegion != null &&
-            nextRegion.audioUrl === region.audioUrl &&
-            nextRegion.surahNumber === region.surahNumber &&
-            nextRegion.ayahNumber === region.ayahNumber + 1;
-
-          const endThreshold = gaplessOk ? endSec - 0.01 : endSec - 0.08;
-
           if (ct >= endThreshold || audio.ended) {
-            elapsedBeforeRef.current = elapsedBefore + regionDurSec;
-
-            if (gaplessOk) {
-              if (regionIndex + 1 < allRegions.length) {
-                playRegionRef.current?.(regionIndex + 1, true);
-              } else {
-                // Cross-item/repeat gapless: update cursor without pausing audio
-                const nc = getNextCursor(itemIndexRef.current, repeatNumRef.current)!;
-                itemIndexRef.current = nc.itemIndex;
-                repeatNumRef.current = nc.repeatNum;
-                updateVisualState(nc.itemIndex);
-                const aData = audioDataRef.current!;
-                const nextItem = reviewQueueRef.current[nc.itemIndex];
-                const nextRegions = computePlaybackRegions(nextItem.selectedWordIds, aData, nextItem.brushFineness, svgToJsonWordMapRef.current);
-                const nextTotalDur = nextRegions.reduce((s, r) => s + r.durationMs, 0) / 1000;
-                queueTotalDurationSecRef.current = nextTotalDur;
-                setQueueTotalDurationSecRef.current(nextTotalDur);
-                setQueueCurrentRegionsRef.current(nextRegions);
-                currentRegionsRef.current = nextRegions;
-                elapsedBeforeRef.current = 0;
-                playRegionRef.current?.(0, true);
-              }
-            } else {
-              audio.pause();
-              audio.onended = null;
-              playRegionRef.current?.(regionIndex + 1, false);
-            }
-            return;
+            handleRegionEnd();
           }
-
-          rafRef.current = requestAnimationFrame(tick);
         };
-        rafRef.current = requestAnimationFrame(tick);
+
+        timeupdateListenerRef.current = onTimeUpdate;
+        audio.addEventListener("timeupdate", onTimeUpdate);
+
+        // Fallback mechanism: setTimeout scheduled for the expected cut point.
+        // Adds 150 ms buffer to account for timeupdate firing late; the
+        // double-fire guard ensures only the first arrival takes effect.
+        const remainingMs = (endThreshold - audio.currentTime) / (audio.playbackRate || 1) * 1000;
+        timeoutRef.current = setTimeout(handleRegionEnd, Math.max(0, remainingMs + 150));
       };
 
       const doSeekAndPlay = () => {
@@ -371,7 +421,7 @@ export function useQueuePlayback(): QueuePlaybackState {
         accumulated += regionDurSec;
       }
 
-      cancelRaf();
+      cancelTimers();
       if (audioRef.current) audioRef.current.pause();
 
       elapsedBeforeRef.current = accumulated;
@@ -419,6 +469,11 @@ export function useQueuePlayback(): QueuePlaybackState {
   useEffect(() => {
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      if (timeoutRef.current !== null) clearTimeout(timeoutRef.current);
+      if (timeupdateListenerRef.current && audioRef.current) {
+        audioRef.current.removeEventListener("timeupdate", timeupdateListenerRef.current);
+        timeupdateListenerRef.current = null;
+      }
       if (audioRef.current) {
         audioRef.current.onended = null;
         audioRef.current.pause();
@@ -463,6 +518,14 @@ export function useQueuePlayback(): QueuePlaybackState {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
+    if (timeoutRef.current !== null) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    if (timeupdateListenerRef.current && audioRef.current) {
+      audioRef.current.removeEventListener("timeupdate", timeupdateListenerRef.current);
+      timeupdateListenerRef.current = null;
+    }
     const audio = audioRef.current;
     if (audio) {
       const allRegions = currentRegionsRef.current;
@@ -485,6 +548,14 @@ export function useQueuePlayback(): QueuePlaybackState {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
+    }
+    if (timeoutRef.current !== null) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    if (timeupdateListenerRef.current && audioRef.current) {
+      audioRef.current.removeEventListener("timeupdate", timeupdateListenerRef.current);
+      timeupdateListenerRef.current = null;
     }
     if (audioRef.current) {
       audioRef.current.onended = null;

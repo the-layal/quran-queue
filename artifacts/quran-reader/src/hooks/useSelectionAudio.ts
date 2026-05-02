@@ -150,7 +150,11 @@ export function useSelectionAudio(): SelectionAudioState {
   const [regions, setRegions] = useState<PlaybackRegion[]>([]);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // rafRef kept for legacy cancel sites but no longer used for timing
   const rafRef = useRef<number | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timeupdateListenerRef = useRef<(() => void) | null>(null);
+  const regionEndedRef = useRef(false);
   const queueRepeatAllRef = useRef(queueRepeatAll);
   queueRepeatAllRef.current = queueRepeatAll;
   const repeatsDoneRef = useRef(0);
@@ -183,7 +187,7 @@ export function useSelectionAudio(): SelectionAudioState {
   regionsRef.current = regions;
 
   // When the highlight mode changes, invalidate the cached IDs so the very next
-  // RAF tick always pushes a fresh update — even if the new mode happens to
+  // timeupdate tick always pushes a fresh update — even if the new mode happens to
   // produce the same word list as the old mode (e.g. a single-line short ayah).
   useEffect(() => {
     prevActiveIdsRef.current = [];
@@ -244,15 +248,23 @@ export function useSelectionAudio(): SelectionAudioState {
     setPlaybackCurrentWordId(null);
   }
 
-  function cancelRaf() {
+  function cancelTimers() {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
+    if (timeoutRef.current !== null) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    if (timeupdateListenerRef.current && audioRef.current) {
+      audioRef.current.removeEventListener("timeupdate", timeupdateListenerRef.current);
+      timeupdateListenerRef.current = null;
+    }
   }
 
   function stopPlayback() {
-    cancelRaf();
+    cancelTimers();
     pendingSeekRef.current = null;
     if (audioRef.current) {
       audioRef.current.onended = null;
@@ -276,7 +288,7 @@ export function useSelectionAudio(): SelectionAudioState {
         playRegion(0);
       } else {
         repeatsDoneRef.current = 0;
-        cancelRaf();
+        cancelTimers();
         setIsPlaying(false);
         setProgress(1);
         prevActiveIdsRef.current = [];
@@ -297,13 +309,56 @@ export function useSelectionAudio(): SelectionAudioState {
     const elapsedBefore = elapsedBeforeSecRef.current;
 
     setCurrentAyahKey(region.ayahKey);
-    cancelRaf();
+    cancelTimers();
 
     const audio = getOrCreateAudio();
     audio.onended = null;
 
+    // Precompute static gapless eligibility.
+    const nextIndex = regionIndex + 1;
+    const nextRegion = allRegions[nextIndex] ?? null;
+    const gaplessStaticOk =
+      nextRegion != null &&
+      nextRegion.audioUrl === region.audioUrl &&
+      nextRegion.surahNumber === region.surahNumber &&
+      nextRegion.ayahNumber === region.ayahNumber + 1;
+
+    const endThreshold = gaplessStaticOk ? endSec - 0.01 : endSec - 0.08;
+
     const startTicking = () => {
-      const tick = () => {
+      // Reset the double-fire guard for this new region.
+      regionEndedRef.current = false;
+
+      const handleRegionEnd = () => {
+        if (regionEndedRef.current) return;
+        regionEndedRef.current = true;
+
+        // Clean up both mechanisms.
+        if (timeupdateListenerRef.current) {
+          audio.removeEventListener("timeupdate", timeupdateListenerRef.current);
+          timeupdateListenerRef.current = null;
+        }
+        if (timeoutRef.current !== null) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+
+        elapsedBeforeSecRef.current = elapsedBefore + regionDurSec;
+
+        const gaplessOk = gaplessStaticOk && !audio.ended;
+
+        if (gaplessOk) {
+          // Same adjacent surah region: audio keeps playing uninterrupted.
+          playRegion(nextIndex, true);
+        } else {
+          audio.pause();
+          audio.onended = null;
+          playRegion(nextIndex, false);
+        }
+      };
+
+      // Primary mechanism: timeupdate fires ~4× per second even in background tabs.
+      const onTimeUpdate = () => {
         const ct = audio.currentTime;
         const regionElapsed = Math.max(0, ct - startSec);
         const prog =
@@ -359,7 +414,7 @@ export function useSelectionAudio(): SelectionAudioState {
         }
 
         // Publish the single current-word highlight only when word highlighting is on.
-        // Deduplicate to avoid unnecessary Zustand updates on every RAF tick.
+        // Deduplicate to avoid unnecessary Zustand updates on every timeupdate tick.
         if (highlightEnabled) {
           const [surahStr, ayahStr] = activeKey.split(":");
           const newCurrentWordId =
@@ -372,38 +427,19 @@ export function useSelectionAudio(): SelectionAudioState {
           }
         }
 
-        // Pre-compute gapless eligibility so we can set the boundary threshold
-        // correctly: gapless transitions need no seek, so a tight boundary is
-        // fine; pause/seek transitions need an 80 ms lookahead to avoid stutters.
-        const nextIndex = regionIndex + 1;
-        const nextRegion = allRegions[nextIndex];
-        const gaplessOk =
-          !audio.ended &&
-          nextRegion != null &&
-          nextRegion.audioUrl === region.audioUrl &&
-          nextRegion.surahNumber === region.surahNumber &&
-          nextRegion.ayahNumber === region.ayahNumber + 1;
-        // For gapless: fire at the true boundary (10 ms slack for float jitter).
-        // For pause/seek: keep the original 80 ms lookahead.
-        const endThreshold = gaplessOk ? endSec - 0.01 : endSec - 0.08;
-
         if (ct >= endThreshold || audio.ended) {
-          elapsedBeforeSecRef.current = elapsedBefore + regionDurSec;
-
-          if (gaplessOk) {
-            // Same adjacent surah region: audio keeps playing uninterrupted.
-            playRegion(nextIndex, true);
-          } else {
-            audio.pause();
-            audio.onended = null;
-            playRegion(nextIndex, false);
-          }
-          return;
+          handleRegionEnd();
         }
-
-        rafRef.current = requestAnimationFrame(tick);
       };
-      rafRef.current = requestAnimationFrame(tick);
+
+      timeupdateListenerRef.current = onTimeUpdate;
+      audio.addEventListener("timeupdate", onTimeUpdate);
+
+      // Fallback mechanism: setTimeout scheduled for the expected cut point.
+      // Adds 150 ms buffer to account for timeupdate firing late; the
+      // double-fire guard ensures only the first arrival takes effect.
+      const remainingMs = (endThreshold - audio.currentTime) / (audio.playbackRate || 1) * 1000;
+      timeoutRef.current = setTimeout(handleRegionEnd, Math.max(0, remainingMs + 150));
     };
 
     const doSeekAndPlay = () => {
@@ -437,7 +473,7 @@ export function useSelectionAudio(): SelectionAudioState {
     } else {
       doSeekAndPlay();
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const play = useCallback(() => {
     if (regions.length === 0) return;
@@ -493,8 +529,8 @@ export function useSelectionAudio(): SelectionAudioState {
 
       const wasPlaying = isPlayingRef.current;
 
-      // Stop the RAF loop and pause audio before seeking.
-      cancelRaf();
+      // Stop the timers and pause audio before seeking.
+      cancelTimers();
       if (audioRef.current) audioRef.current.pause();
 
       elapsedBeforeSecRef.current = accumulated;
@@ -540,7 +576,7 @@ export function useSelectionAudio(): SelectionAudioState {
 
   useEffect(() => {
     return () => {
-      cancelRaf();
+      cancelTimers();
       if (audioRef.current) {
         audioRef.current.onended = null;
         audioRef.current.pause();
