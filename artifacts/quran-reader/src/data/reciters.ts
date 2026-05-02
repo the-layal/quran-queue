@@ -10,9 +10,17 @@ export interface Reciter {
   audioManifestPath?: string;
 }
 
-export const DEFAULT_RECITER_ID = "alafasy";
+export const DEFAULT_RECITER_ID = "husary";
 
 export const RECITERS: Reciter[] = [
+  {
+    id: "husary",
+    nameEn: "Mahmoud Khalil Al-Husary",
+    nameAr: "محمود خليل الحصري",
+    style: "murattal",
+    dataFormat: "ayah-mp3",
+    dataPath: "reciters/husary.json",
+  },
   {
     id: "alafasy",
     nameEn: "Mishary Rashid Alafasy",
@@ -37,14 +45,6 @@ export const RECITERS: Reciter[] = [
     style: "murattal",
     dataFormat: "ayah-mp3",
     dataPath: "reciters/maher-muaiqly.json",
-  },
-  {
-    id: "husary",
-    nameEn: "Mahmoud Khalil Al-Husary",
-    nameAr: "محمود خليل الحصري",
-    style: "murattal",
-    dataFormat: "ayah-mp3",
-    dataPath: "reciters/husary.json",
   },
   {
     id: "hani-rifai",
