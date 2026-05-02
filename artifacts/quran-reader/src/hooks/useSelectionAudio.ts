@@ -45,9 +45,7 @@ export function useSelectionAudio(): SelectionAudioState {
   const [currentAyahKey, setCurrentAyahKey] = useState<string | null>(null);
   const [audioData, setAudioData] = useState<AudioDataMap | null>(null);
   const [regions, setRegions] = useState<PlaybackRegion[]>([]);
-  // True while the selected reciter's audio data is being fetched. Used by
-  // AudioControlBar to render a loading spinner on the play button instead
-  // of momentarily flashing the "No audio for selection" empty state.
+  // True from reciter-change start through region computation completion.
   const [isAudioLoading, setIsAudioLoading] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -109,14 +107,10 @@ export function useSelectionAudio(): SelectionAudioState {
     }
   }, [playbackHighlightEnabled, setPlaybackActiveIds, setPlaybackCurrentWordId]);
 
-  // Load (or reload) audio data whenever the selected reciter changes.
-  // Stop any in-flight playback first so the user never hears the old reciter
-  // bleed into the new one. isAudioLoading is set true here and only cleared
-  // by the regions-computation effect below (after regions are populated for
-  // the freshly-loaded audioData). This guarantees no intermediate render
-  // where audioData is set but regions are still [] (which would otherwise
-  // flash "No audio for selection"). On fetch rejection we clear the flag
-  // here so the genuine empty state can appear.
+  // Reload audio data when the selected reciter changes. Loading flag stays
+  // true until the regions effect below repopulates regions for the new
+  // audioData, so the empty-state branch can never show during the switch.
+  // On rejection we clear it here so the genuine empty state can appear.
   useEffect(() => {
     stopPlayback();
     setAudioData(null);
@@ -129,16 +123,10 @@ export function useSelectionAudio(): SelectionAudioState {
     loadAudioData(selectedReciterId)
       .then((data) => {
         if (cancelled) return;
-        // Do NOT clear isAudioLoading here — the regions effect will do it
-        // after computing regions for this audioData, which prevents the
-        // intermediate "audioData set but regions still []" frame from
-        // exposing the empty-state branch.
         setAudioData(data);
       })
       .catch(() => {
         if (cancelled) return;
-        // Fetch failed: audioData stays null, regions stay []. Allow the
-        // empty-state UI to render now.
         setIsAudioLoading(false);
       });
     return () => {
@@ -162,10 +150,8 @@ export function useSelectionAudio(): SelectionAudioState {
     stopPlayback();
     setProgress(0);
     setCurrentAyahKey(null);
-    // Regions are now in sync with audioData for the current selection. Clear
-    // the loading flag so the play button (or genuine empty state if regions
-    // came back empty) can render. This is the second half of the
-    // reciter-change loading lifecycle started in the selectedReciterId effect.
+    // Regions are now in sync with the freshly-loaded audioData; end the
+    // reciter-switch loading lifecycle started in the selectedReciterId effect.
     setIsAudioLoading(false);
   }, [selectedWordIds, audioData, brushFineness, svgToJsonWordMap]);
 

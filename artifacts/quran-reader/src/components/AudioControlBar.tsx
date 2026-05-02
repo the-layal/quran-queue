@@ -287,6 +287,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
 
   const isCurrentlyPlaying = queueActive ? queueIsPlaying : selIsPlaying;
   const repeatIsActive = clampedRepeat !== 1;
+  const showAudioLoading = isAudioLoading && !queueActive;
 
   const modeOptions: { value: PlaybackHighlightMode; label: string }[] = [
     { value: "line", label: "Line" },
@@ -301,35 +302,30 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
       aria-label="Audio playback controls"
     >
       {/* Play / Pause (or loading spinner while reciter audio is fetching) */}
-      {(() => {
-        const showLoading = isAudioLoading && !queueActive;
-        return (
-          <button
-            onClick={handlePlayPause}
-            disabled={showLoading}
-            style={{ pointerEvents: "auto" }}
-            className={`w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center transition-colors flex-shrink-0 ${
-              showLoading ? "cursor-wait opacity-70" : "hover:bg-primary/90"
-            }`}
-            aria-label={
-              showLoading
-                ? "Loading reciter audio"
-                : isCurrentlyPlaying
-                ? "Pause"
-                : "Play"
-            }
-            aria-busy={showLoading}
-          >
-            {showLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : isCurrentlyPlaying ? (
-              <Pause className="w-4 h-4" />
-            ) : (
-              <Play className="w-4 h-4 ml-0.5" />
-            )}
-          </button>
-        );
-      })()}
+      <button
+        onClick={handlePlayPause}
+        disabled={showAudioLoading}
+        style={{ pointerEvents: "auto" }}
+        className={`w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center transition-colors flex-shrink-0 ${
+          showAudioLoading ? "cursor-wait opacity-70" : "hover:bg-primary/90"
+        }`}
+        aria-label={
+          showAudioLoading
+            ? "Loading reciter audio"
+            : isCurrentlyPlaying
+            ? "Pause"
+            : "Play"
+        }
+        aria-busy={showAudioLoading}
+      >
+        {showAudioLoading ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : isCurrentlyPlaying ? (
+          <Pause className="w-4 h-4" />
+        ) : (
+          <Play className="w-4 h-4 ml-0.5" />
+        )}
+      </button>
 
       {/* Progress area */}
       <div className="flex flex-col gap-1 min-w-0">
