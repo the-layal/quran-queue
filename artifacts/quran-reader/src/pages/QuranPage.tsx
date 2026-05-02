@@ -439,8 +439,9 @@ function SurahReadingView({
     }
 
     const revealedSet = new Set(manuallyRevealedIds);
-    const activeSet = new Set(playbackActiveIds);
-    const contextHideSet = activeSet.size > 0 ? activeSet : new Set(selectedWordIds);
+    // Context-only hides exactly the user's selection. The selection is the
+    // single source of truth — see MushafSvgPage for the same rationale.
+    const contextHideSet = new Set(selectedWordIds);
 
     allWords.forEach((el) => {
       const wordId = el.id;
@@ -455,7 +456,7 @@ function SurahReadingView({
       }
       el.classList.toggle("word-hidden", hide);
     });
-  }, [blindReviewMode, manuallyRevealedIds, playbackCurrentWordId, playbackActiveIds, selectedWordIds, surahNumber]);
+  }, [blindReviewMode, manuallyRevealedIds, playbackCurrentWordId, selectedWordIds, surahNumber]);
 
   const surahInfo = chapter
     ? {

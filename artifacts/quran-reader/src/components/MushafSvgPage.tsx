@@ -358,8 +358,13 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     }
 
     if (blindReviewMode === "context-only") {
-      const activeSet = new Set(playbackActiveIds);
-      const contextHideIds = activeSet.size > 0 ? activeSet : new Set(selectedWordIds);
+      // Hide exactly the user's selection — never more, never less. Earlier
+      // versions overrode this with playbackActiveIds during playback, which
+      // in "ayah" highlight mode expanded to the whole ayah (more hidden
+      // than expected) and in "line" mode shrank to only the current line
+      // of the selection (less hidden than expected). The selection is the
+      // single source of truth for "what the user is trying to recall."
+      const contextHideIds = new Set(selectedWordIds);
       wordGroups.forEach((wordEl) => {
         const s = parseInt(wordEl.getAttribute("data-surah") || "0", 10);
         const a = parseInt(wordEl.getAttribute("data-aya") || "0", 10);
@@ -397,7 +402,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       const w = parseInt(wordEl.getAttribute("data-word-index-in-ayah") || "0", 10);
       wordEl.style.opacity = visibleSvgIds.has(`${s}:${a}:${w}`) ? "" : "0";
     });
-  }, [blindReviewMode, manuallyRevealedIds, playbackCurrentWordId, playbackActiveIds, selectedWordIds, svgText, jsonToSvgWordsMap]);
+  }, [blindReviewMode, manuallyRevealedIds, playbackCurrentWordId, selectedWordIds, svgText, jsonToSvgWordsMap]);
 
   // Clear SVG classes and cached viewBox when page changes.
   // Alignment maps (svgToJsonWordMap / jsonToSvgWordsMap) are NOT reset here —
