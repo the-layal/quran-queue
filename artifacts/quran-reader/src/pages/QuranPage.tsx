@@ -440,6 +440,7 @@ function SurahReadingView({
 
     const revealedSet = new Set(manuallyRevealedIds);
     const activeSet = new Set(playbackActiveIds);
+    const contextHideSet = activeSet.size > 0 ? activeSet : new Set(selectedWordIds);
 
     allWords.forEach((el) => {
       const wordId = el.id;
@@ -450,11 +451,11 @@ function SurahReadingView({
       } else if (blindReviewMode === "blind") {
         hide = !revealedSet.has(wordId);
       } else if (blindReviewMode === "context-only") {
-        hide = activeSet.has(wordId);
+        hide = contextHideSet.has(wordId);
       }
       el.classList.toggle("word-hidden", hide);
     });
-  }, [blindReviewMode, manuallyRevealedIds, playbackCurrentWordId, playbackActiveIds, surahNumber]);
+  }, [blindReviewMode, manuallyRevealedIds, playbackCurrentWordId, playbackActiveIds, selectedWordIds, surahNumber]);
 
   const surahInfo = chapter
     ? {

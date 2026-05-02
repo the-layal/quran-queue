@@ -358,12 +358,13 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     }
 
     if (blindReviewMode === "context-only") {
-      const hiddenSet = new Set(playbackActiveIds);
+      const activeSet = new Set(playbackActiveIds);
+      const contextHideIds = activeSet.size > 0 ? activeSet : new Set(selectedWordIds);
       wordGroups.forEach((wordEl) => {
         const s = parseInt(wordEl.getAttribute("data-surah") || "0", 10);
         const a = parseInt(wordEl.getAttribute("data-aya") || "0", 10);
         const w = parseInt(wordEl.getAttribute("data-word-index-in-ayah") || "0", 10);
-        wordEl.style.opacity = hiddenSet.has(`${s}:${a}:${w}`) ? "0" : "";
+        wordEl.style.opacity = contextHideIds.has(`${s}:${a}:${w}`) ? "0" : "";
       });
       return;
     }
@@ -396,7 +397,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       const w = parseInt(wordEl.getAttribute("data-word-index-in-ayah") || "0", 10);
       wordEl.style.opacity = visibleSvgIds.has(`${s}:${a}:${w}`) ? "" : "0";
     });
-  }, [blindReviewMode, manuallyRevealedIds, playbackCurrentWordId, playbackActiveIds, svgText, jsonToSvgWordsMap]);
+  }, [blindReviewMode, manuallyRevealedIds, playbackCurrentWordId, playbackActiveIds, selectedWordIds, svgText, jsonToSvgWordsMap]);
 
   // Clear SVG classes and cached viewBox when page changes.
   // Alignment maps (svgToJsonWordMap / jsonToSvgWordsMap) are NOT reset here —
