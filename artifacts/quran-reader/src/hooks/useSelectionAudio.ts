@@ -223,6 +223,12 @@ export function useSelectionAudio(): SelectionAudioState {
     setCurrentAyahKey(null);
   }, [selectedWordIds, audioData, brushFineness, svgToJsonWordMap]);
 
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
+
   function getOrCreateAudio(): HTMLAudioElement {
     if (!audioRef.current) {
       audioRef.current = new Audio();
@@ -230,12 +236,6 @@ export function useSelectionAudio(): SelectionAudioState {
     audioRef.current.playbackRate = playbackRateRef.current;
     return audioRef.current;
   }
-
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.playbackRate = playbackRate;
-    }
-  }, [playbackRate]);
 
   function clearActiveHighlight() {
     prevActiveIdsRef.current = [];

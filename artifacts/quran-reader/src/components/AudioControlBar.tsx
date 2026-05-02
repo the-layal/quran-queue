@@ -416,6 +416,9 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
         </div>
       )}
 
+      {/* Playback speed */}
+      <SpeedSelector style={{ pointerEvents: "auto" }} />
+
       {/* Repeat button — cycles through 1×/3×/5×/∞, synced with queue */}
       <button
         onClick={handleRepeatCycle}
