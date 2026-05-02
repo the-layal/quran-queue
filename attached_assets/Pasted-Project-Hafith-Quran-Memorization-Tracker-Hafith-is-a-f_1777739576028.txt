@@ -1,0 +1,29 @@
+Project: Hafith — Quran Memorization Tracker
+
+Hafith is a full-stack web app that helps users track and schedule their Quran memorization using a spaced repetition system (SuperMemo-2 algorithm). It has a zen-minimalist Islamic aesthetic using sage green and cream tones.
+
+Tech Stack
+
+Frontend: React + TypeScript, Vite, Wouter (routing), TanStack Query, shadcn/ui + Tailwind CSS, Recharts
+Backend: Express 5 + Node.js (TypeScript via tsx)
+Database: PostgreSQL with Drizzle ORM
+Auth: Replit OIDC (multi-user, each user's data is isolated)
+Monorepo structure: client/, server/, shared/ (shared types, schemas, route definitions)
+Core Features
+
+Dashboard — donut chart showing memorized pages out of 604, plus "Due Today" and "Day Streak" stats
+Quran Library (/quran) — browsable grid of all 114 surahs; click into any surah to see a per-ayah mastery heatmap with last-reviewed dates
+Daily Plan (/plan) — generates a page-based daily revision plan (e.g. "Pages 595–598 — Al-Bayyinah") from SRS due items, respecting a configurable bandwidth (pages/day). Supports: Add More (+1 page), remove individual items (snoozes SRS), Clear Plan, and completing items via a per-ayah vibe rating grid (1–5 scale)
+History (/history) — monthly calendar view of all past plans; dots show completion status (green = all done, amber = partial); click a day to see its planned vs completed items; Edit mode lets you retroactively toggle any item's completion
+Spaced Repetition — SuperMemo-2 schedules next review dates based on vibe ratings; items overdue surface first in plan generation
+Data Model (PostgreSQL via Drizzle)
+
+logs — revision entries (type, reference, vibe scale 1–5, timestamp, userId)
+srs_items — SRS state per reference (ease factor, interval, repetitions, next review date, userId)
+daily_plans — per-day plan (bandwidth, plannedItems as page refs, completedItems, userId)
+Key Design Decisions
+
+Plan items are always page references (page:X or page:X-Y), never surah refs — uses quran-meta Hafs Madani mushaf data
+Plan generation carries forward incomplete items from yesterday, then fills from SRS due items
+Removing a plan item snoozes its overlapping SRS items to tomorrow
+Multi-surah range SRS items are auto-migrated to individual surahs on server start
