@@ -17,12 +17,34 @@ import type { QueuePlaybackState } from "../hooks/useQueuePlayback";
 import { computeQueueItemLabel } from "../utils/queueLabel";
 import { toast } from "../hooks/use-toast";
 import type { ReviewQueueItem } from "../store/quranStore";
-import type { ChapterMap, BrushFineness } from "../types/quran";
+import type { ChapterMap, BrushFineness, AudioDataMap } from "../types/quran";
+import { loadAudioData } from "../services/quranApi";
+import { computePlaybackRegions } from "../utils/audioRegions";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function genId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function formatDuration(totalSeconds: number): string {
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = Math.floor(totalSeconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
+function computeItemDurationSec(
+  item: ReviewQueueItem,
+  audioData: AudioDataMap,
+  svgToJsonWordMap: Record<string, Record<number, number>>
+): number {
+  const regions = computePlaybackRegions(
+    item.selectedWordIds,
+    audioData,
+    item.brushFineness,
+    svgToJsonWordMap
+  );
+  return regions.reduce((sum, r) => sum + r.durationMs, 0) / 1000;
 }
 
 const REPEAT_OPTIONS = [1, 2, 3, 4, 5, 0] as const;
@@ -154,6 +176,7 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
   const setQueueLoopCount = useQuranStore((s) => s.setQueueLoopCount);
   const setReviewQueue = useQuranStore((s) => s.setReviewQueue);
   const setIsSharedQueue = useQuranStore((s) => s.setIsSharedQueue);
+  const svgToJsonWordMap = useQuranStore((s) => s.svgToJsonWordMap);
 
   const { queueIsPlaying, activeItemIndex, playQueue, pauseQueue, stopQueue } =
     queuePlayback;
@@ -161,6 +184,32 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
   const dragFromRef = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isSharing, setIsSharing] = useState(false);
+
+  // Duration map: item.id → duration in seconds
+  const [durationMap, setDurationMap] = useState<Record<string, number>>({});
+  const audioDataRef = useRef<AudioDataMap | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function computeDurations() {
+      if (!audioDataRef.current) {
+        try {
+          audioDataRef.current = await loadAudioData();
+        } catch {
+          return;
+        }
+      }
+      if (cancelled) return;
+      const aData = audioDataRef.current;
+      const map: Record<string, number> = {};
+      for (const item of reviewQueue) {
+        map[item.id] = computeItemDurationSec(item, aData, svgToJsonWordMap);
+      }
+      setDurationMap(map);
+    }
+    computeDurations();
+    return () => { cancelled = true; };
+  }, [reviewQueue, svgToJsonWordMap]);
 
   // Presets popover
   const [showPresets, setShowPresets] = useState(false);
@@ -558,7 +607,7 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
                     )}
                   </div>
 
-                  {/* Label */}
+                  {/* Label + duration */}
                   <span
                     className={`flex-1 text-xs leading-snug truncate min-w-0 ${
                       isActive ? "font-semibold text-primary" : "text-foreground"
@@ -566,6 +615,13 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
                   >
                     {item.label}
                   </span>
+
+                  {/* Per-item duration */}
+                  {durationMap[item.id] !== undefined && durationMap[item.id] > 0 && (
+                    <span className="flex-shrink-0 text-[10px] tabular-nums text-muted-foreground/70">
+                      {formatDuration(durationMap[item.id])}
+                    </span>
+                  )}
 
                   {/* Repeat badge */}
                   <RepeatBadge
@@ -594,29 +650,73 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
 
         {/* Footer */}
         {hasQueue && (
-          <div className="flex-shrink-0 border-t border-border px-4 py-2.5 flex items-center justify-between">
-            <span className="text-xs text-muted-foreground tabular-nums">
-              {reviewQueue.length} segment{reviewQueue.length !== 1 ? "s" : ""}
-            </span>
-            <div className="flex items-center gap-2">
-              {/* Share button */}
-              <button
-                onClick={handleShare}
-                disabled={isSharing}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
-                title="Copy shareable link"
-              >
-                <Share2 className="w-3 h-3" />
-                {isSharing ? "Saving…" : "Share"}
-              </button>
-              {!isSharedQueue && (
+          <div className="flex-shrink-0 border-t border-border px-4 py-2.5 flex flex-col gap-1.5">
+            {/* Total playlist duration */}
+            {(() => {
+              const hasDurations = Object.keys(durationMap).length > 0;
+              if (!hasDurations) return null;
+
+              // Check if any item or the queue loop is set to infinite (0)
+              const anyItemInfinite = reviewQueue.some((item) => item.repeatCount === 0);
+              const queueInfinite = queueLoopCount === 0;
+
+              if (anyItemInfinite || queueInfinite) {
+                return (
+                  <div className="text-[10px] text-muted-foreground leading-snug">
+                    Total: <span className="font-semibold text-foreground">∞</span>
+                  </div>
+                );
+              }
+
+              // All repeats are finite — compute exact total
+              const perItemSec = reviewQueue.reduce(
+                (sum, item) => sum + (durationMap[item.id] ?? 0) * item.repeatCount,
+                0
+              );
+              if (perItemSec === 0) return null;
+
+              const totalSec = perItemSec * queueLoopCount;
+              const showLoopLine = queueLoopCount > 1;
+              return (
+                <div className="text-[10px] text-muted-foreground tabular-nums leading-snug">
+                  {showLoopLine ? (
+                    <span>
+                      Total: {formatDuration(perItemSec)} × {queueLoopCount} loops ={" "}
+                      <span className="font-semibold text-foreground">{formatDuration(totalSec)}</span>
+                    </span>
+                  ) : (
+                    <span>
+                      Total: <span className="font-semibold text-foreground">{formatDuration(totalSec)}</span>
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
+
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {reviewQueue.length} segment{reviewQueue.length !== 1 ? "s" : ""}
+              </span>
+              <div className="flex items-center gap-2">
+                {/* Share button */}
                 <button
-                  onClick={clearReviewQueue}
-                  className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                  onClick={handleShare}
+                  disabled={isSharing}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+                  title="Copy shareable link"
                 >
-                  Clear all
+                  <Share2 className="w-3 h-3" />
+                  {isSharing ? "Saving…" : "Share"}
                 </button>
-              )}
+                {!isSharedQueue && (
+                  <button
+                    onClick={clearReviewQueue}
+                    className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
