@@ -1,37 +1,75 @@
+import { Eye, EyeOff, EyeClosed } from "lucide-react";
+import type { LucideProps } from "lucide-react";
 import { useQuranStore, type BlindReviewMode } from "../store/quranStore";
 
-const MODES: { mode: BlindReviewMode; label: string; title: string }[] = [
-  { mode: "default",      label: "A", title: "Mode A — all text visible" },
-  { mode: "word-by-word", label: "B", title: "Mode B — word-by-word (audio reveals each word)" },
-  { mode: "blind",        label: "C", title: "Mode C — blind (all hidden, reveal manually)" },
-  { mode: "context-only", label: "D", title: "Mode D — context only (active segment hidden)" },
-];
+type IconComponent = React.ComponentType<LucideProps>;
+
+interface ModeConfig {
+  icon: IconComponent;
+  label: string;
+  title: string;
+  active: boolean;
+}
+
+const MODES: BlindReviewMode[] = ["default", "word-by-word", "blind", "context-only"];
+
+function getModeConfig(mode: BlindReviewMode): ModeConfig {
+  switch (mode) {
+    case "default":
+      return {
+        icon: Eye,
+        label: "Visible",
+        title: "All text visible — click to cycle",
+        active: false,
+      };
+    case "word-by-word":
+      return {
+        icon: Eye,
+        label: "Word by word",
+        title: "Word by word — audio reveals each word — click to cycle",
+        active: true,
+      };
+    case "blind":
+      return {
+        icon: EyeOff,
+        label: "Blind",
+        title: "Blind mode — all hidden, reveal manually — click to cycle",
+        active: true,
+      };
+    case "context-only":
+      return {
+        icon: EyeClosed,
+        label: "Context only",
+        title: "Context only — active segment hidden — click to cycle",
+        active: true,
+      };
+  }
+}
 
 export default function BlindReviewToggle() {
   const blindReviewMode = useQuranStore((s) => s.blindReviewMode);
   const setBlindReviewMode = useQuranStore((s) => s.setBlindReviewMode);
 
+  function cycleMode() {
+    const idx = MODES.indexOf(blindReviewMode);
+    setBlindReviewMode(MODES[(idx + 1) % MODES.length]);
+  }
+
+  const { icon: Icon, label, title, active } = getModeConfig(blindReviewMode);
+
   return (
-    <div
-      className="flex items-center rounded-lg border border-border overflow-hidden flex-shrink-0"
-      role="group"
-      aria-label="Visibility mode"
+    <button
+      onClick={cycleMode}
+      title={title}
+      aria-label={`Visibility: ${label}`}
+      className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition-colors ${
+        active
+          ? "text-primary hover:bg-primary/10"
+          : "text-muted-foreground hover:bg-muted"
+      }`}
     >
-      {MODES.map(({ mode, label, title }) => (
-        <button
-          key={mode}
-          onClick={() => setBlindReviewMode(mode)}
-          className={`w-6 h-6 text-xs font-bold transition-colors ${
-            blindReviewMode === mode
-              ? "bg-primary/15 text-primary"
-              : "text-muted-foreground hover:bg-muted"
-          }`}
-          aria-pressed={blindReviewMode === mode}
-          title={title}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
+      <Icon className="w-4 h-4 flex-shrink-0" />
+      <span className="text-[10px] font-medium leading-none whitespace-nowrap">{label}</span>
+    </button>
   );
 }
