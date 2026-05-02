@@ -21,6 +21,7 @@ import type { ReviewQueueItem } from "../store/quranStore";
 import type { ChapterMap, BrushFineness, AudioDataMap } from "../types/quran";
 import { loadAudioData } from "../services/quranApi";
 import { computePlaybackRegions } from "../utils/audioRegions";
+import { REPEAT_OPTIONS, clampRepeat, nextRepeat, repeatLabel } from "../utils/repeatOptions";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -48,25 +49,7 @@ function computeItemDurationSec(
   return regions.reduce((sum, r) => sum + r.durationMs, 0) / 1000;
 }
 
-const REPEAT_OPTIONS = [1, 2, 3, 0] as const;
-type RepeatOption = (typeof REPEAT_OPTIONS)[number];
-
 const LOOP_OPTIONS = [1, 2, 3, 0] as const;
-
-function nextRepeat(current: number): number {
-  const idx = REPEAT_OPTIONS.indexOf(current as RepeatOption);
-  return REPEAT_OPTIONS[idx === -1 ? 0 : (idx + 1) % REPEAT_OPTIONS.length];
-}
-
-function clampRepeat(current: number): number {
-  if ((REPEAT_OPTIONS as readonly number[]).includes(current)) return current;
-  if (current > 3) return 3;
-  return 1;
-}
-
-function repeatLabel(count: number): string {
-  return count === 0 ? "∞" : `${count}×`;
-}
 
 // ── Preset generation ─────────────────────────────────────────────────────
 
@@ -672,7 +655,8 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
               if (!hasDurations) return null;
 
               // Check if any item or the queue loop is set to infinite (0)
-              const anyItemInfinite = reviewQueue.some((item) => item.repeatCount === 0);
+              // Use clampRepeat so stale persisted 4/5 values don't mask the ∞ check.
+              const anyItemInfinite = reviewQueue.some((item) => clampRepeat(item.repeatCount) === 0);
               const queueInfinite = queueLoopCount === 0;
 
               if (anyItemInfinite || queueInfinite) {
@@ -685,7 +669,7 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
 
               // All repeats are finite — compute exact total
               const perItemSec = reviewQueue.reduce(
-                (sum, item) => sum + (durationMap[item.id] ?? 0) * item.repeatCount,
+                (sum, item) => sum + (durationMap[item.id] ?? 0) * clampRepeat(item.repeatCount),
                 0
               );
               if (perItemSec === 0) return null;

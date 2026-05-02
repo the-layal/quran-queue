@@ -250,7 +250,14 @@ export const useQuranStore = create<QuranStore>()(
       setQueueLoopCount: (count) => set({ queueLoopCount: count }),
 
       setReviewQueue: (items) =>
-        set({ reviewQueue: items, activeQueueItemId: null, isSharedQueue: false }),
+        set({
+          reviewQueue: items.map((item) => ({
+            ...item,
+            repeatCount: clampRepeat(item.repeatCount),
+          })),
+          activeQueueItemId: null,
+          isSharedQueue: false,
+        }),
 
       setIsSharedQueue: (shared) => set({ isSharedQueue: shared }),
 
