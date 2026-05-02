@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef, useMemo, useState } from "react";
-import { Play, Pause, Repeat, Music2, Highlighter, ListMusic, CheckCheck, Loader2 } from "lucide-react";
+import { Play, Pause, Repeat, Music2, Highlighter, ListMusic, CheckCheck, Loader2, MoreHorizontal } from "lucide-react";
 import SpeedSelector from "./SpeedSelector";
 import ReciterSelector from "./ReciterSelector";
 import type { ChapterMap } from "../types/quran";
@@ -63,6 +63,25 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
   const isSharedQueue = useQuranStore((s) => s.isSharedQueue);
 
   const [justAdded, setJustAdded] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const morePopoverRef = useRef<HTMLDivElement>(null);
+
+  // ── More popover click-outside handler ───────────────────────────────────
+  useEffect(() => {
+    if (!moreOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        morePopoverRef.current &&
+        !morePopoverRef.current.contains(e.target as Node) &&
+        !moreButtonRef.current?.contains(e.target as Node)
+      ) {
+        setMoreOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [moreOpen]);
 
   // ── Derived flags ─────────────────────────────────────────────────────────
   // Queue is "active" if it is playing or paused at a position
@@ -219,8 +238,10 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
   }
 
   // ── Shared style atoms ────────────────────────────────────────────────────
+  // On mobile: span full width with a small gutter on each side.
+  // On sm+: intrinsic width anchored to bottom-right (unchanged desktop look).
   const barBase =
-    "fixed z-40 bottom-[8.5rem] left-1/2 -translate-x-1/2 sm:left-auto sm:right-6 sm:translate-x-0 sm:bottom-[8.5rem] flex items-center gap-3 rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-xl px-4 py-2.5 transition-all duration-200";
+    "fixed z-40 bottom-[8.5rem] left-2 right-2 sm:left-auto sm:right-6 sm:w-auto flex items-center gap-3 rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-xl px-4 py-2.5 transition-all duration-200";
 
   const queueToggleBtn = (
     <button
@@ -254,7 +275,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
         aria-label="Audio control bar"
       >
         <Music2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-        <span className="text-xs text-muted-foreground whitespace-nowrap">
+        <span className="text-xs text-muted-foreground whitespace-nowrap flex-1 min-w-0 truncate">
           Select text to play
         </span>
         <ReciterSelector style={{ pointerEvents: "auto" }} />
@@ -276,7 +297,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
         aria-label="Audio control bar"
       >
         <Music2 className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-        <span className="text-xs text-muted-foreground whitespace-nowrap">
+        <span className="text-xs text-muted-foreground whitespace-nowrap flex-1 min-w-0 truncate">
           No audio for selection
         </span>
         <ReciterSelector style={{ pointerEvents: "auto" }} />
@@ -293,6 +314,95 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
     { value: "line", label: "Line" },
     { value: "ayah", label: "Ayah" },
   ];
+
+  // ── Secondary controls (collapsed into "More" on mobile) ─────────────────
+  // Rendered inline on sm+, hidden on mobile (shown in popover instead).
+  const secondaryControlsInline = (
+    <>
+      {!queueActive && !isSharedQueue && (
+        <button
+          onClick={handleAddToQueue}
+          style={{ pointerEvents: "auto" }}
+          className={`hidden sm:flex w-7 h-7 rounded-lg items-center justify-center transition-all flex-shrink-0 border ${
+            justAdded
+              ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 scale-110"
+              : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+          }`}
+          aria-label="Add selection to review queue"
+          title="Add to review queue"
+        >
+          <CheckCheck className="w-3.5 h-3.5" />
+        </button>
+      )}
+
+      {!queueActive && (
+        <button
+          onClick={() => setPlaybackHighlightEnabled(!playbackHighlightEnabled)}
+          style={{ pointerEvents: "auto" }}
+          className={`hidden sm:flex w-7 h-7 rounded-lg items-center justify-center transition-colors flex-shrink-0 border ${
+            playbackHighlightEnabled
+              ? "bg-primary/15 border-primary text-primary"
+              : "border-border text-muted-foreground hover:bg-muted"
+          }`}
+          aria-label={playbackHighlightEnabled ? "Disable per-word colour highlight" : "Enable per-word colour highlight"}
+          aria-pressed={playbackHighlightEnabled}
+          title={playbackHighlightEnabled ? "Word colour: on" : "Word colour: off"}
+        >
+          <Highlighter className="w-3.5 h-3.5" />
+        </button>
+      )}
+
+      {!queueActive && (
+        <div
+          className="hidden sm:flex items-center rounded-lg border border-border overflow-hidden flex-shrink-0"
+          style={{ pointerEvents: "auto" }}
+          role="group"
+          aria-label="Highlight mode"
+        >
+          {modeOptions.map(({ value, label }) => (
+            <button
+              key={value}
+              onClick={() => setPlaybackHighlightMode(value)}
+              className={`px-2 py-1 text-xs font-medium transition-colors ${
+                playbackHighlightMode === value
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+              aria-pressed={playbackHighlightMode === value}
+              title={`Highlight by ${label.toLowerCase()}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="hidden sm:block flex-shrink-0">
+        <ReciterSelector style={{ pointerEvents: "auto" }} />
+      </div>
+
+      <div className="hidden sm:block flex-shrink-0">
+        <SpeedSelector style={{ pointerEvents: "auto" }} />
+      </div>
+
+      <button
+        onClick={handleRepeatCycle}
+        style={{ pointerEvents: "auto" }}
+        className={`hidden sm:flex h-7 rounded-lg items-center justify-center gap-1 transition-colors flex-shrink-0 border px-2 ${
+          repeatIsActive
+            ? "bg-primary/15 border-primary text-primary"
+            : "border-border text-muted-foreground hover:bg-muted"
+        }`}
+        aria-label={`Repeat: ${repeatLabel(clampedRepeat)}`}
+        title={`Repeat: ${repeatLabel(clampedRepeat)} — click to change`}
+      >
+        <Repeat className="w-3.5 h-3.5" />
+        <span className="text-[10px] font-bold tabular-nums leading-none">
+          {repeatLabel(clampedRepeat)}
+        </span>
+      </button>
+    </>
+  );
 
   return (
     <div
@@ -327,16 +437,16 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
         )}
       </button>
 
-      {/* Progress area */}
-      <div className="flex flex-col gap-1 min-w-0">
+      {/* Progress area — flex-1 on mobile so slider fills available space */}
+      <div className="flex flex-col gap-1 min-w-0 flex-1 sm:flex-none">
         {displayLabel && (
-          <span className="text-xs font-medium truncate max-w-[10rem] sm:max-w-[14rem]">
+          <span className="text-xs font-medium truncate max-w-full sm:max-w-[14rem]">
             {displayLabel}
           </span>
         )}
         <div
           ref={progressBarRef}
-          className="relative h-3 w-24 sm:w-36 flex items-center cursor-pointer select-none touch-none"
+          className="relative h-3 w-full sm:w-36 flex items-center cursor-pointer select-none touch-none"
           style={{ pointerEvents: "auto" }}
           role="slider"
           aria-label="Playback position"
@@ -373,91 +483,125 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
         )}
       </div>
 
-      {/* Add to queue — hidden while queue mode is active OR viewing a shared (read-only) queue */}
-      {!queueActive && !isSharedQueue && (
-        <button
-          onClick={handleAddToQueue}
-          style={{ pointerEvents: "auto" }}
-          className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all flex-shrink-0 border ${
-            justAdded
-              ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 scale-110"
-              : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-          }`}
-          aria-label="Add selection to review queue"
-          title="Add to review queue"
-        >
-          <CheckCheck className="w-3.5 h-3.5" />
-        </button>
-      )}
+      {/* Secondary controls — inline on sm+, hidden on mobile */}
+      {secondaryControlsInline}
 
-      {/* Highlight toggle — only meaningful outside queue mode */}
-      {!queueActive && (
+      {/* More button — mobile only, opens popover with secondary controls */}
+      <div className="relative sm:hidden flex-shrink-0">
         <button
-          onClick={() => setPlaybackHighlightEnabled(!playbackHighlightEnabled)}
+          ref={moreButtonRef}
+          onClick={() => setMoreOpen((v) => !v)}
           style={{ pointerEvents: "auto" }}
           className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 border ${
-            playbackHighlightEnabled
+            moreOpen
               ? "bg-primary/15 border-primary text-primary"
               : "border-border text-muted-foreground hover:bg-muted"
           }`}
-          aria-label={playbackHighlightEnabled ? "Disable per-word colour highlight" : "Enable per-word colour highlight"}
-          aria-pressed={playbackHighlightEnabled}
-          title={playbackHighlightEnabled ? "Word colour: on" : "Word colour: off"}
+          aria-label="More controls"
+          aria-haspopup="dialog"
+          aria-expanded={moreOpen}
+          title="More controls"
         >
-          <Highlighter className="w-3.5 h-3.5" />
+          <MoreHorizontal className="w-3.5 h-3.5" />
         </button>
-      )}
 
-      {/* Highlight mode segment — only outside queue mode */}
-      {!queueActive && (
-        <div
-          className="flex items-center rounded-lg border border-border overflow-hidden flex-shrink-0"
-          style={{ pointerEvents: "auto" }}
-          role="group"
-          aria-label="Highlight mode"
-        >
-          {modeOptions.map(({ value, label }) => (
+        {moreOpen && (
+          <div
+            ref={morePopoverRef}
+            className="absolute bottom-full mb-2 right-0 z-[70] bg-card border border-border rounded-xl shadow-xl p-2 flex flex-col gap-1.5 min-w-[11rem]"
+            role="dialog"
+            aria-label="More playback controls"
+            style={{ pointerEvents: "auto" }}
+          >
+            {/* Add to queue */}
+            {!queueActive && !isSharedQueue && (
+              <button
+                onClick={() => { handleAddToQueue(); setMoreOpen(false); }}
+                style={{ pointerEvents: "auto" }}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all border ${
+                  justAdded
+                    ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400"
+                    : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+                aria-label="Add selection to review queue"
+              >
+                <CheckCheck className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>Add to queue</span>
+              </button>
+            )}
+
+            {/* Highlight toggle */}
+            {!queueActive && (
+              <button
+                onClick={() => setPlaybackHighlightEnabled(!playbackHighlightEnabled)}
+                style={{ pointerEvents: "auto" }}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors border ${
+                  playbackHighlightEnabled
+                    ? "bg-primary/15 border-primary text-primary"
+                    : "border-border text-muted-foreground hover:bg-muted"
+                }`}
+                aria-pressed={playbackHighlightEnabled}
+              >
+                <Highlighter className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>Word colour: {playbackHighlightEnabled ? "on" : "off"}</span>
+              </button>
+            )}
+
+            {/* Highlight mode segment */}
+            {!queueActive && (
+              <div className="flex items-center rounded-lg border border-border overflow-hidden" style={{ pointerEvents: "auto" }} role="group" aria-label="Highlight mode">
+                {modeOptions.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    onClick={() => setPlaybackHighlightMode(value)}
+                    className={`flex-1 px-2 py-1.5 text-xs font-medium transition-colors ${
+                      playbackHighlightMode === value
+                        ? "bg-primary/15 text-primary"
+                        : "text-muted-foreground hover:bg-muted"
+                    }`}
+                    aria-pressed={playbackHighlightMode === value}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Reciter selector */}
+            <div className="flex items-center gap-2 px-1">
+              <span className="text-xs text-muted-foreground flex-shrink-0">Reciter</span>
+              <div className="flex-1 flex justify-end">
+                <ReciterSelector style={{ pointerEvents: "auto" }} />
+              </div>
+            </div>
+
+            {/* Speed selector */}
+            <div className="flex items-center gap-2 px-1">
+              <span className="text-xs text-muted-foreground flex-shrink-0">Speed</span>
+              <div className="flex-1 flex justify-end">
+                <SpeedSelector style={{ pointerEvents: "auto" }} />
+              </div>
+            </div>
+
+            {/* Repeat */}
             <button
-              key={value}
-              onClick={() => setPlaybackHighlightMode(value)}
-              className={`px-2 py-1 text-xs font-medium transition-colors ${
-                playbackHighlightMode === value
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:bg-muted"
+              onClick={handleRepeatCycle}
+              style={{ pointerEvents: "auto" }}
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors border ${
+                repeatIsActive
+                  ? "bg-primary/15 border-primary text-primary"
+                  : "border-border text-muted-foreground hover:bg-muted"
               }`}
-              aria-pressed={playbackHighlightMode === value}
-              title={`Highlight by ${label.toLowerCase()}`}
+              aria-label={`Repeat: ${repeatLabel(clampedRepeat)}`}
             >
-              {label}
+              <Repeat className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>Repeat: {repeatLabel(clampedRepeat)}</span>
             </button>
-          ))}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
-      {/* Reciter picker */}
-      <ReciterSelector style={{ pointerEvents: "auto" }} />
-
-      {/* Playback speed */}
-      <SpeedSelector style={{ pointerEvents: "auto" }} />
-
-      {/* Repeat button — cycles through 1×/3×/5×/∞, synced with queue */}
-      <button
-        onClick={handleRepeatCycle}
-        style={{ pointerEvents: "auto" }}
-        className={`h-7 rounded-lg flex items-center justify-center gap-1 transition-colors flex-shrink-0 border px-2 ${
-          repeatIsActive
-            ? "bg-primary/15 border-primary text-primary"
-            : "border-border text-muted-foreground hover:bg-muted"
-        }`}
-        aria-label={`Repeat: ${repeatLabel(clampedRepeat)}`}
-        title={`Repeat: ${repeatLabel(clampedRepeat)} — click to change`}
-      >
-        <Repeat className="w-3.5 h-3.5" />
-        <span className="text-[10px] font-bold tabular-nums leading-none">
-          {repeatLabel(clampedRepeat)}
-        </span>
-      </button>
-
+      {/* Queue toggle — always visible */}
       {queueToggleBtn}
     </div>
   );
