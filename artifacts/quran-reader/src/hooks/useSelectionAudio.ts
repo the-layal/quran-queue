@@ -30,6 +30,7 @@ export function useSelectionAudio(): SelectionAudioState {
   const setPlaybackActiveIds = useQuranStore((s) => s.setPlaybackActiveIds);
   const setPlaybackCurrentWordId = useQuranStore((s) => s.setPlaybackCurrentWordId);
   const queueRepeatAll = useQuranStore((s) => s.queueRepeatAll);
+  const selectedReciterId = useQuranStore((s) => s.selectedReciterId);
   const svgToJsonWordMap = useQuranStore((s) => s.svgToJsonWordMap);
   const svgToJsonWordMapRef = useRef(svgToJsonWordMap);
   svgToJsonWordMapRef.current = svgToJsonWordMap;
@@ -49,6 +50,10 @@ export function useSelectionAudio(): SelectionAudioState {
   const rafRef = useRef<number | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timeupdateListenerRef = useRef<(() => void) | null>(null);
+  // AbortController for any pending "canplay" listener attached after a
+  // src change. stopPlayback() aborts it so a delayed canplay from an old
+  // region (or old reciter) cannot resume playback after stop.
+  const canplayAbortRef = useRef<AbortController | null>(null);
   const regionEndedRef = useRef(false);
   const queueRepeatAllRef = useRef(queueRepeatAll);
   queueRepeatAllRef.current = queueRepeatAll;
@@ -99,11 +104,27 @@ export function useSelectionAudio(): SelectionAudioState {
     }
   }, [playbackHighlightEnabled, setPlaybackActiveIds, setPlaybackCurrentWordId]);
 
+  // Load (or reload) audio data whenever the selected reciter changes.
+  // Stop any in-flight playback first so the user never hears the old reciter
+  // bleed into the new one.
   useEffect(() => {
-    loadAudioData()
-      .then(setAudioData)
+    stopPlayback();
+    setAudioData(null);
+    setRegions([]);
+    setProgress(0);
+    setCurrentAyahKey(null);
+
+    let cancelled = false;
+    loadAudioData(selectedReciterId)
+      .then((data) => {
+        if (!cancelled) setAudioData(data);
+      })
       .catch(() => {});
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedReciterId]);
 
   useEffect(() => {
     if (!audioData) return;
@@ -155,6 +176,10 @@ export function useSelectionAudio(): SelectionAudioState {
     if (timeupdateListenerRef.current && audioRef.current) {
       audioRef.current.removeEventListener("timeupdate", timeupdateListenerRef.current);
       timeupdateListenerRef.current = null;
+    }
+    if (canplayAbortRef.current) {
+      canplayAbortRef.current.abort();
+      canplayAbortRef.current = null;
     }
   }
 
@@ -360,7 +385,14 @@ export function useSelectionAudio(): SelectionAudioState {
     if (audio.src !== region.audioUrl) {
       audio.src = region.audioUrl;
       audio.load();
-      audio.addEventListener("canplay", doSeekAndPlay, { once: true });
+      // Abort any previous pending canplay so only the most recent src change
+      // can resume playback. cancelTimers() also aborts on stop.
+      canplayAbortRef.current?.abort();
+      canplayAbortRef.current = new AbortController();
+      audio.addEventListener("canplay", doSeekAndPlay, {
+        once: true,
+        signal: canplayAbortRef.current.signal,
+      });
     } else if (gapless) {
       // Same URL, audio is already playing — skip the seek and start tracking
       // the new region immediately.
@@ -454,12 +486,17 @@ export function useSelectionAudio(): SelectionAudioState {
         if (audio.src !== region.audioUrl) {
           audio.src = region.audioUrl;
           audio.load();
+          // Same abort pattern as playRegion: cancelTimers/stopPlayback can
+          // cancel this pending preload-seek if the user changes reciter or
+          // re-seeks before this canplay fires.
+          canplayAbortRef.current?.abort();
+          canplayAbortRef.current = new AbortController();
           audio.addEventListener(
             "canplay",
             () => {
               audio.currentTime = targetTime;
             },
-            { once: true }
+            { once: true, signal: canplayAbortRef.current.signal }
           );
         } else {
           audio.currentTime = targetTime;

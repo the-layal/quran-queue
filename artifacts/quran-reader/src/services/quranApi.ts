@@ -11,13 +11,15 @@ import type {
   MushafPageData,
   ChapterMap,
 } from "../types/quran";
+import { DEFAULT_RECITER_ID, getReciter } from "../data/reciters";
 
 const QURANCOM_BASE = "https://api.quran.com/api/v4";
 const BISMILLAH = "بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ";
 
 // ── Audio data ──────────────────────────────────────────────────────────────────
 
-let audioDataCache: AudioDataMap | null = null;
+const audioDataCacheByReciter = new Map<string, AudioDataMap>();
+const audioDataPromiseByReciter = new Map<string, Promise<AudioDataMap>>();
 
 interface SegmentEntry {
   segments: [number, number, number][];
@@ -27,38 +29,102 @@ interface SegmentEntry {
   timestamp_to: number;
 }
 
-export async function loadAudioData(): Promise<AudioDataMap> {
-  if (audioDataCache) return audioDataCache;
+interface AyahMp3Entry {
+  surah_number: number;
+  ayah_number: number;
+  audio_url: string;
+  duration: number | null;
+  segments: [number, number, number][];
+}
+
+export async function loadAudioData(
+  reciterId: string = DEFAULT_RECITER_ID
+): Promise<AudioDataMap> {
+  const cached = audioDataCacheByReciter.get(reciterId);
+  if (cached) return cached;
+
+  // Coalesce concurrent loads for the same reciter so we only fetch once.
+  const inFlight = audioDataPromiseByReciter.get(reciterId);
+  if (inFlight) return inFlight;
+
+  const reciter = getReciter(reciterId);
   const base = import.meta.env.BASE_URL;
   const fix = (path: string) => `${base}${path}`.replace(/\/\//g, "/");
 
-  const [segRes, surahRes] = await Promise.all([
-    fetch(fix("quran-segments-data.json")),
-    fetch(fix("quran-surah-audio.json")),
-  ]);
-  if (!segRes.ok) throw new Error("Failed to load audio segments data");
-  if (!surahRes.ok) throw new Error("Failed to load surah audio data");
+  const promise = (async (): Promise<AudioDataMap> => {
+    let map: AudioDataMap;
 
-  const segments: Record<string, SegmentEntry> = await segRes.json();
-  const surahAudio: Record<string, SurahAudioEntry> = await surahRes.json();
+    if (reciter.dataFormat === "surah-mp3") {
+      if (!reciter.audioManifestPath) {
+        throw new Error(
+          `Reciter "${reciter.id}" has dataFormat "surah-mp3" but no audioManifestPath`
+        );
+      }
+      const [segRes, surahRes] = await Promise.all([
+        fetch(fix(reciter.dataPath)),
+        fetch(fix(reciter.audioManifestPath)),
+      ]);
+      if (!segRes.ok)
+        throw new Error(`Failed to load segments for reciter ${reciter.id}`);
+      if (!surahRes.ok)
+        throw new Error(
+          `Failed to load surah audio manifest for reciter ${reciter.id}`
+        );
 
-  const map: AudioDataMap = {};
-  for (const [key, seg] of Object.entries(segments)) {
-    const [surahStr, ayahStr] = key.split(":");
-    const surahEntry = surahAudio[surahStr];
-    map[key] = {
-      surah_number: Number(surahStr),
-      ayah_number: Number(ayahStr),
-      audio_url: surahEntry?.audio_url ?? "",
-      duration: seg.duration_ms,
-      segments: seg.segments,
-      timestamp_from: seg.timestamp_from,
-      timestamp_to: seg.timestamp_to,
-    };
+      const segments: Record<string, SegmentEntry> = await segRes.json();
+      const surahAudio: Record<string, SurahAudioEntry> = await surahRes.json();
+
+      map = {};
+      for (const [key, seg] of Object.entries(segments)) {
+        const [surahStr, ayahStr] = key.split(":");
+        const surahEntry = surahAudio[surahStr];
+        map[key] = {
+          surah_number: Number(surahStr),
+          ayah_number: Number(ayahStr),
+          audio_url: surahEntry?.audio_url ?? "",
+          duration: seg.duration_ms,
+          segments: seg.segments,
+          timestamp_from: seg.timestamp_from,
+          timestamp_to: seg.timestamp_to,
+        };
+      }
+    } else {
+      // ayah-mp3 format: one MP3 per ayah, segments relative to that MP3.
+      const res = await fetch(fix(reciter.dataPath));
+      if (!res.ok)
+        throw new Error(`Failed to load reciter audio data for ${reciter.id}`);
+
+      const raw: Record<string, AyahMp3Entry> = await res.json();
+      map = {};
+      for (const [key, entry] of Object.entries(raw)) {
+        const segments = entry.segments ?? [];
+        const maxSegEnd = segments.reduce((m, s) => Math.max(m, s[2]), 0);
+        const durationMs = entry.duration != null ? entry.duration * 1000 : null;
+        // Use the larger of (max segment end ms) and (duration*1000) so we never
+        // truncate audio that extends past the last word's end timestamp.
+        const timestampTo = Math.max(maxSegEnd, durationMs ?? 0);
+        map[key] = {
+          surah_number: entry.surah_number,
+          ayah_number: entry.ayah_number,
+          audio_url: entry.audio_url,
+          duration: durationMs,
+          segments,
+          timestamp_from: 0,
+          timestamp_to: timestampTo,
+        };
+      }
+    }
+
+    audioDataCacheByReciter.set(reciterId, map);
+    return map;
+  })();
+
+  audioDataPromiseByReciter.set(reciterId, promise);
+  try {
+    return await promise;
+  } finally {
+    audioDataPromiseByReciter.delete(reciterId);
   }
-
-  audioDataCache = map;
-  return map;
 }
 
 // ── Chapters cache ──────────────────────────────────────────────────────────────

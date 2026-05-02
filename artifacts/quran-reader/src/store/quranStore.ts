@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { SurahData, MushafPageData, Settings, ViewMode, BrushFineness } from "../types/quran";
 import { clampRepeat } from "../utils/repeatOptions";
+import { DEFAULT_RECITER_ID, getReciter } from "../data/reciters";
 
 export type PlaybackHighlightMode = "line" | "ayah";
 export type BlindReviewMode = "default" | "word-by-word" | "blind" | "context-only";
@@ -89,6 +90,9 @@ interface QuranStore {
   playbackRate: number;
   setPlaybackRate: (rate: number) => void;
 
+  selectedReciterId: string;
+  setSelectedReciterId: (id: string) => void;
+
   blindReviewMode: BlindReviewMode;
   manuallyRevealedIds: string[];
   setBlindReviewMode: (mode: BlindReviewMode) => void;
@@ -146,6 +150,8 @@ export const useQuranStore = create<QuranStore>()(
       isSharedQueue: false,
 
       playbackRate: 1,
+
+      selectedReciterId: DEFAULT_RECITER_ID,
 
       blindReviewMode: "default",
       manuallyRevealedIds: [],
@@ -262,6 +268,9 @@ export const useQuranStore = create<QuranStore>()(
       setIsSharedQueue: (shared) => set({ isSharedQueue: shared }),
 
       setPlaybackRate: (rate) => set({ playbackRate: rate }),
+
+      setSelectedReciterId: (id) =>
+        set({ selectedReciterId: getReciter(id).id }),
     }),
     {
       name: "quran-reader-store",
@@ -277,6 +286,7 @@ export const useQuranStore = create<QuranStore>()(
         queueLoopCount: state.queueLoopCount,
         isSharedQueue: state.isSharedQueue,
         playbackRate: state.playbackRate,
+        selectedReciterId: state.selectedReciterId,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
@@ -286,6 +296,8 @@ export const useQuranStore = create<QuranStore>()(
           ...item,
           repeatCount: clampRepeat(item.repeatCount),
         }));
+        // Coerce any stale/unknown reciter id back to a valid one.
+        state.selectedReciterId = getReciter(state.selectedReciterId).id;
       },
     }
   )

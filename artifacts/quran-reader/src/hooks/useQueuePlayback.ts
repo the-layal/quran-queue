@@ -37,6 +37,7 @@ export function useQueuePlayback(): QueuePlaybackState {
   const playbackRate = useQuranStore((s) => s.playbackRate);
   const playbackHighlightMode = useQuranStore((s) => s.playbackHighlightMode);
   const playbackHighlightEnabled = useQuranStore((s) => s.playbackHighlightEnabled);
+  const selectedReciterId = useQuranStore((s) => s.selectedReciterId);
 
   const playbackRateRef = useRef(playbackRate);
   playbackRateRef.current = playbackRate;
@@ -110,13 +111,56 @@ export function useQueuePlayback(): QueuePlaybackState {
   const seekQueueToRef = useRef<((fraction: number) => void) | null>(null);
 
   // ------------------------------------------------------------------
-  // Load audio data once
+  // Load (or reload) audio data when the selected reciter changes.
+  // On change we must hard-stop the queue: the cached regions point at the
+  // OLD reciter's MP3 URLs, so continuing playback would mix reciters.
   // ------------------------------------------------------------------
   useEffect(() => {
-    loadAudioData()
-      .then((data) => { audioDataRef.current = data; })
+    // Hard stop — mirrors the queue-cleared effect.
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    if (timeoutRef.current !== null) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    if (timeupdateListenerRef.current && audioRef.current) {
+      audioRef.current.removeEventListener("timeupdate", timeupdateListenerRef.current);
+      timeupdateListenerRef.current = null;
+    }
+    if (audioRef.current) {
+      audioRef.current.onended = null;
+      audioRef.current.pause();
+      // Force the next playRegion to call audio.load() with the new URL,
+      // since src equality check would otherwise short-circuit on a stale
+      // URL from the previous reciter.
+      audioRef.current.removeAttribute("src");
+    }
+    pauseStateRef.current = null;
+    isPlayingRef.current = false;
+    setQueueIsPlayingRef.current(false);
+    setActiveItemIndexRef.current(null);
+    setQueueProgressRef.current(0);
+    setQueueCurrentRegionsRef.current([]);
+    setQueueTotalDurationSecRef.current(0);
+    useQuranStore.getState().setActiveQueueItemId(null);
+    prevActiveIdsRef.current = [];
+    prevCurrentWordIdRef.current = null;
+    useQuranStore.getState().setPlaybackActiveIds([]);
+    useQuranStore.getState().setPlaybackCurrentWordId(null);
+    audioDataRef.current = null;
+
+    let cancelled = false;
+    loadAudioData(selectedReciterId)
+      .then((data) => {
+        if (!cancelled) audioDataRef.current = data;
+      })
       .catch(() => {});
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedReciterId]);
 
   // ------------------------------------------------------------------
   // Clear highlights immediately when word highlighting is disabled mid-playback.

@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useRef, useMemo, useState } from "react";
 import { Play, Pause, Repeat, Music2, Highlighter, ListMusic, CheckCheck } from "lucide-react";
 import SpeedSelector from "./SpeedSelector";
+import ReciterSelector from "./ReciterSelector";
 import type { ChapterMap } from "../types/quran";
 import { useSelectionAudio } from "../hooks/useSelectionAudio";
 import type { QueuePlaybackState } from "../hooks/useQueuePlayback";
@@ -252,6 +253,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
         <span className="text-xs text-muted-foreground whitespace-nowrap">
           Select text to play
         </span>
+        <ReciterSelector style={{ pointerEvents: "auto" }} />
         {queueToggleBtn}
       </div>
     );
@@ -269,6 +271,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
         <span className="text-xs text-muted-foreground whitespace-nowrap">
           No audio for selection
         </span>
+        <ReciterSelector style={{ pointerEvents: "auto" }} />
         {queueToggleBtn}
       </div>
     );
@@ -409,6 +412,9 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
           ))}
         </div>
       )}
+
+      {/* Reciter picker */}
+      <ReciterSelector style={{ pointerEvents: "auto" }} />
 
       {/* Playback speed */}
       <SpeedSelector style={{ pointerEvents: "auto" }} />
