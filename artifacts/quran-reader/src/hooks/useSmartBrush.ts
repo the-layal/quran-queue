@@ -106,17 +106,15 @@ function applySvgClass(nid: string, add: boolean, container: Element) {
 // continuation of the existing (cross-page) selection or as a fresh selection
 // that should first clear the old one.
 
-/** Parse either "S:A:W" (mushaf) or "word-S-A-W" (reading) into numbers. */
+/**
+ * Parse a word ID in "S:A:W" format (used by both mushaf and reading modes —
+ * reading mode assigns spanId as "${s}:${a}:${wordIndex}" in quranApi.ts).
+ */
 function parseWordId(id: string): { s: number; a: number; w: number } | null {
-  if (id.includes(":")) {
-    const parts = id.split(":").map(Number);
-    if (parts.length === 3 && parts.every((n) => !isNaN(n) && n > 0)) {
-      return { s: parts[0], a: parts[1], w: parts[2] };
-    }
-    return null;
+  const parts = id.split(":").map(Number);
+  if (parts.length === 3 && parts.every((n) => !isNaN(n) && n > 0)) {
+    return { s: parts[0], a: parts[1], w: parts[2] };
   }
-  const m = id.match(/^word-(\d+)-(\d+)-(\d+)$/);
-  if (m) return { s: +m[1], a: +m[2], w: +m[3] };
   return null;
 }
 
@@ -572,23 +570,28 @@ export function useSmartBrush(
 
       orderedUnitsRef.current = units;
 
+      // Resolve the anchor unit now so we can use it for the cross-page check.
+      // If the tap landed on a non-selectable element (e.g. a waqf mark that
+      // resolveAnchorWordId returned but buildSvgUnits excluded), aidx === -1.
+      // In that case skip the cross-page auto-clear entirely — we must not
+      // disturb the existing selection just because the user tapped something
+      // that isn't part of any selectable unit.
+      const aidx = findUnitIndex(units, anchorWordId);
+      if (aidx === -1) return; // non-selectable element; abort without clearing
+
       // ── Cross-page auto-clear ───────────────────────────────────────────────
       // If there is an existing selection and none of its words appear in the
       // current page's unit list, the selection was made on a different page.
-      // In that case check whether the new anchor is a direct Quran-sequence
-      // continuation of the old selection.  If it is not, clear the old
-      // selection first so the user starts fresh rather than accumulating
-      // unrelated words from different pages.
+      // Check whether the new anchor is a direct Quran-sequence continuation
+      // of the old selection.  If it is not, clear the old selection first so
+      // the user starts fresh rather than accumulating unrelated words.
       let effectiveBase = new Set(snap);
       if (snap.size > 0) {
         const currentPageIds = new Set(units.flatMap((u) => u));
         const existingOnCurrentPage = [...snap].some((id) => currentPageIds.has(id));
 
         if (!existingOnCurrentPage) {
-          // Find the anchor unit (need aidx a step early to get firstAnchorId)
-          const tentativeAidx = findUnitIndex(units, anchorWordId);
-          const firstAnchorId =
-            tentativeAidx >= 0 ? getFirstWordId(units[tentativeAidx]) : null;
+          const firstAnchorId = getFirstWordId(units[aidx]);
           const lastExistingId = getLastWordId(snap);
 
           const isContinuation =
@@ -606,16 +609,12 @@ export function useSmartBrush(
             effectiveBase = new Set();
             setSelectedWordIds([]);
           }
-          // If it IS a continuation, effectiveBase stays as snap — the new
-          // gesture will extend the existing selection seamlessly.
+          // Continuation: effectiveBase stays as snap for seamless extension.
         }
       }
 
       baseIdsRef.current = effectiveBase;
       activeRangeIdsRef.current = new Set();
-
-      const aidx = findUnitIndex(units, anchorWordId);
-      if (aidx === -1) return;
       anchorIndexRef.current = aidx;
 
       applyRange(aidx, aidx);
