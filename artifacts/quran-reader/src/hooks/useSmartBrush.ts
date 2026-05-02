@@ -85,6 +85,71 @@ function applySvgClass(nid: string, add: boolean, container: Element) {
   }
 }
 
+// ── Cross-page adjacency helpers ─────────────────────────────────────────────
+// When the user starts a new selection gesture on a page that has no currently
+// selected words, we need to decide whether to treat the gesture as a
+// continuation of the existing (cross-page) selection or as a fresh selection
+// that should first clear the old one.
+
+/** Parse either "S:A:W" (mushaf) or "word-S-A-W" (reading) into numbers. */
+function parseWordId(id: string): { s: number; a: number; w: number } | null {
+  if (id.includes(":")) {
+    const parts = id.split(":").map(Number);
+    if (parts.length === 3 && parts.every((n) => !isNaN(n) && n > 0)) {
+      return { s: parts[0], a: parts[1], w: parts[2] };
+    }
+    return null;
+  }
+  const m = id.match(/^word-(\d+)-(\d+)-(\d+)$/);
+  if (m) return { s: +m[1], a: +m[2], w: +m[3] };
+  return null;
+}
+
+/** Stable numeric key for sorting word IDs in Quran order. */
+function wordOrderKey(id: string): number {
+  const p = parseWordId(id);
+  if (!p) return -1;
+  // Max surah=114, max ayah~286, max word/ayah~50 — large multipliers avoid collision
+  return p.s * 1_000_000 + p.a * 1_000 + p.w;
+}
+
+/** Return the word ID with the highest Quran-order position from a collection. */
+function getLastWordId(ids: Iterable<string>): string | null {
+  let bestId: string | null = null;
+  let bestKey = -1;
+  for (const id of ids) {
+    const k = wordOrderKey(id);
+    if (k > bestKey) { bestKey = k; bestId = id; }
+  }
+  return bestId;
+}
+
+/** Return the word ID with the lowest Quran-order position from a unit. */
+function getFirstWordId(unit: Unit): string | null {
+  if (unit.length === 0) return null;
+  return unit.reduce((best, cur) => wordOrderKey(cur) < wordOrderKey(best) ? cur : best);
+}
+
+/**
+ * Returns true iff `candidateId` is the direct next word after `lastId` in
+ * the Quran word sequence.  We check three cases:
+ *  1. Same ayah, next word index (w2 === w1 + 1).
+ *  2. Next ayah of the same surah, word index 1 — we accept this as adjacent
+ *     without knowing the exact word count of the previous ayah, because in
+ *     practice the first word of the next ayah is always what appears after a
+ *     page-turn boundary.
+ *  3. First word of the first ayah of the next surah.
+ */
+function isDirectlyAdjacentInQuran(lastId: string, candidateId: string): boolean {
+  const p1 = parseWordId(lastId);
+  const p2 = parseWordId(candidateId);
+  if (!p1 || !p2) return false;
+  if (p1.s === p2.s && p1.a === p2.a && p2.w === p1.w + 1) return true;
+  if (p1.s === p2.s && p2.a === p1.a + 1 && p2.w === 1) return true;
+  if (p2.s === p1.s + 1 && p2.a === 1 && p2.w === 1) return true;
+  return false;
+}
+
 // ── Ordered unit index builders ───────────────────────────────────────────────
 // A "unit" is the group of word IDs selected atomically together.
 // For word fineness: one unit = one word.
@@ -388,7 +453,43 @@ export function useSmartBrush(
           : container ? buildSvgUnits(container, fineness) : [];
 
       orderedUnitsRef.current = units;
-      baseIdsRef.current = new Set(snap);
+
+      // ── Cross-page auto-clear ───────────────────────────────────────────────
+      // If there is an existing selection and none of its words appear in the
+      // current page's unit list, the selection was made on a different page.
+      // In that case check whether the new anchor is a direct Quran-sequence
+      // continuation of the old selection.  If it is not, clear the old
+      // selection first so the user starts fresh rather than accumulating
+      // unrelated words from different pages.
+      let effectiveBase = new Set(snap);
+      if (snap.size > 0) {
+        const currentPageIds = new Set(units.flatMap((u) => u));
+        const existingOnCurrentPage = [...snap].some((id) => currentPageIds.has(id));
+
+        if (!existingOnCurrentPage) {
+          // Find the anchor unit (need aidx a step early to get firstAnchorId)
+          const tentativeAidx = findUnitIndex(units, anchorWordId);
+          const firstAnchorId =
+            tentativeAidx >= 0 ? getFirstWordId(units[tentativeAidx]) : null;
+          const lastExistingId = getLastWordId(snap);
+
+          const isContinuation =
+            firstAnchorId !== null &&
+            lastExistingId !== null &&
+            isDirectlyAdjacentInQuran(lastExistingId, firstAnchorId);
+
+          if (!isContinuation) {
+            // Non-contiguous cross-page selection — wipe the old base.
+            // The previous page's DOM will re-sync from the store on next render.
+            effectiveBase = new Set();
+            setSelectedWordIds([]);
+          }
+          // If it IS a continuation, effectiveBase stays as snap — the new
+          // gesture will extend the existing selection seamlessly.
+        }
+      }
+
+      baseIdsRef.current = effectiveBase;
       activeRangeIdsRef.current = new Set();
 
       const aidx = findUnitIndex(units, anchorWordId);
