@@ -132,6 +132,14 @@ export function useQueuePlayback(): QueuePlaybackState {
     }
   }, [playbackHighlightEnabled]);
 
+  // Invalidate cached IDs when mode changes so the very next tick always
+  // pushes a fresh update, even if the new mode produces the same word list
+  // as the old one. Mirrors useSelectionAudio.
+  useEffect(() => {
+    prevActiveIdsRef.current = [];
+    prevCurrentWordIdRef.current = null;
+  }, [playbackHighlightMode]);
+
   // ------------------------------------------------------------------
   // Stop on queue cleared (whether playing or paused at a position)
   // ------------------------------------------------------------------
