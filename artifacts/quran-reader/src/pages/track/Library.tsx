@@ -163,7 +163,22 @@ export default function LibraryPage() {
           </button>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex gap-1 bg-card border border-border/50 rounded-lg p-0.5">
+          {filterOptions.map((opt) => (
+            <button
+              key={opt.value}
+              data-testid={`button-filter-${opt.value}`}
+              onClick={() => setFilter(opt.value)}
+              className={cn(
+                "px-4 py-1.5 rounded-full text-sm font-medium transition-all border",
+                filter === opt.value
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-card text-muted-foreground border-border/50 hover:text-foreground hover:border-primary/30",
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+          <div className="flex gap-1 bg-card border border-border/50 rounded-lg p-0.5 ml-auto">
             <button
               data-testid="button-library-view-standard"
               onClick={() => setView("standard")}
@@ -185,21 +200,6 @@ export default function LibraryPage() {
               <List size={12} /> Simple
             </button>
           </div>
-          {filterOptions.map((opt) => (
-            <button
-              key={opt.value}
-              data-testid={`button-filter-${opt.value}`}
-              onClick={() => setFilter(opt.value)}
-              className={cn(
-                "px-4 py-1.5 rounded-full text-sm font-medium transition-all border",
-                filter === opt.value
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-card text-muted-foreground border-border/50 hover:text-foreground hover:border-primary/30",
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground mr-1">Rating:</span>
