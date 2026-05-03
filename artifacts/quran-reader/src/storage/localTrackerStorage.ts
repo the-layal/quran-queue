@@ -9,6 +9,7 @@ import type {
   CompleteAdvancedInput,
 } from "./trackerStorage";
 import { getAyahsForReference } from "./referenceFanOut";
+import { getPageEquivalent } from "../lib/page-utils";
 
 const KEYS = {
   logs: "hafith_logs",
@@ -330,15 +331,13 @@ export class LocalTrackerStorage implements ITrackerStorage {
   }
 
   async getStats(): Promise<TrackerStats> {
-    // Without quran-meta on the client (server-only this task), provide a
-    // simple approximation: memorizedPages = count of references whose latest
-    // vibe >= 3, dueToday = uncompleted items in today's plan (or due SRS),
-    // dayStreak = consecutive days where today's plan is fully completed.
     const allLogs = readLogs();
     const latest: Record<string, number> = {};
     for (let i = allLogs.length - 1; i >= 0; i--) latest[allLogs[i].reference] = allLogs[i].vibeScale;
     let memorizedPages = 0;
-    for (const r of Object.keys(latest)) if (latest[r] >= 3) memorizedPages += 1;
+    for (const [ref, vibe] of Object.entries(latest)) {
+      if (vibe >= 3) memorizedPages += getPageEquivalent(ref);
+    }
 
     const t = todayStr();
     const plans = readPlans();

@@ -110,7 +110,7 @@ export class ApiTrackerStorage implements ITrackerStorage {
   }
 
   async clear(): Promise<void> {
-    // No-op for API: clearing is handled server-side via restore({version:1, ...empty}).
+    await this.restore({ version: 1, exportedAt: new Date().toISOString(), logs: [], srsItems: [], dailyPlans: [] });
   }
 }
 
