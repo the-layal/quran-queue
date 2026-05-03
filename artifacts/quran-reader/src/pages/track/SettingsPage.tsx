@@ -1,17 +1,22 @@
 import { useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
 import GuestBanner from "@/components/GuestBanner";
-import { Download, Upload, ShieldCheck, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { Download, Upload, ShieldCheck, AlertTriangle, CheckCircle2, Loader2, Link2, Unlink, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useQueryClient } from "@tanstack/react-query";
 import type { BackupData } from "@/storage/trackerStorage";
+import { useQFConnection } from "@/hooks/useQFConnection";
 
 type RestoreState = "idle" | "confirm" | "loading" | "done" | "error";
 
 export default function SettingsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { isQFConnected, qfDisplayName, qfEmail, isLoading: qfLoading, disconnect, isDisconnecting } = useQFConnection();
+
+  const searchParams = new URLSearchParams(window.location.search);
+  const qfParam = searchParams.get("qf");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [downloadLoading, setDownloadLoading] = useState(false);
@@ -124,6 +129,68 @@ export default function SettingsPage() {
             </a>
           </div>
         </div>
+
+        {user && (
+          <div className="bg-card rounded-2xl border border-border/50 p-6">
+            <div className="flex items-center gap-2 mb-1">
+              <Link2 size={18} className="text-primary" />
+              <h2 className="font-serif font-semibold text-foreground text-lg">Quran Foundation</h2>
+            </div>
+            <p className="text-sm text-muted-foreground mb-5">
+              Connect your Quran.foundation account to enable Goals and Bookmarks sync.
+            </p>
+
+            {qfParam === "connected" && (
+              <div className="flex items-start gap-2 bg-primary/5 border border-primary/20 rounded-xl p-3 mb-4">
+                <CheckCircle2 size={15} className="text-primary mt-0.5 shrink-0" />
+                <p className="text-xs text-foreground font-medium">Successfully connected to Quran.foundation!</p>
+              </div>
+            )}
+            {qfParam === "error" && (
+              <div className="flex items-start gap-2 bg-destructive/5 border border-destructive/20 rounded-xl p-3 mb-4">
+                <AlertTriangle size={15} className="text-destructive mt-0.5 shrink-0" />
+                <p className="text-xs text-destructive">Connection failed. Please try again.</p>
+              </div>
+            )}
+
+            {qfLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 size={15} className="animate-spin" /> Checking connection…
+              </div>
+            ) : isQFConnected ? (
+              <div className="space-y-3">
+                <div className="bg-secondary/30 rounded-xl p-4 border border-border/40 flex items-center gap-3">
+                  <CheckCircle2 size={16} className="text-primary shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">Connected</p>
+                    {(qfDisplayName || qfEmail) && (
+                      <p className="text-xs text-muted-foreground truncate">{qfDisplayName ?? qfEmail}</p>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => disconnect()}
+                  disabled={isDisconnecting}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all border border-border hover:bg-secondary/60 text-foreground",
+                    isDisconnecting && "opacity-70 pointer-events-none",
+                  )}
+                >
+                  {isDisconnecting ? <Loader2 size={15} className="animate-spin" /> : <Unlink size={15} />}
+                  {isDisconnecting ? "Disconnecting…" : "Disconnect"}
+                </button>
+              </div>
+            ) : (
+              <a
+                href="/api/auth/qf/connect"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                <ExternalLink size={15} />
+                Connect Quran.foundation
+              </a>
+            )}
+          </div>
+        )}
 
         <div className="bg-card rounded-2xl border border-border/50 p-6">
           <div className="flex items-center gap-2 mb-1">
