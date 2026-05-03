@@ -307,7 +307,7 @@ export default function AppShell({ children, rightActions, centerContent }: AppS
       {desktopVisible && (
         <aside
           data-testid="sidebar-desktop"
-          className="hidden lg:flex w-72 flex-shrink-0 flex-col bg-card border-r border-border sticky top-0 h-screen"
+          className="hidden lg:flex w-72 flex-shrink-0 flex-col bg-card border-r border-border sticky top-0 h-dvh"
           aria-label="Navigation sidebar"
         >
           {sidebarBody}
@@ -353,7 +353,7 @@ export default function AppShell({ children, rightActions, centerContent }: AppS
       {!isDesktop && (
         <div
           data-testid="sidebar-mobile"
-          className={`fixed top-0 left-0 h-full z-[60] flex flex-col bg-card border-r border-border shadow-2xl transition-transform duration-300 ease-in-out w-72 ${
+          className={`fixed top-0 left-0 h-dvh z-[60] flex flex-col bg-card border-r border-border shadow-2xl transition-transform duration-300 ease-in-out w-72 ${
             mobileOpen ? "translate-x-0" : "-translate-x-full"
           }`}
           aria-label="Navigation sidebar"
