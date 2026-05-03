@@ -236,8 +236,8 @@ export default function AppShell({ children, rightActions, centerContent }: AppS
         <nav className="py-3">
           {NAV_ITEMS.map((item) => {
             const isActive =
-              item.path === "/"
-                ? location === "/"
+              item.path === "/" || item.path === "/track"
+                ? location === item.path
                 : location === item.path || location.startsWith(item.path + "/");
 
             return (

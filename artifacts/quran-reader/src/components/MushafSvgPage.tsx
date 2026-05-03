@@ -381,19 +381,26 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     }
 
     if (blindReviewMode === "context-only") {
-      // Hide the user's active selection OR any locked (confirmed) selection —
-      // never more, never less. Earlier versions overrode this with
-      // playbackActiveIds during playback, which in "ayah" highlight mode
-      // expanded to the whole ayah (more hidden than expected) and in "line"
-      // mode shrank to only the current line of the selection (less hidden
-      // than expected). The selection is the single source of truth for
-      // "what the user is trying to recall."
       const contextHideIds = new Set([...selectedWordIds, ...lockedContextIds]);
       wordGroups.forEach((wordEl) => {
         const s = parseInt(wordEl.getAttribute("data-surah") || "0", 10);
         const a = parseInt(wordEl.getAttribute("data-aya") || "0", 10);
         const w = parseInt(wordEl.getAttribute("data-word-index-in-ayah") || "0", 10);
-        wordEl.style.opacity = contextHideIds.has(`${s}:${a}:${w}`) ? "0" : "";
+        let hidden: boolean;
+        if (playbackCurrentWordId) {
+          const [ps, pa, pw] = playbackCurrentWordId.split(":");
+          const playbackKey = `${parseInt(ps, 10)}:${parseInt(pa, 10)}`;
+          const jsonIdx = parseInt(pw, 10);
+          const svgIndices = jsonToSvgWordsMap[playbackKey]?.[jsonIdx];
+          if (svgIndices && svgIndices.length > 0) {
+            hidden = svgIndices.includes(w);
+          } else {
+            hidden = `${s}:${a}:${w}` === `${parseInt(ps, 10)}:${parseInt(pa, 10)}:${jsonIdx}`;
+          }
+        } else {
+          hidden = contextHideIds.has(`${s}:${a}:${w}`);
+        }
+        wordEl.style.opacity = hidden ? "0" : "";
       });
       return;
     }

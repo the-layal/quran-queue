@@ -513,7 +513,9 @@ function SurahReadingView({
       } else if (blindReviewMode === "blind") {
         hide = !revealedSet.has(wordId);
       } else if (blindReviewMode === "context-only") {
-        hide = contextHideSet.has(wordId);
+        hide = playbackCurrentWordId
+          ? wordId === playbackCurrentWordId
+          : contextHideSet.has(wordId);
       }
       el.classList.toggle("word-hidden", hide);
     });
