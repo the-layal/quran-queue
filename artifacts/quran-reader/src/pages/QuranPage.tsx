@@ -1057,7 +1057,6 @@ export default function QuranPage() {
     <>
       <button
         onClick={handleModeSwitch}
-        data-tour="mode-toggle"
         className={`p-2 rounded-lg hover:bg-muted transition-colors ${isMushaf ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
         aria-label={isMushaf ? "Switch to Reading mode" : "Switch to Mushaf mode"}
         title={isMushaf ? "Reading mode" : "Mushaf mode"}
@@ -1078,6 +1077,19 @@ export default function QuranPage() {
       </button>
 
       <button
+        data-tour="bookmarks"
+        onClick={() => {
+          const toggle = document.querySelector<HTMLElement>('[data-testid="button-sidebar-toggle"]');
+          toggle?.click();
+        }}
+        className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+        aria-label="Saved verses"
+        title="Saved verses"
+      >
+        <Bookmark className="w-5 h-5" />
+      </button>
+
+      <button
         onClick={() => setQueuePanelOpen(!queuePanelOpen)}
         data-tour="queue-button"
         className={`p-2 rounded-lg transition-colors ${
@@ -1095,11 +1107,13 @@ export default function QuranPage() {
   );
 
   const centerContent = (
-    <SurahSelectorButton
-      chapter={chapter}
-      surahNumber={currentSurah}
-      onClick={() => setSurahPickerOpen(true)}
-    />
+    <span data-tour="surah-picker">
+      <SurahSelectorButton
+        chapter={chapter}
+        surahNumber={currentSurah}
+        onClick={() => setSurahPickerOpen(true)}
+      />
+    </span>
   );
 
   return (

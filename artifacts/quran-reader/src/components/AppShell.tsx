@@ -20,12 +20,11 @@ interface NavItem {
   label: string;
   path: string;
   icon: React.ReactNode;
-  tourId?: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Quran Reader", path: "/", icon: <BookOpen className="w-4 h-4" /> },
-  { label: "Dashboard", path: "/track", icon: <LayoutDashboard className="w-4 h-4" />, tourId: "nav-dashboard" },
+  { label: "Dashboard", path: "/track", icon: <LayoutDashboard className="w-4 h-4" /> },
   { label: "Daily Plan", path: "/track/plan", icon: <CalendarDays className="w-4 h-4" /> },
   { label: "Library", path: "/track/library", icon: <Library className="w-4 h-4" /> },
   { label: "History", path: "/track/history", icon: <History className="w-4 h-4" /> },
@@ -246,7 +245,6 @@ export default function AppShell({ children, rightActions, centerContent }: AppS
               <Link
                 key={item.path}
                 href={item.path}
-                data-tour={item.tourId}
                 className={`flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${
                   isActive
                     ? "bg-primary/10 text-primary"

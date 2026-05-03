@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useLocation } from "wouter";
 import {
   Dialog,
   DialogContent,
@@ -19,28 +20,28 @@ interface TourStep {
 
 const STEPS: TourStep[] = [
   {
-    selector: '[data-testid="button-sidebar-toggle"]',
-    title: "Navigate the app",
+    selector: '[data-tour="surah-picker"]',
+    title: "Navigate the Quran",
     description:
-      "Open the sidebar to access the Quran Reader, your memorization Dashboard, Daily Plan, Library, and Settings.",
-  },
-  {
-    selector: '[data-tour="mode-toggle"]',
-    title: "Two reading modes",
-    description:
-      "Switch between Mushaf mode — the authentic page layout — and Reading mode for a scrollable verse-by-verse view.",
+      "Tap here to jump to any of the 114 surahs. Search by name or number and navigate instantly.",
   },
   {
     selector: '[data-tour="highlight-controls"]',
     title: "Highlight to memorize",
     description:
-      "Brush across the text to select words, lines, or full ayahs. Use Word · Line · Ayah to change brush granularity.",
+      "Brush across the text to select words, lines, or full ayahs. Switch granularity with Word · Line · Ayah.",
   },
   {
     selector: '[data-tour="audio-bar"]',
     title: "Listen with recitation",
     description:
       "Play professional recitation with real-time word highlighting. Choose your reciter and adjust playback speed.",
+  },
+  {
+    selector: '[data-tour="bookmarks"]',
+    title: "Save your favourite ayahs",
+    description:
+      "Tap the bookmark icon on any verse to save it for later. Access all your saved verses in the sidebar.",
   },
   {
     selector: '[data-tour="queue-button"]',
@@ -51,6 +52,7 @@ const STEPS: TourStep[] = [
 ];
 
 const PAD = 8;
+const NAV_DELAY_MS = 600;
 
 interface SpotlightRect {
   top: number;
@@ -133,6 +135,7 @@ function TourTooltipContent({
 }
 
 export default function FeatureTour() {
+  const [, setLocation] = useLocation();
   const [phase, setPhase] = useState<"idle" | "welcome" | "steps">("idle");
   const [stepIndex, setStepIndex] = useState(0);
   const [spotlight, setSpotlight] = useState<SpotlightRect | null>(null);
@@ -149,8 +152,9 @@ export default function FeatureTour() {
 
   const startTour = useCallback(() => {
     setStepIndex(0);
-    setPhase("steps");
-  }, []);
+    setLocation("/");
+    setTimeout(() => setPhase("steps"), NAV_DELAY_MS);
+  }, [setLocation]);
 
   useEffect(() => {
     try {
@@ -162,19 +166,6 @@ export default function FeatureTour() {
       /* ignore */
     }
 
-    const handler = () => {
-      try {
-        localStorage.removeItem(TOUR_STORAGE_KEY);
-      } catch {
-        /* ignore */
-      }
-      setPhase("welcome");
-    };
-    window.addEventListener(TOUR_START_EVENT, handler);
-    return () => window.removeEventListener(TOUR_START_EVENT, handler);
-  }, []);
-
-  useEffect(() => {
     const handler = () => {
       try {
         localStorage.removeItem(TOUR_STORAGE_KEY);
@@ -299,10 +290,7 @@ export default function FeatureTour() {
           }}
         />
       ) : (
-        <div
-          className="fixed inset-0 bg-black/50"
-          style={{ zIndex: 9000 }}
-        />
+        <div className="fixed inset-0 bg-black/50" style={{ zIndex: 9000 }} />
       )}
 
       <button
