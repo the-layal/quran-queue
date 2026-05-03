@@ -189,7 +189,7 @@
 
 .word-translit {
   font-family: var(--app-font-sans);
-  font-size: 0.5em;
+  font-size: 0.42em;
   color: hsl(var(--muted-foreground));
   direction: ltr;
   unicode-bidi: isolate;
@@ -198,17 +198,27 @@
   max-width: 12em;
   overflow: hidden;
   text-overflow: ellipsis;
+  padding: 0.25em 0.4em;
 }
 
-/* Extra line spacing to fit the transliteration label under each word */
+/* Extra line spacing to fit the transliteration label under each word.
+   max-width + overflow-x guard against long transliterations pushing content
+   off-screen at narrow viewports or large font sizes. */
 .quran-text--translit {
   line-height: 3.8;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 @media (max-width: 640px) {
   .quran-text--translit {
     line-height: 4.2;
   }
+}
+
+/* Verse Arabic block — never exceed its flex-1 column width */
+.verse-block .quran-text {
+  max-width: 100%;
 }
 
 /* Smart Brush — highlighted word in reading mode */

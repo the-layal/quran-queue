@@ -380,12 +380,6 @@ function VerseBlock({
           )}
         </div>
 
-        {showTransliteration && ayah.transliteration && (
-          <p className="text-xs text-muted-foreground italic mt-1 leading-relaxed">
-            {ayah.transliteration}
-          </p>
-        )}
-
         {translation !== undefined && (
           <p className="verse-translation">{translation}</p>
         )}
