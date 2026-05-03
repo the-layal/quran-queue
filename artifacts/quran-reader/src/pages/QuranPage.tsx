@@ -334,25 +334,34 @@ function VerseBlock({
       {/* Right: Arabic text block + optional transliteration + optional translation */}
       <div className="flex-1">
         <div
-          className="quran-text text-right"
+          className={`quran-text text-right${showTransliteration ? " quran-text--translit" : ""}`}
           dir="rtl"
           lang="ar"
           style={{ fontSize: `${fontSize}px` }}
         >
-          {ayah.words.map((word) => (
-            <span
-              key={word.spanId}
-              id={word.spanId}
-              className="quran-word"
-              style={{ fontFamily: `QCFv2p${word.pageNumber}, serif` }}
-              data-surah={word.surahNumber}
-              data-ayah={word.ayahNumber}
-              data-word={word.wordIndex}
-            >
-              {word.codeV2}
-              {" "}
-            </span>
-          ))}
+          {ayah.words.map((word) => {
+            const translit = showTransliteration ? word.transliteration : undefined;
+            return (
+              <span
+                key={word.spanId}
+                id={word.spanId}
+                className={translit ? "quran-word quran-word--translit" : "quran-word"}
+                style={{ fontFamily: `QCFv2p${word.pageNumber}, serif` }}
+                data-surah={word.surahNumber}
+                data-ayah={word.ayahNumber}
+                data-word={word.wordIndex}
+              >
+                {translit ? (
+                  <>
+                    <span className="quran-glyph">{word.codeV2}{" "}</span>
+                    <span className="word-translit" dir="ltr" aria-hidden="true">{translit}</span>
+                  </>
+                ) : (
+                  <>{word.codeV2}{" "}</>
+                )}
+              </span>
+            );
+          })}
           {ayah.endMarkerCodeV2 ? (
             <span
               className="ayah-end-marker select-none"

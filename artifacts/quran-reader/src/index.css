@@ -175,6 +175,42 @@
   background-color: hsl(var(--accent));
 }
 
+/* Per-word transliteration — column stack layout */
+.quran-word--translit {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  vertical-align: top;
+}
+
+.quran-glyph {
+  line-height: inherit;
+}
+
+.word-translit {
+  font-family: var(--app-font-sans);
+  font-size: 0.5em;
+  color: hsl(var(--muted-foreground));
+  direction: ltr;
+  unicode-bidi: isolate;
+  line-height: 1.3;
+  white-space: nowrap;
+  max-width: 12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Extra line spacing to fit the transliteration label under each word */
+.quran-text--translit {
+  line-height: 3.8;
+}
+
+@media (max-width: 640px) {
+  .quran-text--translit {
+    line-height: 4.2;
+  }
+}
+
 /* Smart Brush — highlighted word in reading mode */
 .quran-word.word-selected {
   background-color: hsl(var(--primary) / 0.18);
