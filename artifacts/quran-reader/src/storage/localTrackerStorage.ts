@@ -208,13 +208,19 @@ export class LocalTrackerStorage implements ITrackerStorage {
         const completed = yPlan.completedItems || [];
         for (const ref of yPlan.plannedItems || []) if (!completed.includes(ref)) carryover.push(ref);
       }
-      // Local plan generator: just include carryover and fill from due SRS
-      // items by reference (no page-arithmetic since quran-meta is server-only).
       const planned: string[] = [...carryover];
+      let usedPages = planned.reduce((s, r) => s + getPageEquivalent(r), 0);
       const due = await this.getDueSrsItems();
-      for (const item of due) {
-        if (planned.length >= bandwidth) break;
-        if (!planned.includes(item.reference)) planned.push(item.reference);
+      const all = await this.getSrsItems();
+      for (const list of [due, all]) {
+        for (const item of list) {
+          if (usedPages >= bandwidth) break;
+          if (!planned.includes(item.reference)) {
+            planned.push(item.reference);
+            usedPages += getPageEquivalent(item.reference);
+          }
+        }
+        if (usedPages >= bandwidth) break;
       }
       const plan: DailyPlan = {
         id: nextId(),
@@ -239,15 +245,17 @@ export class LocalTrackerStorage implements ITrackerStorage {
     const plan = await this.requireToday();
     const due = await this.getDueSrsItems();
     const all = await this.getSrsItems();
-    const candidates: string[] = [];
+    let added = 0;
     for (const list of [due, all]) {
       for (const item of list) {
-        if (!plan.plannedItems.includes(item.reference) && !candidates.includes(item.reference)) {
-          candidates.push(item.reference);
+        if (added >= count) break;
+        if (!plan.plannedItems.includes(item.reference)) {
+          plan.plannedItems = [...plan.plannedItems, item.reference];
+          added += getPageEquivalent(item.reference);
         }
       }
+      if (added >= count) break;
     }
-    plan.plannedItems = [...plan.plannedItems, ...candidates.slice(0, count)];
     return this.replacePlan(plan);
   }
 
