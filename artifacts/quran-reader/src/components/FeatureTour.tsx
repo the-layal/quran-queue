@@ -157,10 +157,11 @@ export default function FeatureTour() {
   }, [setLocation]);
 
   useEffect(() => {
+    let firstRunTimer: ReturnType<typeof setTimeout> | undefined;
+
     try {
       if (!localStorage.getItem(TOUR_STORAGE_KEY)) {
-        const t = setTimeout(() => setPhase("welcome"), 800);
-        return () => clearTimeout(t);
+        firstRunTimer = setTimeout(() => setPhase("welcome"), 800);
       }
     } catch {
       /* ignore */
@@ -174,8 +175,13 @@ export default function FeatureTour() {
       }
       setPhase("welcome");
     };
+
     window.addEventListener(TOUR_START_EVENT, handler);
-    return () => window.removeEventListener(TOUR_START_EVENT, handler);
+
+    return () => {
+      clearTimeout(firstRunTimer);
+      window.removeEventListener(TOUR_START_EVENT, handler);
+    };
   }, []);
 
   useEffect(() => {
