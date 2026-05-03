@@ -86,7 +86,11 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
     : paceUnit === "lines"
     ? Math.max(1, totalLines)
     : Math.max(1, totalAyahs);
-  const sliderValue = ayahsToUnit(dailyTarget, paceUnit, totalAyahs, totalPages);
+  const rawSliderValue = ayahsToUnit(dailyTarget, paceUnit, totalAyahs, totalPages);
+  const sliderValue = Math.max(
+    sliderMin,
+    Math.min(sliderMax, Math.round(rawSliderValue / sliderStep) * sliderStep)
+  );
 
   const filteredSurahs = useMemo(() => {
     const q = surahQuery.trim().toLowerCase();
