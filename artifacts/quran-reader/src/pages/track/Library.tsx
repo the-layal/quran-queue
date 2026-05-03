@@ -139,7 +139,7 @@ export default function LibraryPage() {
   return (
     <AppShell>
       <GuestBanner />
-      <div className="p-4 max-w-6xl mx-auto">
+      <div className="p-4 w-full max-w-6xl mx-auto">
       <div className="mb-6 flex flex-col gap-4">
         <div className="flex items-center justify-between gap-4">
           <div className="relative w-64 shrink-0">
