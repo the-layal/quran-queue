@@ -389,13 +389,15 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
         let hidden: boolean;
         if (playbackCurrentWordId) {
           const [ps, pa, pw] = playbackCurrentWordId.split(":");
-          const playbackKey = `${parseInt(ps, 10)}:${parseInt(pa, 10)}`;
+          const parsedPs = parseInt(ps, 10);
+          const parsedPa = parseInt(pa, 10);
+          const playbackKey = `${parsedPs}:${parsedPa}`;
           const jsonIdx = parseInt(pw, 10);
           const svgIndices = jsonToSvgWordsMap[playbackKey]?.[jsonIdx];
           if (svgIndices && svgIndices.length > 0) {
-            hidden = svgIndices.includes(w);
+            hidden = s === parsedPs && a === parsedPa && svgIndices.includes(w);
           } else {
-            hidden = `${s}:${a}:${w}` === `${parseInt(ps, 10)}:${parseInt(pa, 10)}:${jsonIdx}`;
+            hidden = s === parsedPs && a === parsedPa && w === jsonIdx;
           }
         } else {
           hidden = contextHideIds.has(`${s}:${a}:${w}`);
