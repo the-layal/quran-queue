@@ -96,6 +96,27 @@ export function getTotalPagesForAyahRange(surah: number, fromAyah: number, toAya
   return Math.round(sumAyahFractions(surah, fromAyah, toAyah) * 100) / 100;
 }
 
+export function ayahsToPages(ayahs: number, totalAyahs: number, totalPages: number): number {
+  if (totalAyahs <= 0) return 0;
+  return Math.round((ayahs / totalAyahs) * totalPages * 10) / 10;
+}
+
+export function pagesToAyahs(pages: number, totalAyahs: number, totalPages: number): number {
+  if (totalPages <= 0) return totalAyahs;
+  return Math.max(1, Math.round((pages / totalPages) * totalAyahs));
+}
+
+export function ayahsToLines(ayahs: number, totalAyahs: number, totalPages: number): number {
+  if (totalAyahs <= 0) return 0;
+  return Math.round((ayahs / totalAyahs) * totalPages * LINES_PER_PAGE);
+}
+
+export function linesToAyahs(lines: number, totalAyahs: number, totalPages: number): number {
+  const totalLines = totalPages * LINES_PER_PAGE;
+  if (totalLines <= 0) return totalAyahs;
+  return Math.max(1, Math.round((lines / totalLines) * totalAyahs));
+}
+
 export function getPageEquivalent(reference: string): number {
   if (!reference) return 1;
   const parts = reference.split(":");

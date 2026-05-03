@@ -1,7 +1,14 @@
 import { useState, useMemo } from "react";
 import { X, ChevronRight, ChevronLeft, AlertTriangle } from "lucide-react";
 import { SURAHS } from "@/lib/quran-data";
-import { getTotalPagesForAyahRange, LINES_PER_PAGE } from "@/lib/page-utils";
+import {
+  getTotalPagesForAyahRange,
+  LINES_PER_PAGE,
+  ayahsToPages,
+  pagesToAyahs,
+  ayahsToLines,
+  linesToAyahs,
+} from "@/lib/page-utils";
 import type { CreateGoalInput } from "@/hooks/useGoals";
 
 interface GoalModalProps {
@@ -30,16 +37,14 @@ function daysUntil(dateStr: string): number {
 }
 
 function ayahsToUnit(ayahs: number, unit: PaceUnit, totalAyahs: number, totalPages: number): number {
-  if (totalAyahs <= 0) return 0;
-  if (unit === "pages") return Math.round((ayahs / totalAyahs) * totalPages * 10) / 10;
-  if (unit === "lines") return Math.round((ayahs / totalAyahs) * totalPages * LINES_PER_PAGE);
+  if (unit === "pages") return ayahsToPages(ayahs, totalAyahs, totalPages);
+  if (unit === "lines") return ayahsToLines(ayahs, totalAyahs, totalPages);
   return ayahs;
 }
 
 function unitToAyahs(val: number, unit: PaceUnit, totalAyahs: number, totalPages: number): number {
-  if (totalAyahs <= 0) return 1;
-  if (unit === "pages") return Math.max(1, Math.round((val / totalPages) * totalAyahs));
-  if (unit === "lines") return Math.max(1, Math.round((val / (totalPages * LINES_PER_PAGE)) * totalAyahs));
+  if (unit === "pages") return pagesToAyahs(val, totalAyahs, totalPages);
+  if (unit === "lines") return linesToAyahs(val, totalAyahs, totalPages);
   return Math.max(1, Math.round(val));
 }
 
@@ -72,13 +77,15 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
   const paceNeeded = daysRemaining > 0 ? Math.ceil(totalAyahs / daysRemaining) : totalAyahs;
   const paceTooSlow = dailyTarget < paceNeeded;
 
-  const sliderMin = paceUnit === "pages" ? 0.5 : 1;
+  const sliderStep = paceUnit === "pages" ? 0.5 : 1;
+  const sliderMin = paceUnit === "pages"
+    ? Math.min(0.5, totalPages)
+    : 1;
   const sliderMax = paceUnit === "pages"
-    ? Math.max(0.5, totalPages)
+    ? Math.max(sliderMin, totalPages)
     : paceUnit === "lines"
     ? Math.max(1, totalLines)
     : Math.max(1, totalAyahs);
-  const sliderStep = paceUnit === "pages" ? 0.5 : 1;
   const sliderValue = ayahsToUnit(dailyTarget, paceUnit, totalAyahs, totalPages);
 
   const filteredSurahs = useMemo(() => {
@@ -140,7 +147,6 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
     <>
       <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={handleClose} />
       <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 bg-card rounded-2xl border border-border shadow-2xl max-w-md mx-auto max-h-[90vh] flex flex-col">
-        {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
           <div className="flex items-center gap-2">
             {step > 1 && (
@@ -166,7 +172,6 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
           </div>
         </div>
 
-        {/* Step 1: Surah picker */}
         {step === 1 && (
           <div className="flex flex-col flex-1 min-h-0 px-5 pb-5">
             <input
@@ -200,7 +205,6 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
           </div>
         )}
 
-        {/* Step 2: Ayah range */}
         {step === 2 && selectedSurah && (
           <div className="px-5 pb-5 space-y-5">
             <div className="p-3 rounded-xl bg-muted/50 text-sm">
@@ -254,7 +258,6 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
           </div>
         )}
 
-        {/* Step 3: Target date + pace */}
         {step === 3 && selectedSurah && (
           <div className="px-5 pb-5 space-y-5">
             <div className="p-3 rounded-xl bg-muted/50 text-sm">
@@ -283,11 +286,9 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
             </div>
 
             <div>
-              {/* Label row: "Daily Pace" + unit toggle + current value */}
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs font-medium text-muted-foreground">Daily Pace</label>
                 <div className="flex items-center gap-2">
-                  {/* Segmented unit toggle */}
                   <div className="flex rounded-lg bg-muted p-0.5 text-xs">
                     {(["ayahs", "lines", "pages"] as PaceUnit[]).map((unit) => (
                       <button
