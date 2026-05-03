@@ -7,8 +7,6 @@ interface QuranGridProps {
   onSurahClick?: (surah: number) => void;
 }
 
-// Stub Quran grid for the data-model rewrite. The real surah-by-surah
-// memorization heatmap (driven by per-ayah vibes) ships in task #152.
 export default function QuranGrid({ logs, onSurahClick }: QuranGridProps) {
   const [, navigate] = useLocation();
 

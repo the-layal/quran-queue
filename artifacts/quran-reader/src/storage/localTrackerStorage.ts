@@ -196,7 +196,7 @@ export class LocalTrackerStorage implements ITrackerStorage {
     return readPlans().slice().sort((a, b) => b.date.localeCompare(a.date));
   }
 
-  async createOrUpdatePlan(bandwidth: number): Promise<DailyPlan> {
+  async createOrUpdatePlan({ bandwidth }: { bandwidth: number }): Promise<DailyPlan> {
     const t = todayStr();
     const plans = readPlans();
     const existingIdx = plans.findIndex((p) => p.date === t);
@@ -241,7 +241,7 @@ export class LocalTrackerStorage implements ITrackerStorage {
     return updated;
   }
 
-  async addMoreItems(count: number): Promise<DailyPlan> {
+  async addMoreItems({ count }: { count: number }): Promise<DailyPlan> {
     const plan = await this.requireToday();
     const due = await this.getDueSrsItems();
     const all = await this.getSrsItems();
@@ -259,21 +259,16 @@ export class LocalTrackerStorage implements ITrackerStorage {
     return this.replacePlan(plan);
   }
 
-  async markPlanCompleted(reference: string, vibeScale: number): Promise<DailyPlan> {
+  async markPlanCompleted({ reference, vibeScale }: { reference: string; vibeScale: number }): Promise<DailyPlan> {
     const plan = await this.requireToday();
     if (!plan.completedItems.includes(reference)) plan.completedItems.push(reference);
     const type = reference.split(":")[0] || "page";
     await this.createLog({ type, reference, vibeScale });
-    // Mirror server: fan out to per-ayah logs + SRS for richer per-ayah stats.
-    try {
-      const groups = getAyahsForReference(reference);
-      for (const g of groups) {
-        for (const ayah of g.ayahs) {
-          await this.createLog({ type: "ayah", reference: `ayah:${g.surah}:${ayah}`, vibeScale });
-        }
+    const groups = getAyahsForReference(reference);
+    for (const g of groups) {
+      for (const ayah of g.ayahs) {
+        await this.createLog({ type: "ayah", reference: `ayah:${g.surah}:${ayah}`, vibeScale });
       }
-    } catch {
-      // ignore fan-out errors — top-level log is already recorded.
     }
     return this.replacePlan(plan);
   }
@@ -292,7 +287,7 @@ export class LocalTrackerStorage implements ITrackerStorage {
     return this.replacePlan(plan);
   }
 
-  async removePlanItem(reference: string): Promise<DailyPlan> {
+  async removePlanItem({ reference }: { reference: string }): Promise<DailyPlan> {
     const plan = await this.requireToday();
     plan.plannedItems = plan.plannedItems.filter((r) => r !== reference);
     plan.completedItems = plan.completedItems.filter((r) => r !== reference);
@@ -326,7 +321,7 @@ export class LocalTrackerStorage implements ITrackerStorage {
     return plans[idx];
   }
 
-  async togglePlanItem(date: string, reference: string): Promise<DailyPlan> {
+  async togglePlanItem({ date, reference }: { date: string; reference: string }): Promise<DailyPlan> {
     const plans = readPlans();
     const idx = plans.findIndex((p) => p.date === date);
     if (idx === -1) throw new Error("Plan not found");
@@ -344,8 +339,12 @@ export class LocalTrackerStorage implements ITrackerStorage {
     for (let i = allLogs.length - 1; i >= 0; i--) latest[allLogs[i].reference] = allLogs[i].vibeScale;
     let memorizedPages = 0;
     for (const [ref, vibe] of Object.entries(latest)) {
-      if (vibe >= 3) memorizedPages += getPageEquivalent(ref);
+      if (vibe < 3) continue;
+      const parts = ref.split(":");
+      if (parts[0] === "ayah" && !(parts[2] || "").includes("-")) continue;
+      memorizedPages += getPageEquivalent(ref);
     }
+    memorizedPages = Math.round(memorizedPages * 10) / 10;
 
     const t = todayStr();
     const plans = readPlans();

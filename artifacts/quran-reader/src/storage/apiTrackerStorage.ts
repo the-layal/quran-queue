@@ -51,15 +51,15 @@ export class ApiTrackerStorage implements ITrackerStorage {
     return apiFetch<DailyPlan[]>("/api/plans");
   }
 
-  createOrUpdatePlan(bandwidth: number): Promise<DailyPlan> {
+  createOrUpdatePlan({ bandwidth }: { bandwidth: number }): Promise<DailyPlan> {
     return jsonPost<DailyPlan>("/api/plans/today", { bandwidth });
   }
 
-  addMoreItems(count: number): Promise<DailyPlan> {
+  addMoreItems({ count }: { count: number }): Promise<DailyPlan> {
     return jsonPost<DailyPlan>("/api/plans/today/add-more", { count });
   }
 
-  markPlanCompleted(reference: string, vibeScale: number): Promise<DailyPlan> {
+  markPlanCompleted({ reference, vibeScale }: { reference: string; vibeScale: number }): Promise<DailyPlan> {
     return jsonPost<DailyPlan>("/api/plans/today/complete", { reference, vibeScale });
   }
 
@@ -67,7 +67,7 @@ export class ApiTrackerStorage implements ITrackerStorage {
     return jsonPost<DailyPlan>("/api/plans/today/complete-advanced", input);
   }
 
-  removePlanItem(reference: string): Promise<DailyPlan> {
+  removePlanItem({ reference }: { reference: string }): Promise<DailyPlan> {
     return jsonPost<DailyPlan>("/api/plans/today/remove-item", { reference });
   }
 
@@ -79,7 +79,7 @@ export class ApiTrackerStorage implements ITrackerStorage {
     return jsonPost<DailyPlan>("/api/plans/today/extra", input);
   }
 
-  togglePlanItem(date: string, reference: string): Promise<DailyPlan> {
+  togglePlanItem({ date, reference }: { date: string; reference: string }): Promise<DailyPlan> {
     return jsonPost<DailyPlan>(`/api/plans/${encodeURIComponent(date)}/toggle-item`, { reference });
   }
 

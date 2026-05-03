@@ -69,14 +69,14 @@ export interface ITrackerStorage {
   // Daily plans
   getTodayPlan(): Promise<DailyPlan | null>;
   getAllPlans(): Promise<DailyPlan[]>;
-  createOrUpdatePlan(bandwidth: number): Promise<DailyPlan>;
-  addMoreItems(count: number): Promise<DailyPlan>;
-  markPlanCompleted(reference: string, vibeScale: number): Promise<DailyPlan>;
+  createOrUpdatePlan(input: { bandwidth: number }): Promise<DailyPlan>;
+  addMoreItems(input: { count: number }): Promise<DailyPlan>;
+  markPlanCompleted(input: { reference: string; vibeScale: number }): Promise<DailyPlan>;
   markPlanCompletedAdvanced(input: CompleteAdvancedInput): Promise<DailyPlan>;
-  removePlanItem(reference: string): Promise<DailyPlan>;
+  removePlanItem(input: { reference: string }): Promise<DailyPlan>;
   clearPlan(): Promise<DailyPlan>;
   logExtraRevision(input: LogInput): Promise<DailyPlan>;
-  togglePlanItem(date: string, reference: string): Promise<DailyPlan>;
+  togglePlanItem(input: { date: string; reference: string }): Promise<DailyPlan>;
 
   // Stats
   getStats(): Promise<TrackerStats>;

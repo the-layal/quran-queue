@@ -282,3 +282,31 @@ export function getAyahsForReference(reference: string): PageAyahGroup[] {
   return [];
 }
 
+
+export const TOTAL_PAGES = 604;
+
+export interface Surah {
+  id: number;
+  name: string;
+  englishName: string;
+  ayahCount: number;
+  startPage: number;
+  endPage: number;
+}
+
+export const SURAHS: Surah[] = Object.entries(SURAH_PAGE_SPANS).map(([idStr, span]) => {
+  const id = parseInt(idStr, 10);
+  const sm = qmGetSurahMeta(id as never) as unknown as { arabicName?: string; latinName?: string; englishName?: string; [k: string]: unknown };
+  const name = String(sm.arabicName ?? sm.latinName ?? id);
+  const englishName = String(sm.englishName ?? sm.latinName ?? id);
+  return { id, name, englishName, ayahCount: span.ayahCount, startPage: span.startPage, endPage: span.endPage };
+}).sort((a, b) => a.id - b.id);
+
+export function getSurahName(surahId: number): { en: string; ar: string } {
+  const s = SURAHS.find((x) => x.id === surahId);
+  return s ? { en: s.englishName, ar: s.name } : { en: `Surah ${surahId}`, ar: `${surahId}` };
+}
+
+export function getSurahNamesForPageRange(from: number, to: number): string[] {
+  return SURAHS.filter((s) => s.startPage <= to && s.endPage >= from).map((s) => s.englishName);
+}

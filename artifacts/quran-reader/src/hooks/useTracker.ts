@@ -73,7 +73,7 @@ export function useCreateOrUpdatePlan() {
   const { storage } = useTrackerStorage();
   const invalidate = useInvalidateAll();
   return useMutation({
-    mutationFn: (vars: { bandwidth: number }) => storage.createOrUpdatePlan(vars.bandwidth),
+    mutationFn: (vars: { bandwidth: number }) => storage.createOrUpdatePlan(vars),
     onSuccess: () => invalidate(),
   });
 }
@@ -83,7 +83,7 @@ export function useMarkPlanCompleted() {
   const invalidate = useInvalidateAll();
   return useMutation({
     mutationFn: (vars: { reference: string; vibeScale: number }) =>
-      storage.markPlanCompleted(vars.reference, vars.vibeScale),
+      storage.markPlanCompleted(vars),
     onSuccess: () => invalidate(),
   });
 }
@@ -101,7 +101,7 @@ export function useAddMoreItems() {
   const { storage } = useTrackerStorage();
   const invalidate = useInvalidateAll();
   return useMutation({
-    mutationFn: (vars: { count: number }) => storage.addMoreItems(vars.count),
+    mutationFn: (vars: { count: number }) => storage.addMoreItems(vars),
     onSuccess: () => invalidate(),
   });
 }
@@ -110,7 +110,7 @@ export function useRemovePlanItem() {
   const { storage } = useTrackerStorage();
   const invalidate = useInvalidateAll();
   return useMutation({
-    mutationFn: (vars: { reference: string }) => storage.removePlanItem(vars.reference),
+    mutationFn: (vars: { reference: string }) => storage.removePlanItem(vars),
     onSuccess: () => invalidate(),
   });
 }
@@ -129,7 +129,7 @@ export function useToggleHistoryItem() {
   const invalidate = useInvalidateAll();
   return useMutation({
     mutationFn: (vars: { date: string; reference: string }) =>
-      storage.togglePlanItem(vars.date, vars.reference),
+      storage.togglePlanItem(vars),
     onSuccess: () => invalidate(),
   });
 }
