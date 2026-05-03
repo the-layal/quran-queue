@@ -519,7 +519,17 @@ export function useQueuePlayback(): QueuePlaybackState {
           }
 
           if (ct >= endThreshold || audio.ended) {
-            handleRegionEnd();
+            // Defer handleRegionEnd by one event-loop tick so React can render the
+            // last word's highlight before the cleanup call clears it.  Removing the
+            // listener here prevents any further timeupdate ticks from re-entering;
+            // storing the id in timeoutRef lets pause/stop cancel it if needed.
+            audio.removeEventListener("timeupdate", onTimeUpdate);
+            timeupdateListenerRef.current = null;
+            if (timeoutRef.current !== null) {
+              clearTimeout(timeoutRef.current);
+              timeoutRef.current = null;
+            }
+            timeoutRef.current = setTimeout(handleRegionEnd, 0);
           }
         };
 
