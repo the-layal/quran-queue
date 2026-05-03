@@ -65,8 +65,16 @@ function getDailyVerse(): VerseEntry {
   return DAILY_VERSES[dayOfYear % DAILY_VERSES.length];
 }
 
+// DAILY_VERSES and getDailyVerse are preserved for potential future use.
+
+const FIXED_VERSE: VerseEntry = {
+  arabic: "وَلَقَدْ يَسَّرْنَا الْقُرْآنَ لِلذِّكْرِ فَهَلْ مِن مُّدَّكِرٍ",
+  translation: "And We have certainly made the Quran easy for remembrance, so is there any who will remember?",
+  reference: "Quran 54:17",
+};
+
 function VersePanel() {
-  const verse = getDailyVerse();
+  const verse = FIXED_VERSE;
   return (
     <div
       className="mx-3 mb-3 p-3 rounded-xl bg-primary/5 border border-primary/15"
