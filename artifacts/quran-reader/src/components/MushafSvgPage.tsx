@@ -124,7 +124,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const [translitLoading, setTranslitLoading] = useState(false);
   const [translitError, setTranslitError] = useState<string | null>(null);
   const [popover, setPopover] = useState<
-    | { ayahKey: string; x: number; y: number }
+    | { ayahKey: string; x: number; y: number; placement: "above" | "below" }
     | null
   >(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -841,12 +841,28 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
         const a = wordGroup.getAttribute("data-aya");
         if (s && a) {
           const ayahKey = `${parseInt(s, 10)}:${parseInt(a, 10)}`;
-          const rect = (wordGroup as Element).getBoundingClientRect();
-          setPopover({
-            ayahKey,
-            x: rect.left + rect.width / 2,
-            y: rect.top,
-          });
+          // Re-tap on a word in the currently-shown ayah closes the popover
+          // (toggle behavior consistent with the active-word interaction).
+          if (popover && popover.ayahKey === ayahKey) {
+            setPopover(null);
+          } else {
+            const rect = (wordGroup as Element).getBoundingClientRect();
+            // Clamp horizontally so the popover stays inside the viewport.
+            const margin = 12;
+            const halfMaxW = 160; // matches max-w-xs (~20rem) / 2
+            const x = Math.max(
+              margin + halfMaxW,
+              Math.min(window.innerWidth - margin - halfMaxW, rect.left + rect.width / 2)
+            );
+            // If there isn't room above (popover ~ 120px tall), flip below.
+            const flipBelow = rect.top < 140;
+            setPopover({
+              ayahKey,
+              x,
+              y: flipBelow ? rect.bottom : rect.top,
+              placement: flipBelow ? "below" : "above",
+            });
+          }
         }
       }
 
@@ -1001,7 +1017,10 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
           style={{
             left: `${popover.x}px`,
             top: `${popover.y}px`,
-            transform: "translate(-50%, calc(-100% - 10px))",
+            transform:
+              popover.placement === "above"
+                ? "translate(-50%, calc(-100% - 10px))"
+                : "translate(-50%, 10px)",
           }}
           role="dialog"
           aria-modal="false"

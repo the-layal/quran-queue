@@ -389,6 +389,13 @@ export const TOTAL_SURAHS = 114;
 // Lazy fetch + module-level cache, separate from SVG rendering.
 // Returns a map "S:A" → concatenated transliteration string for every ayah on
 // the requested page.
+//
+// Source: Quran.com `verses/by_page` with `word_fields=transliteration`. We
+// concatenate per-word transliterations (filtering null end-marker words) into
+// a single ayah string. This is the same source used by Quran.com itself
+// (community-maintained, free to use) and matches the per-word transliteration
+// already returned by `fetchSurahVerses` for reading mode, so the two surfaces
+// stay text-consistent.
 
 const pageTransliterationsCache = new Map<number, Record<string, string>>();
 const pageTransliterationsPromise = new Map<number, Promise<Record<string, string>>>();
