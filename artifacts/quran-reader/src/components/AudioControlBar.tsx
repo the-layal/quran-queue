@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef, useMemo, useState } from "react";
-import { Play, Pause, Repeat, Music2, Highlighter, ListMusic, CheckCheck, Loader2, MoreHorizontal } from "lucide-react";
+import { Play, Pause, Repeat, Music2, Highlighter, ListMusic, CheckCheck, Loader2 } from "lucide-react";
 import SpeedSelector from "./SpeedSelector";
 import ReciterSelector from "./ReciterSelector";
 import type { ChapterMap } from "../types/quran";
@@ -63,25 +63,6 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
   const isSharedQueue = useQuranStore((s) => s.isSharedQueue);
 
   const [justAdded, setJustAdded] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const moreButtonRef = useRef<HTMLButtonElement>(null);
-  const morePopoverRef = useRef<HTMLDivElement>(null);
-
-  // ── More popover click-outside handler ───────────────────────────────────
-  useEffect(() => {
-    if (!moreOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (
-        morePopoverRef.current &&
-        !morePopoverRef.current.contains(e.target as Node) &&
-        !moreButtonRef.current?.contains(e.target as Node)
-      ) {
-        setMoreOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [moreOpen]);
 
   // ── Derived flags ─────────────────────────────────────────────────────────
   // Queue is "active" if it is playing or paused at a position
@@ -240,8 +221,11 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
   // ── Shared style atoms ────────────────────────────────────────────────────
   // On mobile: span full width with a small gutter on each side.
   // On sm+: intrinsic width anchored to bottom-right (unchanged desktop look).
+  // Idle states stay single-row; active state stacks on mobile.
+  const barBaseRow =
+    "fixed z-40 bottom-[8.5rem] left-2 right-2 sm:left-auto sm:right-6 sm:w-auto flex flex-row items-center gap-3 rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-xl px-4 py-2.5 transition-all duration-200";
   const barBase =
-    "fixed z-40 bottom-[8.5rem] left-2 right-2 sm:left-auto sm:right-6 sm:w-auto flex items-center gap-3 rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-xl px-4 py-2.5 transition-all duration-200";
+    "fixed z-40 bottom-[8.5rem] left-2 right-2 sm:left-auto sm:right-6 sm:w-auto flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-xl px-4 py-2.5 transition-all duration-200";
 
   const queueToggleBtn = (
     <button
@@ -269,7 +253,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
   if (!hasSelection && !queueActive) {
     return (
       <div
-        className={`${barBase} opacity-60`}
+        className={`${barBaseRow} opacity-60`}
         style={{ pointerEvents: "none" }}
         role="status"
         aria-label="Audio control bar"
@@ -291,7 +275,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
   if (!hasAudio && !queueActive && !isAudioLoading) {
     return (
       <div
-        className={`${barBase} opacity-60`}
+        className={`${barBaseRow} opacity-60`}
         style={{ pointerEvents: "none" }}
         role="status"
         aria-label="Audio control bar"
@@ -315,93 +299,82 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
     { value: "ayah", label: "Ayah" },
   ];
 
-  // ── Secondary controls (collapsed into "More" on mobile) ─────────────────
-  // Rendered inline on sm+, hidden on mobile (shown in popover instead).
-  const secondaryControlsInline = (
-    <>
-      {!queueActive && !isSharedQueue && (
+  // ── Shared secondary control elements ─────────────────────────────────────
+  const addToQueueBtn = !queueActive && !isSharedQueue ? (
+    <button
+      onClick={handleAddToQueue}
+      style={{ pointerEvents: "auto" }}
+      className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all flex-shrink-0 border ${
+        justAdded
+          ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 scale-110"
+          : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+      }`}
+      aria-label="Add selection to review queue"
+      title="Add to review queue"
+    >
+      <CheckCheck className="w-3.5 h-3.5" />
+    </button>
+  ) : null;
+
+  const highlightBtn = !queueActive ? (
+    <button
+      onClick={() => setPlaybackHighlightEnabled(!playbackHighlightEnabled)}
+      style={{ pointerEvents: "auto" }}
+      className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 border ${
+        playbackHighlightEnabled
+          ? "bg-primary/15 border-primary text-primary"
+          : "border-border text-muted-foreground hover:bg-muted"
+      }`}
+      aria-label={playbackHighlightEnabled ? "Disable per-word colour highlight" : "Enable per-word colour highlight"}
+      aria-pressed={playbackHighlightEnabled}
+      title={playbackHighlightEnabled ? "Word colour: on" : "Word colour: off"}
+    >
+      <Highlighter className="w-3.5 h-3.5" />
+    </button>
+  ) : null;
+
+  const highlightModeGroup = !queueActive ? (
+    <div
+      className="flex items-center rounded-lg border border-border overflow-hidden flex-shrink-0"
+      style={{ pointerEvents: "auto" }}
+      role="group"
+      aria-label="Highlight mode"
+    >
+      {modeOptions.map(({ value, label }) => (
         <button
-          onClick={handleAddToQueue}
-          style={{ pointerEvents: "auto" }}
-          className={`hidden sm:flex w-7 h-7 rounded-lg items-center justify-center transition-all flex-shrink-0 border ${
-            justAdded
-              ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 scale-110"
-              : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+          key={value}
+          onClick={() => setPlaybackHighlightMode(value)}
+          className={`px-2 py-1 text-xs font-medium transition-colors ${
+            playbackHighlightMode === value
+              ? "bg-primary/15 text-primary"
+              : "text-muted-foreground hover:bg-muted"
           }`}
-          aria-label="Add selection to review queue"
-          title="Add to review queue"
+          aria-pressed={playbackHighlightMode === value}
+          title={`Highlight by ${label.toLowerCase()}`}
         >
-          <CheckCheck className="w-3.5 h-3.5" />
+          {label}
         </button>
-      )}
+      ))}
+    </div>
+  ) : null;
 
-      {!queueActive && (
-        <button
-          onClick={() => setPlaybackHighlightEnabled(!playbackHighlightEnabled)}
-          style={{ pointerEvents: "auto" }}
-          className={`hidden sm:flex w-7 h-7 rounded-lg items-center justify-center transition-colors flex-shrink-0 border ${
-            playbackHighlightEnabled
-              ? "bg-primary/15 border-primary text-primary"
-              : "border-border text-muted-foreground hover:bg-muted"
-          }`}
-          aria-label={playbackHighlightEnabled ? "Disable per-word colour highlight" : "Enable per-word colour highlight"}
-          aria-pressed={playbackHighlightEnabled}
-          title={playbackHighlightEnabled ? "Word colour: on" : "Word colour: off"}
-        >
-          <Highlighter className="w-3.5 h-3.5" />
-        </button>
-      )}
-
-      {!queueActive && (
-        <div
-          className="hidden sm:flex items-center rounded-lg border border-border overflow-hidden flex-shrink-0"
-          style={{ pointerEvents: "auto" }}
-          role="group"
-          aria-label="Highlight mode"
-        >
-          {modeOptions.map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => setPlaybackHighlightMode(value)}
-              className={`px-2 py-1 text-xs font-medium transition-colors ${
-                playbackHighlightMode === value
-                  ? "bg-primary/15 text-primary"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
-              aria-pressed={playbackHighlightMode === value}
-              title={`Highlight by ${label.toLowerCase()}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="hidden sm:block flex-shrink-0">
-        <ReciterSelector style={{ pointerEvents: "auto" }} />
-      </div>
-
-      <div className="hidden sm:block flex-shrink-0">
-        <SpeedSelector style={{ pointerEvents: "auto" }} />
-      </div>
-
-      <button
-        onClick={handleRepeatCycle}
-        style={{ pointerEvents: "auto" }}
-        className={`hidden sm:flex h-7 rounded-lg items-center justify-center gap-1 transition-colors flex-shrink-0 border px-2 ${
-          repeatIsActive
-            ? "bg-primary/15 border-primary text-primary"
-            : "border-border text-muted-foreground hover:bg-muted"
-        }`}
-        aria-label={`Repeat: ${repeatLabel(clampedRepeat)}`}
-        title={`Repeat: ${repeatLabel(clampedRepeat)} — click to change`}
-      >
-        <Repeat className="w-3.5 h-3.5" />
-        <span className="text-[10px] font-bold tabular-nums leading-none">
-          {repeatLabel(clampedRepeat)}
-        </span>
-      </button>
-    </>
+  const repeatBtn = (
+    <button
+      onClick={handleRepeatCycle}
+      style={{ pointerEvents: "auto" }}
+      className={`h-7 rounded-lg flex items-center justify-center gap-1 transition-colors flex-shrink-0 border px-2 ${
+        repeatIsActive
+          ? "bg-primary/15 border-primary text-primary"
+          : "border-border text-muted-foreground hover:bg-muted"
+      }`}
+      aria-label={`Repeat: ${repeatLabel(clampedRepeat)}`}
+      title={`Repeat: ${repeatLabel(clampedRepeat)} — click to change`}
+    >
+      <Repeat className="w-3.5 h-3.5" />
+      <span className="text-[10px] font-bold tabular-nums leading-none">
+        {repeatLabel(clampedRepeat)}
+      </span>
+    </button>
   );
 
   return (
@@ -411,198 +384,110 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
       role="region"
       aria-label="Audio playback controls"
     >
-      {/* Play / Pause (or loading spinner while reciter audio is fetching) */}
-      <button
-        onClick={handlePlayPause}
-        disabled={showAudioLoading}
-        style={{ pointerEvents: "auto" }}
-        className={`w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center transition-colors flex-shrink-0 ${
-          showAudioLoading ? "cursor-wait opacity-70" : "hover:bg-primary/90"
-        }`}
-        aria-label={
-          showAudioLoading
-            ? "Loading reciter audio"
-            : isCurrentlyPlaying
-            ? "Pause"
-            : "Play"
-        }
-        aria-busy={showAudioLoading}
-      >
-        {showAudioLoading ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
-        ) : isCurrentlyPlaying ? (
-          <Pause className="w-4 h-4" />
-        ) : (
-          <Play className="w-4 h-4 ml-0.5" />
-        )}
-      </button>
-
-      {/* Progress area — flex-1 on mobile so slider fills available space */}
-      <div className="flex flex-col gap-1 min-w-0 flex-1 sm:flex-none">
-        {displayLabel && (
-          <span className="text-xs font-medium truncate max-w-full sm:max-w-[14rem]">
-            {displayLabel}
-          </span>
-        )}
-        <div
-          ref={progressBarRef}
-          className="relative h-3 w-full sm:w-36 flex items-center cursor-pointer select-none touch-none"
-          style={{ pointerEvents: "auto" }}
-          role="slider"
-          aria-label="Playback position"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(activeProgress * 100)}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerCancel}
-        >
-          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 rounded-full bg-muted overflow-hidden">
-            <div
-              className="absolute inset-y-0 left-0 bg-primary rounded-full"
-              style={{ width: `${Math.round(activeProgress * 100)}%` }}
-            />
-          </div>
-          {activeBoundaryFractions.map((frac) => (
-            <div
-              key={frac}
-              className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-black pointer-events-none"
-              style={{ left: `${frac * 100}%` }}
-            />
-          ))}
-          <div
-            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-primary shadow-sm"
-            style={{ left: `${Math.round(activeProgress * 100)}%` }}
-          />
-        </div>
-        {activeTotalDurationSec > 0 && (
-          <span className="text-[10px] tabular-nums text-muted-foreground leading-none">
-            {fmtTime(activeElapsedSec)} / {fmtTime(activeTotalDurationSec)}
-          </span>
-        )}
-      </div>
-
-      {/* Secondary controls — inline on sm+, hidden on mobile */}
-      {secondaryControlsInline}
-
-      {/* More button — mobile only, opens popover with secondary controls */}
-      <div className="relative sm:hidden flex-shrink-0">
+      {/*
+       * ── Primary row ──────────────────────────────────────────────────────
+       * Mobile:  flex-row — play · progress (flex-1) · queue toggle
+       * sm+:     `sm:contents` dissolves this wrapper so its children become
+       *          direct flex items of the outer bar (single-row desktop look).
+       */}
+      <div className="flex items-center gap-2 sm:contents">
+        {/* Play / Pause (or loading spinner while reciter audio is fetching) */}
         <button
-          ref={moreButtonRef}
-          onClick={() => setMoreOpen((v) => !v)}
+          onClick={handlePlayPause}
+          disabled={showAudioLoading}
           style={{ pointerEvents: "auto" }}
-          className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 border ${
-            moreOpen
-              ? "bg-primary/15 border-primary text-primary"
-              : "border-border text-muted-foreground hover:bg-muted"
+          className={`w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center transition-colors flex-shrink-0 ${
+            showAudioLoading ? "cursor-wait opacity-70" : "hover:bg-primary/90"
           }`}
-          aria-label="More controls"
-          aria-haspopup="dialog"
-          aria-expanded={moreOpen}
-          title="More controls"
+          aria-label={
+            showAudioLoading
+              ? "Loading reciter audio"
+              : isCurrentlyPlaying
+              ? "Pause"
+              : "Play"
+          }
+          aria-busy={showAudioLoading}
         >
-          <MoreHorizontal className="w-3.5 h-3.5" />
+          {showAudioLoading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : isCurrentlyPlaying ? (
+            <Pause className="w-4 h-4" />
+          ) : (
+            <Play className="w-4 h-4 ml-0.5" />
+          )}
         </button>
 
-        {moreOpen && (
+        {/* Progress area */}
+        <div className="flex flex-col gap-1 min-w-0 flex-1 sm:flex-none">
+          {displayLabel && (
+            <span className="text-xs font-medium truncate max-w-full sm:max-w-[14rem]">
+              {displayLabel}
+            </span>
+          )}
           <div
-            ref={morePopoverRef}
-            className="absolute bottom-full mb-2 right-0 z-[70] bg-card border border-border rounded-xl shadow-xl p-2 flex flex-col gap-1.5 min-w-[11rem]"
-            role="dialog"
-            aria-label="More playback controls"
+            ref={progressBarRef}
+            className="relative h-3 w-full sm:w-36 flex items-center cursor-pointer select-none touch-none"
             style={{ pointerEvents: "auto" }}
+            role="slider"
+            aria-label="Playback position"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(activeProgress * 100)}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
           >
-            {/* Add to queue */}
-            {!queueActive && !isSharedQueue && (
-              <button
-                onClick={() => { handleAddToQueue(); setMoreOpen(false); }}
-                style={{ pointerEvents: "auto" }}
-                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all border ${
-                  justAdded
-                    ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400"
-                    : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-                aria-label="Add selection to review queue"
-              >
-                <CheckCheck className="w-3.5 h-3.5 flex-shrink-0" />
-                <span>Add to queue</span>
-              </button>
-            )}
-
-            {/* Highlight toggle */}
-            {!queueActive && (
-              <button
-                onClick={() => setPlaybackHighlightEnabled(!playbackHighlightEnabled)}
-                style={{ pointerEvents: "auto" }}
-                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors border ${
-                  playbackHighlightEnabled
-                    ? "bg-primary/15 border-primary text-primary"
-                    : "border-border text-muted-foreground hover:bg-muted"
-                }`}
-                aria-pressed={playbackHighlightEnabled}
-              >
-                <Highlighter className="w-3.5 h-3.5 flex-shrink-0" />
-                <span>Word colour: {playbackHighlightEnabled ? "on" : "off"}</span>
-              </button>
-            )}
-
-            {/* Highlight mode segment */}
-            {!queueActive && (
-              <div className="flex items-center rounded-lg border border-border overflow-hidden" style={{ pointerEvents: "auto" }} role="group" aria-label="Highlight mode">
-                {modeOptions.map(({ value, label }) => (
-                  <button
-                    key={value}
-                    onClick={() => setPlaybackHighlightMode(value)}
-                    className={`flex-1 px-2 py-1.5 text-xs font-medium transition-colors ${
-                      playbackHighlightMode === value
-                        ? "bg-primary/15 text-primary"
-                        : "text-muted-foreground hover:bg-muted"
-                    }`}
-                    aria-pressed={playbackHighlightMode === value}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Reciter selector */}
-            <div className="flex items-center gap-2 px-1">
-              <span className="text-xs text-muted-foreground flex-shrink-0">Reciter</span>
-              <div className="flex-1 flex justify-end">
-                <ReciterSelector style={{ pointerEvents: "auto" }} />
-              </div>
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 rounded-full bg-muted overflow-hidden">
+              <div
+                className="absolute inset-y-0 left-0 bg-primary rounded-full"
+                style={{ width: `${Math.round(activeProgress * 100)}%` }}
+              />
             </div>
-
-            {/* Speed selector */}
-            <div className="flex items-center gap-2 px-1">
-              <span className="text-xs text-muted-foreground flex-shrink-0">Speed</span>
-              <div className="flex-1 flex justify-end">
-                <SpeedSelector style={{ pointerEvents: "auto" }} />
-              </div>
-            </div>
-
-            {/* Repeat */}
-            <button
-              onClick={handleRepeatCycle}
-              style={{ pointerEvents: "auto" }}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors border ${
-                repeatIsActive
-                  ? "bg-primary/15 border-primary text-primary"
-                  : "border-border text-muted-foreground hover:bg-muted"
-              }`}
-              aria-label={`Repeat: ${repeatLabel(clampedRepeat)}`}
-            >
-              <Repeat className="w-3.5 h-3.5 flex-shrink-0" />
-              <span>Repeat: {repeatLabel(clampedRepeat)}</span>
-            </button>
+            {activeBoundaryFractions.map((frac) => (
+              <div
+                key={frac}
+                className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-black pointer-events-none"
+                style={{ left: `${frac * 100}%` }}
+              />
+            ))}
+            <div
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-primary shadow-sm"
+              style={{ left: `${Math.round(activeProgress * 100)}%` }}
+            />
           </div>
-        )}
+          {activeTotalDurationSec > 0 && (
+            <span className="text-[10px] tabular-nums text-muted-foreground leading-none">
+              {fmtTime(activeElapsedSec)} / {fmtTime(activeTotalDurationSec)}
+            </span>
+          )}
+        </div>
+
+        {/* Queue toggle — mobile: end of top row (hidden on sm+, re-rendered below) */}
+        <div className="sm:hidden flex-shrink-0">{queueToggleBtn}</div>
       </div>
 
-      {/* Queue toggle — always visible */}
-      {queueToggleBtn}
+      {/*
+       * ── Secondary controls ────────────────────────────────────────────────
+       * Mobile:  flex-row (bottom row), wraps on very narrow screens.
+       * sm+:     `sm:contents` dissolves this wrapper so items flow inline
+       *          in the bar's single flex row, between progress and queue toggle.
+       */}
+      <div className="flex items-center gap-2 flex-wrap sm:contents">
+        {addToQueueBtn}
+        {highlightBtn}
+        {highlightModeGroup}
+        <div className="flex-shrink-0" style={{ pointerEvents: "auto" }}>
+          <ReciterSelector style={{ pointerEvents: "auto" }} />
+        </div>
+        <div className="flex-shrink-0" style={{ pointerEvents: "auto" }}>
+          <SpeedSelector style={{ pointerEvents: "auto" }} />
+        </div>
+        {repeatBtn}
+      </div>
+
+      {/* Queue toggle — sm+: appears after secondary controls in the single row */}
+      <div className="hidden sm:block flex-shrink-0">{queueToggleBtn}</div>
     </div>
   );
 }
