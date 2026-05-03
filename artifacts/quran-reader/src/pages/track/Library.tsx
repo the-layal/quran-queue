@@ -241,7 +241,7 @@ export default function LibraryPage() {
         </div>
       </div>
 
-      <div className={cn("flex items-center justify-end gap-1.5 text-xs text-muted-foreground mb-3", view === "simple" && "invisible")}>
+      <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground mb-3">
         <span>Weak</span>
         <div className="flex gap-1">
           <div className="w-3 h-3 rounded-sm bg-primary/20" />
