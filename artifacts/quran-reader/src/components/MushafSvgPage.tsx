@@ -816,11 +816,11 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       // Short-circuit early when the hovered ayah is already the active popover
       // ayah so rapid hover across same-ayah words doesn't refire fetches.
       if (showMushafTranslationRef.current) {
-        const wordId = (wordEl as HTMLElement).id; // "surah:ayah:wordIndex"
-        if (wordId) {
-          const parts = wordId.split(":");
-          const surahNum = parseInt(parts[0], 10);
-          const ayahNum  = parseInt(parts[1], 10);
+        const surahAttr = (wordEl as Element).getAttribute("data-surah");
+        const ayahAttr = (wordEl as Element).getAttribute("data-aya");
+        if (surahAttr && ayahAttr) {
+          const surahNum = parseInt(surahAttr, 10);
+          const ayahNum = parseInt(ayahAttr, 10);
           if (surahNum > 0 && ayahNum > 0) {
             const ayahKey = `${surahNum}:${ayahNum}`;
             if (translationPopoverAyahKeyRef.current !== ayahKey) {
