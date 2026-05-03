@@ -1,23 +1,14 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import AppShell from "@/components/AppShell";
 import GuestBanner from "@/components/GuestBanner";
-import {
-  useCreateOrUpdatePlan,
-  useTodayPlan,
-  useAllPlans,
-  useMarkPlanCompleted,
-  useMarkPlanCompletedAdvanced,
-  useAddMoreItems,
-  useRemovePlanItem,
-  useClearPlan,
-} from "@/hooks/useTracker";
+import { useTrackerStorage } from "@/context/useTrackerStorage";
+import type { DailyPlan, CompleteAdvancedInput } from "@/storage/trackerStorage";
 import { LogModal } from "@/components/LogModal";
 import { AdvancedVibeGrid } from "@/components/AdvancedVibeGrid";
 import { BrainCircuit, Settings2, CheckCircle2, ListTodo, ChevronLeft, ChevronRight, Circle, Play, BookOpen, Layers, X, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VibeScale } from "@/components/ui/VibeScale";
 import { getPageCountForReference, getSurahNamesForPageRange } from "@/lib/page-utils";
-import type { DailyPlan } from "@/hooks/useTracker";
 
 function parseReference(ref: string) {
   const parts = ref.split(":");
@@ -147,14 +138,12 @@ function PlanCalendar({ plans }: { plans: DailyPlan[] }) {
 }
 
 export default function DailyPlanPage() {
-  const { data: plan, isLoading: isLoadingPlan } = useTodayPlan();
-  const { data: allPlans } = useAllPlans();
-  const { mutate: updatePlan, isPending: isUpdatingPlan } = useCreateOrUpdatePlan();
-  const { mutate: markCompleted, isPending: isMarking } = useMarkPlanCompleted();
-  const { mutate: markCompletedAdvanced, isPending: isMarkingAdvanced } = useMarkPlanCompletedAdvanced();
-  const { mutate: addMore, isPending: isAddingMore } = useAddMoreItems();
-  const { mutate: removeItem } = useRemovePlanItem();
-  const { mutate: clearPlan, isPending: isClearing } = useClearPlan();
+  const { storage } = useTrackerStorage();
+
+  const [plan, setPlan] = useState<DailyPlan | null>(null);
+  const [allPlans, setAllPlans] = useState<DailyPlan[]>([]);
+  const [isLoadingPlan, setIsLoadingPlan] = useState(true);
+  const [pending, setPending] = useState<null | "create" | "complete" | "complete-adv" | "add" | "clear">(null);
 
   const [bandwidth, setBandwidth] = useState(5);
   const [isConfiguring, setIsConfiguring] = useState(false);
@@ -165,8 +154,24 @@ export default function DailyPlanPage() {
   const [inlineVibe, setInlineVibe] = useState(0);
   const [advancedMode, setAdvancedMode] = useState<string | null>(null);
 
-  const handleCreatePlan = () => {
-    updatePlan({ bandwidth }, { onSuccess: () => setIsConfiguring(false) });
+  const reload = useCallback(async () => {
+    const [p, all] = await Promise.all([storage.getTodayPlan(), storage.getAllPlans()]);
+    setPlan(p);
+    setAllPlans(all);
+    setIsLoadingPlan(false);
+  }, [storage]);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  const handleCreatePlan = async () => {
+    setPending("create");
+    try {
+      await storage.createOrUpdatePlan({ bandwidth });
+      setIsConfiguring(false);
+      await reload();
+    } finally {
+      setPending(null);
+    }
   };
 
   const handleItemClick = (reference: string) => {
@@ -175,16 +180,53 @@ export default function DailyPlanPage() {
     setAdvancedMode(null);
   };
 
-  const handleVibeSubmit = (reference: string, vibe: number) => {
-    markCompleted({ reference, vibeScale: vibe }, {
-      onSuccess: () => { setInlineVibeRef(null); setInlineVibe(0); },
-    });
+  const handleVibeSubmit = async (reference: string, vibe: number) => {
+    setPending("complete");
+    try {
+      await storage.markPlanCompleted({ reference, vibeScale: vibe });
+      setInlineVibeRef(null);
+      setInlineVibe(0);
+      await reload();
+    } finally {
+      setPending(null);
+    }
   };
 
-  const handleAdvancedSubmit = (reference: string, ayahVibes: { surah: number; ayah: number; vibe: number }[]) => {
-    markCompletedAdvanced({ reference, ayahVibes }, {
-      onSuccess: () => { setInlineVibeRef(null); setAdvancedMode(null); },
-    });
+  const handleAdvancedSubmit = async (reference: string, ayahVibes: CompleteAdvancedInput["ayahVibes"]) => {
+    setPending("complete-adv");
+    try {
+      await storage.markPlanCompletedAdvanced({ reference, ayahVibes });
+      setInlineVibeRef(null);
+      setAdvancedMode(null);
+      await reload();
+    } finally {
+      setPending(null);
+    }
+  };
+
+  const handleAddMore = async () => {
+    setPending("add");
+    try {
+      await storage.addMoreItems({ count: 1 });
+      await reload();
+    } finally {
+      setPending(null);
+    }
+  };
+
+  const handleRemoveItem = async (reference: string) => {
+    await storage.removePlanItem({ reference });
+    await reload();
+  };
+
+  const handleClearPlan = async () => {
+    setPending("clear");
+    try {
+      await storage.clearPlan();
+      await reload();
+    } finally {
+      setPending(null);
+    }
   };
 
   const handleOpenFullLogger = (reference: string) => {
@@ -208,6 +250,12 @@ export default function DailyPlanPage() {
   const totalPlanPages = getTotalPages(plannedItems);
   const completedPages = getTotalPages(completedItems);
   const hasUncompleted = plannedItems.some((r) => !completedItems.includes(r));
+
+  const isMarking = pending === "complete";
+  const isMarkingAdvanced = pending === "complete-adv";
+  const isAddingMore = pending === "add";
+  const isClearing = pending === "clear";
+  const isUpdatingPlan = pending === "create";
 
   return (
     <AppShell>
@@ -264,7 +312,7 @@ export default function DailyPlanPage() {
               </div>
               <div className="flex items-center gap-2">
                 {hasUncompleted && (
-                  <button onClick={() => clearPlan()} disabled={isClearing} data-testid="button-clear-plan" className="text-muted-foreground hover:text-destructive flex items-center gap-1.5 text-sm bg-secondary/50 px-3 py-1.5 rounded-lg transition-colors">
+                  <button onClick={handleClearPlan} disabled={isClearing} data-testid="button-clear-plan" className="text-muted-foreground hover:text-destructive flex items-center gap-1.5 text-sm bg-secondary/50 px-3 py-1.5 rounded-lg transition-colors">
                     <Trash2 size={14} /> {isClearing ? "Clearing..." : "Clear"}
                   </button>
                 )}
@@ -322,7 +370,7 @@ export default function DailyPlanPage() {
                               Review & Rate
                             </span>
                             <button
-                              onClick={(e) => { e.stopPropagation(); removeItem({ reference: ref }); }}
+                              onClick={(e) => { e.stopPropagation(); handleRemoveItem(ref); }}
                               data-testid={`button-remove-item-${idx}`}
                               className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                               title="Remove from plan"
@@ -400,7 +448,7 @@ export default function DailyPlanPage() {
               )}
 
               <div className="flex gap-3">
-                <button onClick={() => addMore({ count: 1 })} disabled={isAddingMore} data-testid="button-add-more" className="flex-1 py-4 rounded-2xl border-2 border-dashed border-border hover:border-primary/40 text-muted-foreground hover:text-primary font-medium transition-all hover:bg-primary/5">
+                <button onClick={handleAddMore} disabled={isAddingMore} data-testid="button-add-more" className="flex-1 py-4 rounded-2xl border-2 border-dashed border-border hover:border-primary/40 text-muted-foreground hover:text-primary font-medium transition-all hover:bg-primary/5">
                   {isAddingMore ? "Adding..." : "+ Add 1 Page"}
                 </button>
                 <button onClick={() => setExtraModalOpen(true)} data-testid="button-extra-revision" className="flex-1 py-4 rounded-2xl border-2 border-dashed border-border hover:border-accent/40 text-muted-foreground hover:text-accent font-medium transition-all hover:bg-accent/5 flex items-center justify-center gap-2">
@@ -411,13 +459,13 @@ export default function DailyPlanPage() {
           </div>
 
           <div>
-            <PlanCalendar plans={allPlans || []} />
+            <PlanCalendar plans={allPlans} />
           </div>
         </div>
       )}
 
-      <LogModal isOpen={logModalOpen} onClose={() => setLogModalOpen(false)} {...parseReference(selectedReference)} />
-      <LogModal isOpen={extraModalOpen} onClose={() => setExtraModalOpen(false)} mode="extra" />
+      <LogModal isOpen={logModalOpen} onClose={() => { setLogModalOpen(false); reload(); }} {...parseReference(selectedReference)} />
+      <LogModal isOpen={extraModalOpen} onClose={() => { setExtraModalOpen(false); reload(); }} mode="extra" />
       </div>
     </AppShell>
   );

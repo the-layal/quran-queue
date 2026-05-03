@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import AppShell from "@/components/AppShell";
 import GuestBanner from "@/components/GuestBanner";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { useStats, useTodayPlan } from "@/hooks/useTracker";
+import { useTrackerStorage } from "@/context/useTrackerStorage";
+import type { DailyPlan, TrackerStats } from "@/storage/trackerStorage";
 import { Trophy, ArrowRight, PenLine, CheckCircle2, Play, Flame } from "lucide-react";
 import { TOTAL_PAGES, SURAHS } from "@/lib/quran-data";
 import { Link } from "wouter";
@@ -44,9 +45,18 @@ function formatReference(ref: string): string {
 }
 
 export default function Dashboard() {
-  const { data: stats } = useStats();
-  const { data: todayPlan } = useTodayPlan();
+  const { storage } = useTrackerStorage();
+  const [stats, setStats] = useState<TrackerStats | null>(null);
+  const [todayPlan, setTodayPlan] = useState<DailyPlan | null>(null);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+
+  const reload = useCallback(async () => {
+    const [s, p] = await Promise.all([storage.getStats(), storage.getTodayPlan()]);
+    setStats(s);
+    setTodayPlan(p);
+  }, [storage]);
+
+  useEffect(() => { reload(); }, [reload]);
 
   const memorizedPages = stats?.memorizedPages || 0;
   const dueToday = stats?.dueToday || 0;
@@ -57,7 +67,7 @@ export default function Dashboard() {
     { name: "Remaining", value: Math.max(0, TOTAL_PAGES - memorizedPages) || 1, color: "hsl(var(--secondary))" },
   ];
 
-  const percentage = TOTAL_PAGES > 0 ? Math.round((memorizedPages / TOTAL_PAGES) * 100) : 0;
+  const percentage = TOTAL_PAGES > 0 ? Math.floor((memorizedPages / TOTAL_PAGES) * 100) : 0;
   const plannedItems = todayPlan?.plannedItems || [];
   const completedItems = todayPlan?.completedItems || [];
 
@@ -183,7 +193,7 @@ export default function Dashboard() {
         <PenLine size={22} />
       </button>
 
-      <LogModal isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} />
+      <LogModal isOpen={isLogModalOpen} onClose={() => { setIsLogModalOpen(false); reload(); }} />
     </AppShell>
   );
 }
