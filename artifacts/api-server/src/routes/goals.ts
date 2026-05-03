@@ -1,11 +1,9 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
 import { storage } from "../storage/index";
-import { qfTokenService } from "../lib/qfTokenService";
+import { syncGoalToQF, pushProgressToQF, fetchQFGoals } from "../lib/qfGoalsService";
 
 const router: IRouter = Router();
-
-const QF_GOALS_URL = "https://api.quran.foundation/api/v4/user/goals";
 
 function isAuth(req: Request, res: Response): req is Request & { user: NonNullable<typeof req.user> } {
   if (!req.isAuthenticated()) {
@@ -13,63 +11,6 @@ function isAuth(req: Request, res: Response): req is Request & { user: NonNullab
     return false;
   }
   return true;
-}
-
-async function syncGoalToQF(userId: string, goal: {
-  surahNumber: number;
-  ayahStart: number;
-  ayahEnd: number;
-  targetDate: string;
-  dailyTarget: number;
-}): Promise<string | null> {
-  try {
-    const token = await qfTokenService.getToken(userId);
-    if (!token) return null;
-
-    const res = await fetch(QF_GOALS_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        type: "memorization",
-        surah_id: goal.surahNumber,
-        start_verse: goal.ayahStart,
-        end_verse: goal.ayahEnd,
-        target_date: goal.targetDate,
-        daily_target: goal.dailyTarget,
-      }),
-    });
-
-    if (!res.ok) return null;
-    const data = (await res.json()) as { id?: string | number };
-    return data.id ? String(data.id) : null;
-  } catch {
-    return null;
-  }
-}
-
-async function pushProgressToQF(userId: string, qfGoalId: string, completedCount: number, totalCount: number): Promise<void> {
-  try {
-    const token = await qfTokenService.getToken(userId);
-    if (!token) return;
-
-    await fetch(`${QF_GOALS_URL}/${qfGoalId}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        completed_verses: completedCount,
-        total_verses: totalCount,
-        progress_percent: totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0,
-      }),
-    });
-  } catch {
-    // silent — local goal is the source of truth
-  }
 }
 
 const createGoalSchema = z.object({
@@ -99,13 +40,12 @@ router.post("/goals", async (req: Request, res: Response) => {
 
     const goal = await storage.createGoal({ userId, ...input });
 
-    const qfGoalId = await syncGoalToQF(userId, input);
-    if (qfGoalId) {
-      await storage.updateGoal(goal.id, { qfGoalId });
-      res.status(201).json({ ...goal, qfGoalId });
-    } else {
-      res.status(201).json(goal);
-    }
+    // Best-effort QF sync — fire async, don't block the response
+    syncGoalToQF(userId, input).then(async (qfGoalId) => {
+      if (qfGoalId) await storage.updateGoal(goal.id, { qfGoalId });
+    }).catch(() => {});
+
+    res.status(201).json(goal);
   } catch (err) {
     if (err instanceof z.ZodError) {
       res.status(400).json({ message: err.errors[0].message });
@@ -134,6 +74,15 @@ router.patch("/goals/:id", async (req: Request, res: Response) => {
 
     const input = updateGoalSchema.parse(req.body);
     const updated = await storage.updateGoal(id, input);
+
+    // Push status/date changes to QF in background
+    if (updated.qfGoalId) {
+      const total = updated.ayahEnd - updated.ayahStart + 1;
+      const completed = (updated.completedAyahsList || []).length;
+      const isComplete = updated.status === "complete";
+      void pushProgressToQF(userId, updated.qfGoalId, completed, total, isComplete);
+    }
+
     res.json(updated);
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -162,38 +111,26 @@ router.delete("/goals/:id", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/goals/qf/sync
+ * Imports goals from QF that don't exist locally yet and returns the count.
+ */
 router.get("/goals/qf/sync", async (req: Request, res: Response) => {
   if (!isAuth(req, res)) return;
   try {
     const userId = req.user!.id;
-    const token = await qfTokenService.getToken(userId);
-    if (!token) { res.json({ synced: 0 }); return; }
-
-    const qfRes = await fetch(QF_GOALS_URL, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    if (!qfRes.ok) { res.json({ synced: 0 }); return; }
-
-    const qfGoals = (await qfRes.json()) as Array<{
-      id: string | number;
-      surah_id?: number;
-      start_verse?: number;
-      end_verse?: number;
-      target_date?: string;
-      daily_target?: number;
-    }>;
+    const qfGoals = await fetchQFGoals(userId);
+    if (qfGoals.length === 0) { res.json({ synced: 0 }); return; }
 
     const existingGoals = await storage.getGoals(userId);
     const existingQfIds = new Set(existingGoals.map((g) => g.qfGoalId).filter(Boolean));
 
     let synced = 0;
     for (const qg of qfGoals) {
-      const qfId = String(qg.id);
-      if (existingQfIds.has(qfId)) continue;
+      if (existingQfIds.has(qg.id)) continue;
       if (!qg.surah_id || !qg.start_verse || !qg.end_verse || !qg.target_date) continue;
 
-      await storage.createGoal({
+      const created = await storage.createGoal({
         userId,
         surahNumber: qg.surah_id,
         ayahStart: qg.start_verse,
@@ -201,6 +138,8 @@ router.get("/goals/qf/sync", async (req: Request, res: Response) => {
         targetDate: qg.target_date,
         dailyTarget: qg.daily_target ?? 1,
       });
+      // Store qfGoalId so future syncs don't reimport it
+      await storage.updateGoal(created.id, { qfGoalId: qg.id });
       synced++;
     }
 
@@ -210,5 +149,4 @@ router.get("/goals/qf/sync", async (req: Request, res: Response) => {
   }
 });
 
-export { pushProgressToQF };
 export default router;

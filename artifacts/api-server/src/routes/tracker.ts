@@ -7,6 +7,7 @@ import {
   groupConsecutivePages,
   getAyahsForReference,
 } from "../lib/page-utils";
+import { pushProgressToQF } from "../lib/qfGoalsService";
 
 const router: IRouter = Router();
 
@@ -434,10 +435,15 @@ async function updateGoalProgressForAyah(userId: string, surahNumber: number, ay
       completed.add(ayahNumber);
       const newList = Array.from(completed);
       const total = goal.ayahEnd - goal.ayahStart + 1;
-      await storage.updateGoal(goal.id, {
+      const isComplete = newList.length >= total;
+      const updated = await storage.updateGoal(goal.id, {
         completedAyahsList: newList,
-        status: newList.length >= total ? "complete" : "active",
+        status: isComplete ? "complete" : "active",
       });
+      // Push progress to QF in background — best-effort
+      if (updated.qfGoalId) {
+        void pushProgressToQF(userId, updated.qfGoalId, newList.length, total, isComplete);
+      }
     }
   } catch {
     // non-critical — don't block the response

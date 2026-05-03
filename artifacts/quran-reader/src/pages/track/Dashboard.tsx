@@ -4,7 +4,7 @@ import GuestBanner from "@/components/GuestBanner";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useTrackerStorage } from "@/context/useTrackerStorage";
 import type { DailyPlan, TrackerStats } from "@/storage/trackerStorage";
-import { Trophy, ArrowRight, PenLine, CheckCircle2, Play, Flame, Plus, Target, X } from "lucide-react";
+import { Trophy, ArrowRight, PenLine, CheckCircle2, Play, Flame, Plus, Target, X, ChevronDown, ChevronUp, Link2 } from "lucide-react";
 import { TOTAL_PAGES, SURAHS } from "@/lib/quran-data";
 import { Link } from "wouter";
 import { LogModal } from "@/components/LogModal";
@@ -54,24 +54,38 @@ function daysUntil(dateStr: string): number {
 }
 
 function GoalCard({ goal, onDelete }: { goal: Goal; onDelete: (id: number) => void }) {
+  const [expanded, setExpanded] = useState(false);
   const surah = SURAHS.find((s) => s.id === goal.surahNumber);
   const totalAyahs = goal.ayahEnd - goal.ayahStart + 1;
-  const completedCount = (goal.completedAyahsList || []).length;
+  const completedSet = new Set(goal.completedAyahsList || []);
+  const completedCount = completedSet.size;
   const progressPct = totalAyahs > 0 ? Math.round((completedCount / totalAyahs) * 100) : 0;
   const days = daysUntil(goal.targetDate);
   const isComplete = goal.status === "complete";
   const isOverdue = days < 0 && !isComplete;
+  const isSynced = !!goal.qfGoalId;
+
+  // Limit dot display to 60 ayahs; show ellipsis if more
+  const displayDots = totalAyahs <= 80;
 
   return (
     <div className={cn(
-      "bg-background rounded-2xl p-4 border flex flex-col gap-2",
-      isComplete ? "border-primary/40 bg-primary/5" : isOverdue ? "border-destructive/40" : "border-border/50",
+      "bg-background rounded-2xl p-4 border flex flex-col gap-2.5",
+      isComplete ? "border-primary/40 bg-primary/5" : isOverdue ? "border-destructive/30" : "border-border/50",
     )}>
+      {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground leading-tight truncate">
-            {surah?.englishName ?? `Surah ${goal.surahNumber}`}
-          </p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-semibold text-foreground leading-tight truncate">
+              {surah?.englishName ?? `Surah ${goal.surahNumber}`}
+            </p>
+            {isSynced && (
+              <span title="Synced with Quran Foundation" className="flex-shrink-0">
+                <Link2 className="w-3 h-3 text-blue-500" />
+              </span>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground mt-0.5">
             {goal.ayahStart === 1 && goal.ayahEnd === surah?.ayahCount
               ? "Full surah"
@@ -95,15 +109,16 @@ function GoalCard({ goal, onDelete }: { goal: Goal; onDelete: (id: number) => vo
         </div>
       </div>
 
+      {/* Progress bar */}
       <div className="space-y-1">
         <div className="h-1.5 bg-muted rounded-full overflow-hidden">
           <div
-            className={cn("h-full rounded-full transition-all", isComplete ? "bg-primary" : "bg-primary/60")}
+            className={cn("h-full rounded-full transition-all", isComplete ? "bg-primary" : "bg-primary/70")}
             style={{ width: `${progressPct}%` }}
           />
         </div>
         <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-          <span>{completedCount}/{totalAyahs} ayahs</span>
+          <span className="tabular-nums">{completedCount}/{totalAyahs} ayahs</span>
           <span>
             {isComplete
               ? "Completed"
@@ -115,6 +130,71 @@ function GoalCard({ goal, onDelete }: { goal: Goal; onDelete: (id: number) => vo
           </span>
         </div>
       </div>
+
+      {/* Daily target */}
+      {!isComplete && (
+        <div className="text-[11px] text-muted-foreground">
+          Target pace: <span className="font-medium text-foreground">{goal.dailyTarget} ayah{goal.dailyTarget !== 1 ? "s" : ""}/day</span>
+        </div>
+      )}
+
+      {/* Expandable per-ayah mastery grid */}
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        {expanded ? "Hide" : "Show"} ayah breakdown
+      </button>
+
+      {expanded && (
+        <div className="pt-1">
+          {displayDots ? (
+            <div className="flex flex-wrap gap-1">
+              {Array.from({ length: totalAyahs }, (_, i) => {
+                const ayahNum = goal.ayahStart + i;
+                const done = completedSet.has(ayahNum);
+                return (
+                  <div
+                    key={ayahNum}
+                    title={`Ayah ${ayahNum}${done ? " ✓" : ""}`}
+                    className={cn(
+                      "w-5 h-5 rounded text-[9px] flex items-center justify-center font-medium transition-colors",
+                      done
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {ayahNum}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <p className="text-[11px] text-muted-foreground">
+                {completedCount} of {totalAyahs} ayahs memorized ({progressPct}%)
+              </p>
+              <div className="flex flex-wrap gap-0.5">
+                {Array.from({ length: totalAyahs }, (_, i) => {
+                  const ayahNum = goal.ayahStart + i;
+                  const done = completedSet.has(ayahNum);
+                  return (
+                    <div
+                      key={ayahNum}
+                      title={`Ayah ${ayahNum}`}
+                      className={cn(
+                        "w-2.5 h-2.5 rounded-sm",
+                        done ? "bg-primary" : "bg-muted",
+                      )}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -294,7 +374,7 @@ export default function Dashboard() {
                 <Target size={22} />
               </div>
               <p className="text-foreground font-medium">No goals yet</p>
-              <p className="text-sm text-muted-foreground mt-1 mb-4">Set a memorization goal to track your progress.</p>
+              <p className="text-sm text-muted-foreground mt-1 mb-4">Set a memorization goal to track your progress ayah by ayah.</p>
               <button
                 onClick={() => setIsGoalModalOpen(true)}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
