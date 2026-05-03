@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, type RefObject } from "react";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, X } from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
 import { useSmartBrush } from "../hooks/useSmartBrush";
 import { hasArabicLetter } from "../utils/arabicUtils";
+import { fetchPageTransliterations } from "../services/quranApi";
 
 interface MushafSvgPageProps {
   pageNumber: number;
@@ -116,6 +117,17 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const jsonToSvgWordsMap = useQuranStore((s) => s.jsonToSvgWordsMap);
   const blindReviewMode = useQuranStore((s) => s.blindReviewMode);
   const manuallyRevealedIds = useQuranStore((s) => s.manuallyRevealedIds);
+  const showTransliteration = useQuranStore((s) => s.settings.showTransliteration);
+
+  // ── Transliteration popover ─────────────────────────────────────────────
+  const [translitMap, setTranslitMap] = useState<Record<string, string>>({});
+  const [translitLoading, setTranslitLoading] = useState(false);
+  const [translitError, setTranslitError] = useState<string | null>(null);
+  const [popover, setPopover] = useState<
+    | { ayahKey: string; x: number; y: number }
+    | null
+  >(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const jsonToSvgWordsMapRef = useRef(jsonToSvgWordsMap);
   jsonToSvgWordsMapRef.current = jsonToSvgWordsMap;
   const brush = useSmartBrush("mushaf", containerRef as RefObject<HTMLElement | null>);
@@ -821,6 +833,23 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       const wordGroup = el.closest('[data-word-index-in-ayah][data-type="text"]');
       if (!wordGroup) return;
       const wordId = (wordGroup as HTMLElement).id;
+
+      // Transliteration popover — anchored to this word's bounding box.
+      // Independent from active-word toggle; both can fire on the same tap.
+      if (showTransliteration) {
+        const s = wordGroup.getAttribute("data-surah");
+        const a = wordGroup.getAttribute("data-aya");
+        if (s && a) {
+          const ayahKey = `${parseInt(s, 10)}:${parseInt(a, 10)}`;
+          const rect = (wordGroup as Element).getBoundingClientRect();
+          setPopover({
+            ayahKey,
+            x: rect.left + rect.width / 2,
+            y: rect.top,
+          });
+        }
+      }
+
       if (activeWordIdRef.current === wordId) {
         wordGroup.classList.remove("md-word-active");
         activeWordIdRef.current = null;
@@ -830,8 +859,65 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       wordGroup.classList.add("md-word-active");
       activeWordIdRef.current = wordId;
     },
-    [clearActiveWord]
+    [clearActiveWord, showTransliteration]
   );
+
+  // Lazy-fetch transliterations for this page when the toggle is on.
+  useEffect(() => {
+    if (!showTransliteration) return;
+    let cancelled = false;
+    setTranslitError(null);
+    setTranslitLoading(true);
+    fetchPageTransliterations(pageNumber)
+      .then((map) => {
+        if (!cancelled) {
+          setTranslitMap(map);
+          setTranslitLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setTranslitError(err instanceof Error ? err.message : "Failed to load transliteration");
+          setTranslitLoading(false);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [pageNumber, showTransliteration]);
+
+  // Close popover on page change or when toggle is turned off.
+  useEffect(() => {
+    setPopover(null);
+  }, [pageNumber, showTransliteration]);
+
+  // Close popover on outside click / Esc / scroll / resize.
+  // Scroll & resize close the popover because its position is captured in
+  // viewport coords at tap time and would otherwise drift away from the word.
+  useEffect(() => {
+    if (!popover) return;
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (popoverRef.current?.contains(t)) return;
+      if (containerRef.current?.contains(t)) return; // tap inside mushaf — handled by handleTap
+      setPopover(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPopover(null);
+    };
+    const close = () => setPopover(null);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [popover]);
 
   // Track pointer-down position so onPointerUp can detect a single tap.
   const tapStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -905,6 +991,53 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
           />
+        </div>
+      )}
+
+      {popover && (
+        <div
+          ref={popoverRef}
+          className="fixed z-50 max-w-xs rounded-lg border border-border bg-card text-card-foreground shadow-lg p-3"
+          style={{
+            left: `${popover.x}px`,
+            top: `${popover.y}px`,
+            transform: "translate(-50%, calc(-100% - 10px))",
+          }}
+          role="dialog"
+          aria-modal="false"
+          aria-label={`Transliteration for ayah ${popover.ayahKey}`}
+          dir="ltr"
+        >
+          <div className="flex items-start gap-2">
+            <div className="flex-1 min-w-0">
+              <div id={`translit-label-${popover.ayahKey}`} className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+                Ayah {popover.ayahKey} · Transliteration
+              </div>
+              {translitLoading && !translitMap[popover.ayahKey] ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Loading…
+                </div>
+              ) : translitError && !translitMap[popover.ayahKey] ? (
+                <div className="text-xs text-destructive">{translitError}</div>
+              ) : translitMap[popover.ayahKey] ? (
+                <p className="text-sm italic leading-snug break-words">
+                  {translitMap[popover.ayahKey]}
+                </p>
+              ) : (
+                <div className="text-xs text-muted-foreground">
+                  No transliteration available.
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => setPopover(null)}
+              className="flex-shrink-0 -mt-1 -mr-1 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              aria-label="Close transliteration"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       )}
     </div>

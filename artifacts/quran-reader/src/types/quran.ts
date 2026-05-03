@@ -33,6 +33,7 @@ export interface QuranWord {
   ayahNumber: number;
   spanId: string;
   hasAudio: boolean;
+  transliteration?: string;
 }
 
 export interface QuranAyah {
@@ -52,6 +53,7 @@ export interface QuranAyah {
   words: QuranWord[];
   endMarkerCodeV2: string;
   endMarkerPageNumber: number;
+  transliteration?: string;
 }
 
 export interface QuranPage {
@@ -104,6 +106,7 @@ export interface AlQuranPageResponse {
 export interface Settings {
   fontSize: number;
   showTranslation: boolean;
+  showTransliteration: boolean;
   mushafScale: number;
 }
 

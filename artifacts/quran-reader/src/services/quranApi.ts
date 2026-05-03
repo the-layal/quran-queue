@@ -171,6 +171,7 @@ interface QuranComSurahWord {
   code_v2: string;
   location: string;
   page_number?: number;
+  transliteration?: { text: string | null; language_name: string };
 }
 
 interface QuranComSurahVerse {
@@ -203,7 +204,7 @@ export async function fetchSurahVerses(surahNumber: number): Promise<SurahData> 
   while (true) {
     const url =
       `${QURANCOM_BASE}/verses/by_chapter/${surahNumber}` +
-      `?words=true&word_fields=text_uthmani,code_v2,location,page_number&per_page=50&page=${apiPage}`;
+      `?words=true&word_fields=text_uthmani,code_v2,location,page_number,transliteration&per_page=50&page=${apiPage}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Quran.com API error: ${res.status}`);
     const data: QuranComSurahResponse = await res.json();
@@ -240,8 +241,12 @@ export async function fetchSurahVerses(surahNumber: number): Promise<SurahData> 
           ayahNumber: a,
           spanId,
           hasAudio,
+          transliteration: w.transliteration?.text ?? undefined,
         };
       });
+
+    const transliteration =
+      words.map((w) => w.transliteration ?? "").filter(Boolean).join(" ").trim() || undefined;
 
     return {
       number: verse.id,
@@ -260,6 +265,7 @@ export async function fetchSurahVerses(surahNumber: number): Promise<SurahData> 
       words,
       endMarkerCodeV2: endWord?.code_v2 ?? "",
       endMarkerPageNumber: endWord?.page_number ?? verse.page_number,
+      transliteration,
     };
   });
 
@@ -378,3 +384,69 @@ export async function fetchMushafPage(pageNumber: number): Promise<MushafPageDat
 
 export const TOTAL_PAGES = 604;
 export const TOTAL_SURAHS = 114;
+
+// ── Page transliterations (mushaf popover) ───────────────────────────────────
+// Lazy fetch + module-level cache, separate from SVG rendering.
+// Returns a map "S:A" → concatenated transliteration string for every ayah on
+// the requested page.
+
+const pageTransliterationsCache = new Map<number, Record<string, string>>();
+const pageTransliterationsPromise = new Map<number, Promise<Record<string, string>>>();
+
+interface QuranComTransliterationWord {
+  char_type_name: "word" | "end";
+  location: string;
+  transliteration?: { text: string | null; language_name: string };
+}
+
+interface QuranComTransliterationVerse {
+  verse_key: string;
+  words: QuranComTransliterationWord[];
+}
+
+interface QuranComTransliterationResponse {
+  verses: QuranComTransliterationVerse[];
+  pagination: { next_page: number | null };
+}
+
+export async function fetchPageTransliterations(
+  pageNumber: number
+): Promise<Record<string, string>> {
+  const cached = pageTransliterationsCache.get(pageNumber);
+  if (cached) return cached;
+  const inFlight = pageTransliterationsPromise.get(pageNumber);
+  if (inFlight) return inFlight;
+
+  const promise = (async () => {
+    const result: Record<string, string> = {};
+    let page = 1;
+    while (true) {
+      const url =
+        `${QURANCOM_BASE}/verses/by_page/${pageNumber}` +
+        `?words=true&word_fields=transliteration,location&per_page=50&page=${page}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Quran.com API error: ${res.status}`);
+      const data: QuranComTransliterationResponse = await res.json();
+      for (const verse of data.verses) {
+        const parts: string[] = [];
+        for (const w of verse.words) {
+          if (w.char_type_name === "word" && w.transliteration?.text) {
+            parts.push(w.transliteration.text);
+          }
+        }
+        if (parts.length) result[verse.verse_key] = parts.join(" ");
+      }
+      if (data.pagination.next_page === null) break;
+      page++;
+    }
+    pageTransliterationsCache.set(pageNumber, result);
+    return result;
+  })();
+
+  pageTransliterationsPromise.set(pageNumber, promise);
+  try {
+    return await promise;
+  } finally {
+    pageTransliterationsPromise.delete(pageNumber);
+  }
+}

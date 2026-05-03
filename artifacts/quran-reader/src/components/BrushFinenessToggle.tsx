@@ -11,14 +11,21 @@ const TIERS: { value: BrushFineness; label: string; short: string; title: string
 interface Props {
   hideActions?: boolean;
   compactLabels?: boolean;
+  showTransliterationButton?: boolean;
 }
 
-export default function BrushFinenessToggle({ hideActions = false, compactLabels = false }: Props) {
+export default function BrushFinenessToggle({
+  hideActions = false,
+  compactLabels = false,
+  showTransliterationButton = false,
+}: Props) {
   const brushFineness    = useQuranStore((s) => s.brushFineness);
   const setBrushFineness = useQuranStore((s) => s.setBrushFineness);
   const selectedWordIds  = useQuranStore((s) => s.selectedWordIds);
   const clearSelection   = useQuranStore((s) => s.clearSelection);
   const confirmSelection = useQuranStore((s) => s.confirmSelection);
+  const showTransliteration = useQuranStore((s) => s.settings.showTransliteration);
+  const updateSettings   = useQuranStore((s) => s.updateSettings);
 
   const hasSelection = selectedWordIds.length > 0;
 
@@ -42,6 +49,23 @@ export default function BrushFinenessToggle({ hideActions = false, compactLabels
           </button>
         ))}
       </div>
+
+      {/* Transliteration "Aa" toggle — mushaf mode only */}
+      {showTransliterationButton && (
+        <button
+          onClick={() => updateSettings({ showTransliteration: !showTransliteration })}
+          title={showTransliteration ? "Hide transliteration popover" : "Show transliteration popover (tap a word)"}
+          aria-label="Toggle transliteration"
+          aria-pressed={showTransliteration}
+          className={`flex items-center justify-center w-7 h-7 rounded-lg text-xs font-semibold border transition-colors flex-shrink-0 ${
+            showTransliteration
+              ? "bg-primary/15 border-primary text-primary"
+              : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+          }`}
+        >
+          Aa
+        </button>
+      )}
 
       {/* X / ✓ action pair — only visible when words are selected and not suppressed */}
       {!hideActions && hasSelection && (

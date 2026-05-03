@@ -115,6 +115,7 @@ export const useQuranStore = create<QuranStore>()(
       settings: {
         fontSize: 26,
         showTranslation: false,
+        showTransliteration: false,
         mushafScale: 1,
       },
       isLoading: false,

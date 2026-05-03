@@ -300,9 +300,11 @@ function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number): boolean {
 function VerseBlock({
   ayah,
   fontSize,
+  showTransliteration,
 }: {
   ayah: QuranAyah;
   fontSize: number;
+  showTransliteration: boolean;
 }) {
   return (
     <div className="verse-block flex items-start gap-3">
@@ -352,6 +354,16 @@ function VerseBlock({
             </span>
           )}
         </div>
+
+        {showTransliteration && ayah.transliteration && (
+          <p
+            dir="ltr"
+            lang="en"
+            className="mt-2 text-sm italic text-muted-foreground leading-relaxed select-text"
+          >
+            {ayah.transliteration}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -364,11 +376,13 @@ function SurahReadingView({
   ayahs,
   chapter,
   fontSize,
+  showTransliteration,
 }: {
   surahNumber: number;
   ayahs: QuranAyah[];
   chapter: ChapterInfo | undefined;
   fontSize: number;
+  showTransliteration: boolean;
 }) {
   const firstAyah = ayahs[0];
   const containerRef = useRef<HTMLDivElement>(null);
@@ -506,6 +520,7 @@ function SurahReadingView({
             key={`${surahNumber}:${ayah.numberInSurah}`}
             ayah={ayah}
             fontSize={fontSize}
+            showTransliteration={showTransliteration}
           />
         ))}
       </div>
@@ -526,6 +541,8 @@ function SettingsPanel({
   setFontSize,
   showTranslation,
   setShowTranslation,
+  showTransliteration,
+  setShowTransliteration,
   isMushafMode,
 }: {
   open: boolean;
@@ -534,6 +551,8 @@ function SettingsPanel({
   setFontSize: (n: number) => void;
   showTranslation: boolean;
   setShowTranslation: (v: boolean) => void;
+  showTransliteration: boolean;
+  setShowTransliteration: (v: boolean) => void;
   isMushafMode: boolean;
 }) {
   if (!open) return null;
@@ -591,6 +610,31 @@ function SettingsPanel({
             >
               <span
                 className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${showTranslation ? "translate-x-6" : "translate-x-1"}`}
+              />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium">Show Transliteration</div>
+              <div className="text-xs text-muted-foreground">
+                {isMushafMode
+                  ? "Tap a word in the page to see its ayah transliteration"
+                  : "English phonetic spelling under each ayah"}
+              </div>
+            </div>
+            <button
+              onClick={() => setShowTransliteration(!showTransliteration)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                showTransliteration ? "bg-primary" : "bg-muted"
+              }`}
+              aria-checked={showTransliteration}
+              role="switch"
+            >
+              <span
+                className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${
+                  showTransliteration ? "translate-x-6" : "translate-x-1"
+                }`}
               />
             </button>
           </div>
@@ -1098,6 +1142,7 @@ export default function QuranPage() {
             ayahs={surahData.ayahs}
             chapter={chapter}
             fontSize={settings.fontSize}
+            showTransliteration={settings.showTransliteration}
           />
         )}
       </main>
@@ -1132,7 +1177,7 @@ export default function QuranPage() {
             className="absolute z-10"
             style={{ left: `calc(50% - ${pillAnchor}px)`, transform: "translateX(-50%)" }}
           >
-            <BrushFinenessToggle hideActions compactLabels={compactPill} />
+            <BrushFinenessToggle hideActions compactLabels={compactPill} showTransliterationButton={isMushaf} />
           </div>
 
           {/* Blind section — starts flush right of pill, grows rightward; pill never shifts */}
@@ -1299,6 +1344,8 @@ export default function QuranPage() {
         setFontSize={(n) => updateSettings({ fontSize: n })}
         showTranslation={settings.showTranslation}
         setShowTranslation={(v) => updateSettings({ showTranslation: v })}
+        showTransliteration={settings.showTransliteration}
+        setShowTransliteration={(v) => updateSettings({ showTransliteration: v })}
         isMushafMode={isMushaf}
       />
 
