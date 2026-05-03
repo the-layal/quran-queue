@@ -243,19 +243,20 @@ export default function LibraryPage() {
         </div>
       </div>
 
+      <div className={cn("flex items-center justify-end gap-1.5 text-xs text-muted-foreground mb-3", view === "simple" && "invisible")}>
+        <span>Weak</span>
+        <div className="flex gap-1">
+          <div className="w-3 h-3 rounded-sm bg-primary/20" />
+          <div className="w-3 h-3 rounded-sm bg-primary/40" />
+          <div className="w-3 h-3 rounded-sm bg-primary/60" />
+          <div className="w-3 h-3 rounded-sm bg-primary/80" />
+          <div className="w-3 h-3 rounded-sm bg-primary" />
+        </div>
+        <span>Strong</span>
+      </div>
+
       {view === "standard" ? (
         <div>
-          <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground mb-3">
-            <span>Weak</span>
-            <div className="flex gap-1">
-              <div className="w-3 h-3 rounded-sm bg-primary/20" />
-              <div className="w-3 h-3 rounded-sm bg-primary/40" />
-              <div className="w-3 h-3 rounded-sm bg-primary/60" />
-              <div className="w-3 h-3 rounded-sm bg-primary/80" />
-              <div className="w-3 h-3 rounded-sm bg-primary" />
-            </div>
-            <span>Strong</span>
-          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredSurahs.map((surah) => (
               <Link
