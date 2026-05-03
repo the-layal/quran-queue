@@ -150,7 +150,7 @@ export default function SurahDetail() {
   return (
     <AppShell>
       <GuestBanner />
-      <div className="p-4 max-w-6xl mx-auto">
+      <div className="p-4 md:px-10 w-full">
       <div className="mb-6 flex justify-between items-center">
         <Link href="/track/library" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors p-2 -ml-2 rounded-lg hover:bg-secondary/50">
           <ArrowLeft size={18} />
@@ -173,7 +173,7 @@ export default function SurahDetail() {
       </div>
 
       <div>
-        <div className="flex justify-between items-center mb-4 gap-4">
+        <div className="flex flex-wrap justify-between items-center mb-4 gap-x-4 gap-y-2">
           <div className="flex items-center gap-3 min-w-0">
             <h3 className="font-serif font-bold text-lg text-foreground shrink-0">Ayah Heatmap</h3>
             <div className="flex gap-1 bg-card border border-border/50 rounded-lg p-0.5 shrink-0">
