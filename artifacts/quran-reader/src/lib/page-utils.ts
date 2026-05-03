@@ -76,20 +76,40 @@ export function getPageForAyah(surah: number, ayah: number): number {
   }
 }
 
+function ayahFraction(surah: number, ayah: number): number {
+  const page = getPageForAyah(surah, ayah);
+  const totalOnPage = AYAHS_ON_PAGE[page] || 15;
+  return 1 / totalOnPage;
+}
+
+function sumAyahFractions(surah: number, fromAyah: number, toAyah: number): number {
+  let sum = 0;
+  for (let a = fromAyah; a <= toAyah; a++) sum += ayahFraction(surah, a);
+  return sum;
+}
+
 export function getPageEquivalent(reference: string): number {
   if (!reference) return 1;
   const parts = reference.split(":");
   const type = parts[0];
 
-  if (type === "page") return 1;
+  if (type === "page") {
+    const val = parts[1] || "1";
+    const rangeParts = val.split("-");
+    const from = parseInt(rangeParts[0], 10) || 1;
+    const to = rangeParts.length > 1 ? (parseInt(rangeParts[1], 10) || from) : from;
+    return Math.max(1, to - from + 1);
+  }
 
   if (type === "ayah") {
     const surahId = parseInt(parts[1], 10);
-    const ayahNum = parseInt(parts[2], 10);
-    if (!surahId || !ayahNum) return 0;
-    const page = getPageForAyah(surahId, ayahNum);
-    const totalOnPage = AYAHS_ON_PAGE[page] || 15;
-    return Math.round((1 / totalOnPage) * 1000) / 1000;
+    const rangePart = parts[2] || "";
+    if (!surahId || !rangePart) return 0;
+    const rangeParts = rangePart.split("-");
+    const fromAyah = parseInt(rangeParts[0], 10);
+    const toAyah = rangeParts.length > 1 ? (parseInt(rangeParts[1], 10) || fromAyah) : fromAyah;
+    if (!fromAyah || fromAyah < 1) return 0;
+    return Math.round(sumAyahFractions(surahId, fromAyah, toAyah) * 1000) / 1000;
   }
 
   if (type === "surah") {
@@ -102,16 +122,10 @@ export function getPageEquivalent(reference: string): number {
 
     if (parts[2]) {
       const rangeParts = parts[2].split("-");
-      if (rangeParts.length === 2) {
-        const fromAyah = parseInt(rangeParts[0], 10);
-        const toAyah = parseInt(rangeParts[1], 10);
-        if (fromAyah && toAyah && fromAyah <= toAyah) {
-          const startPage = getPageForAyah(fromSurah, fromAyah);
-          const endPage = getPageForAyah(fromSurah, toAyah);
-          return Math.max(0.5, endPage - startPage + 1);
-        }
-      }
-      return 0.5;
+      const fromAyah = parseInt(rangeParts[0], 10);
+      const toAyah = rangeParts.length > 1 ? (parseInt(rangeParts[1], 10) || fromAyah) : fromAyah;
+      if (!fromAyah || fromAyah < 1) return 0;
+      return Math.round(sumAyahFractions(fromSurah, fromAyah, toAyah) * 1000) / 1000;
     }
 
     let total = 0;
