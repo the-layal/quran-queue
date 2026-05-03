@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { History, Loader2, AlertCircle, Trash2 } from "lucide-react";
 import AppShell from "../../components/AppShell";
-import AuthRequired from "../../components/AuthRequired";
+import GuestBanner from "../../components/GuestBanner";
 import { useLogs } from "../../hooks/useTracker";
+import { useTrackerStorage } from "../../context/useTrackerStorage";
+import type { DailyPlan } from "../../storage/trackerStorage";
 
 const QUALITY_COLORS: Record<number, string> = {
   0: "text-red-500", 1: "text-red-400", 2: "text-orange-400",
@@ -90,7 +92,13 @@ function ActivityCalendar({ countByDate }: { countByDate: Record<string, number>
 
 function HistoryContent() {
   const { logs, loading, error, reload, deleteLog } = useLogs();
+  const { storage } = useTrackerStorage();
+  const [plans, setPlans] = useState<DailyPlan[]>([]);
   const [deleting, setDeleting] = useState<number | null>(null);
+
+  useEffect(() => {
+    storage.getPlans().then(setPlans).catch(() => setPlans([]));
+  }, [storage]);
 
   const handleDelete = async (id: number) => {
     setDeleting(id);
@@ -111,6 +119,7 @@ function HistoryContent() {
     );
   }
 
+  // Build countByDate from both logs and completed daily plans
   const countByDate: Record<string, number> = {};
   const grouped: Record<string, typeof logs> = {};
   for (const log of logs) {
@@ -119,7 +128,14 @@ function HistoryContent() {
     if (!grouped[date]) grouped[date] = [];
     grouped[date].push(log);
   }
+  // Supplement calendar with plan completion dates (each completed plan day counts as at least 1)
+  for (const plan of plans) {
+    if (plan.completed && plan.planDate) {
+      countByDate[plan.planDate] = Math.max(countByDate[plan.planDate] ?? 0, 1);
+    }
+  }
   const dates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+  const hasActivity = logs.length > 0 || plans.some((p) => p.completed);
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
@@ -128,7 +144,7 @@ function HistoryContent() {
         <span className="text-xs text-muted-foreground">{logs.length} reviews</span>
       </div>
 
-      {logs.length > 0 && <ActivityCalendar countByDate={countByDate} />}
+      {hasActivity && <ActivityCalendar countByDate={countByDate} />}
 
       {dates.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
@@ -178,9 +194,8 @@ export default function HistoryPage() {
   return (
     <AppShell centerContent={<span className="text-sm font-medium text-muted-foreground">History</span>}>
       <main className="flex-1">
-        <AuthRequired>
-          <HistoryContent />
-        </AuthRequired>
+        <GuestBanner />
+        <HistoryContent />
       </main>
     </AppShell>
   );

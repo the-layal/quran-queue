@@ -15,14 +15,17 @@ export interface IStorage {
 
   getStats(userId: string): Promise<{
     totalItems: number;
+    totalLogs: number;
     dueToday: number;
     avgEaseFactor: number;
     todayReviews: number;
+    dayStreak: number;
     recentLogs: Log[];
     qualityDistribution: Record<number, number>;
   }>;
 
   getTodayPlan(userId: string): Promise<DailyPlan>;
+  getPlans(userId: string): Promise<DailyPlan[]>;
   getPlan(id: number, userId: string): Promise<DailyPlan | undefined>;
   patchPlan(id: number, userId: string, updates: Partial<Pick<DailyPlan, "items" | "completed">>): Promise<DailyPlan | undefined>;
 
@@ -80,7 +83,22 @@ export class DatabaseStorage implements IStorage {
       qualityDistribution[log.quality] = (qualityDistribution[log.quality] ?? 0) + 1;
     }
 
-    return { totalItems, dueToday, avgEaseFactor: Math.round(avgEaseFactor * 100) / 100, todayReviews, recentLogs: allLogs.slice(0, 10), qualityDistribution };
+    const totalLogs = allLogs.length;
+
+    // Compute consecutive day streak ending today
+    const logDaySet = new Set(allLogs.map((l) => l.createdAt.toISOString().slice(0, 10)));
+    let dayStreak = 0;
+    const cur = new Date();
+    while (logDaySet.has(cur.toISOString().slice(0, 10))) {
+      dayStreak++;
+      cur.setDate(cur.getDate() - 1);
+    }
+
+    return { totalItems, totalLogs, dueToday, avgEaseFactor: Math.round(avgEaseFactor * 100) / 100, todayReviews, dayStreak, recentLogs: allLogs.slice(0, 10), qualityDistribution };
+  }
+
+  async getPlans(userId: string): Promise<DailyPlan[]> {
+    return db.select().from(dailyPlansTable).where(eq(dailyPlansTable.userId, userId)).orderBy(desc(dailyPlansTable.planDate));
   }
 
   async getTodayPlan(userId: string): Promise<DailyPlan> {
@@ -116,7 +134,17 @@ export class DatabaseStorage implements IStorage {
   async restore(userId: string, data: { logs?: unknown[]; srsItems?: unknown[]; dailyPlans?: unknown[] }): Promise<void> {
     const logRows = (data.logs ?? []).map((l) => {
       const r = l as Record<string, unknown>;
-      return { userId, surah: Number(r.surah), ayahStart: Number(r.ayahStart), ayahEnd: Number(r.ayahEnd), quality: Number(r.quality), notes: typeof r.notes === "string" ? r.notes : null };
+      const rawDate = r.createdAt ?? r.created_at;
+      const createdAt = rawDate ? new Date(String(rawDate)) : new Date();
+      return {
+        userId,
+        surah: Number(r.surah),
+        ayahStart: Number(r.ayahStart),
+        ayahEnd: Number(r.ayahEnd),
+        quality: Number(r.quality),
+        notes: typeof r.notes === "string" ? r.notes : null,
+        createdAt: isNaN(createdAt.getTime()) ? new Date() : createdAt,
+      };
     });
     const srsRows = (data.srsItems ?? []).map((s) => {
       const r = s as Record<string, unknown>;

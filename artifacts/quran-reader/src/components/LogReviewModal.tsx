@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { X, Loader2 } from "lucide-react";
+import { usePostLog } from "../hooks/useTracker";
 
 interface LogReviewModalProps {
   onClose: () => void;
@@ -26,6 +27,7 @@ const QUALITY_COLORS: Record<number, string> = {
 };
 
 export default function LogReviewModal({ onClose, onSuccess, defaultSurah }: LogReviewModalProps) {
+  const postLog = usePostLog();
   const [surah, setSurah] = useState(defaultSurah ?? 1);
   const [ayahStart, setAyahStart] = useState(1);
   const [ayahEnd, setAyahEnd] = useState(1);
@@ -42,16 +44,7 @@ export default function LogReviewModal({ onClose, onSuccess, defaultSurah }: Log
     setError(null);
     setSubmitting(true);
     try {
-      const res = await fetch("/api/logs", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ surah, ayahStart, ayahEnd, quality, notes: notes || undefined }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({})) as Record<string, unknown>;
-        throw new Error((data.error as string) ?? `HTTP ${res.status}`);
-      }
+      await postLog({ surah, ayahStart, ayahEnd, quality, notes: notes || undefined });
       onSuccess();
       onClose();
     } catch (e) {

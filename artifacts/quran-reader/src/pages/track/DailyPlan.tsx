@@ -2,9 +2,9 @@ import { useState } from "react";
 import { CalendarDays, CheckCircle2, Circle, Loader2, AlertCircle, RefreshCw, Plus } from "lucide-react";
 import { useLocation } from "wouter";
 import AppShell from "../../components/AppShell";
-import AuthRequired from "../../components/AuthRequired";
+import GuestBanner from "../../components/GuestBanner";
 import LogReviewModal from "../../components/LogReviewModal";
-import { useTodayPlan, postLog } from "../../hooks/useTracker";
+import { useTodayPlan, usePostLog } from "../../hooks/useTracker";
 import type { PlanItem } from "../../hooks/useTracker";
 
 const QUALITY_LABELS: Record<number, string> = {
@@ -17,6 +17,7 @@ const QUALITY_LABELS: Record<number, string> = {
 };
 
 function LogModal({ item, onClose, onLogged }: { item: PlanItem; onClose: () => void; onLogged: () => void }) {
+  const postLog = usePostLog();
   const [quality, setQuality] = useState(4);
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -211,9 +212,8 @@ export default function DailyPlanPage() {
   return (
     <AppShell centerContent={<span className="text-sm font-medium text-muted-foreground">Daily Plan</span>}>
       <main className="flex-1">
-        <AuthRequired>
-          <DailyPlanContent />
-        </AuthRequired>
+        <GuestBanner />
+        <DailyPlanContent />
       </main>
     </AppShell>
   );

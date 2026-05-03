@@ -1,9 +1,14 @@
 import { useRef, useState } from "react";
-import { Download, Upload, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { Download, Upload, AlertCircle, CheckCircle2, Loader2, LogIn } from "lucide-react";
 import AppShell from "../../components/AppShell";
-import AuthRequired from "../../components/AuthRequired";
+import GuestBanner from "../../components/GuestBanner";
+import { useAuth } from "../../hooks/useAuth";
+import { useTrackerStorage } from "../../context/useTrackerStorage";
+import type { BackupData } from "../../storage/trackerStorage";
 
 function SettingsContent() {
+  const { storage } = useTrackerStorage();
+  const { isAuthenticated, login } = useAuth();
   const [downloadStatus, setDownloadStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [restoreStatus, setRestoreStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -11,9 +16,8 @@ function SettingsContent() {
   const downloadBackup = async () => {
     setDownloadStatus("loading");
     try {
-      const res = await fetch("/api/backup", { credentials: "include" });
-      if (!res.ok) throw new Error("Backup failed");
-      const blob = await res.blob();
+      const data = await storage.backup();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -34,14 +38,8 @@ function SettingsContent() {
     setRestoreStatus("loading");
     try {
       const text = await file.text();
-      const data = JSON.parse(text);
-      const res = await fetch("/api/restore", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error("Restore failed");
+      const data = JSON.parse(text) as BackupData;
+      await storage.restore(data);
       setRestoreStatus("done");
       setTimeout(() => setRestoreStatus("idle"), 2000);
     } catch {
@@ -56,12 +54,30 @@ function SettingsContent() {
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
       <h1 className="text-xl font-semibold">Settings</h1>
 
+      {/* Sign-in prompt for guests */}
+      {!isAuthenticated && (
+        <div className="bg-card border border-border rounded-xl px-4 py-4">
+          <h2 className="text-sm font-semibold mb-1">Back up your progress</h2>
+          <p className="text-xs text-muted-foreground mb-3">
+            Sign in to sync your memorization data across devices and never lose your progress.
+          </p>
+          <button
+            onClick={login}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <LogIn className="w-4 h-4" />
+            Sign in
+          </button>
+        </div>
+      )}
+
       {/* Data section */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-border/50">
           <h2 className="text-sm font-semibold">Data Management</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             Export or import your memorization data as JSON.
+            {!isAuthenticated && " Works with your local data too."}
           </p>
         </div>
 
@@ -154,9 +170,8 @@ export default function SettingsPage() {
       }
     >
       <main className="flex-1">
-        <AuthRequired>
-          <SettingsContent />
-        </AuthRequired>
+        <GuestBanner />
+        <SettingsContent />
       </main>
     </AppShell>
   );

@@ -9,6 +9,7 @@ import HistoryPage from "@/pages/track/HistoryPage";
 import SettingsPage from "@/pages/track/SettingsPage";
 import NotFound from "@/pages/not-found";
 import { Toaster } from "@/components/ui/toaster";
+import { TrackerStorageProvider } from "@/context/TrackerStorageContext";
 
 function Router() {
   return (
@@ -29,8 +30,10 @@ function Router() {
 function App() {
   return (
     <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-      <Router />
-      <Toaster />
+      <TrackerStorageProvider>
+        <Router />
+        <Toaster />
+      </TrackerStorageProvider>
     </WouterRouter>
   );
 }

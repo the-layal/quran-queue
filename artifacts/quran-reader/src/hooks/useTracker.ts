@@ -1,50 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
+import { useTrackerStorage } from "../context/useTrackerStorage";
+import type { SrsItem, LogEntry, TrackerStats, DailyPlan, PlanItem } from "../storage/trackerStorage";
 
-export interface SrsItem {
-  id: number;
-  surah: number;
-  ayahStart: number;
-  ayahEnd: number;
-  easeFactor: number;
-  interval: number;
-  repetitions: number;
-  nextReview: string;
-  lastReviewed: string | null;
-}
-
-export interface LogEntry {
-  id: number;
-  surah: number;
-  ayahStart: number;
-  ayahEnd: number;
-  quality: number;
-  notes: string | null;
-  createdAt: string;
-}
-
-export interface TrackerStats {
-  totalItems: number;
-  dueToday: number;
-  avgEaseFactor: number;
-  todayReviews: number;
-  qualityDistribution: Record<number, number>;
-  recentLogs: LogEntry[];
-}
-
-export interface PlanItem {
-  srsItemId: number;
-  surah: number;
-  ayahStart: number;
-  ayahEnd: number;
-  completed: boolean;
-}
-
-export interface DailyPlan {
-  id: number;
-  planDate: string;
-  items: PlanItem[];
-  completed: boolean;
-}
+export type { SrsItem, LogEntry, TrackerStats, DailyPlan, PlanItem };
 
 export function masteryLevel(ef: number, reps: number): "new" | "struggling" | "reviewing" | "learning" | "mastered" {
   if (reps === 0) return "new";
@@ -81,16 +39,8 @@ export function masteryBadgeClass(ef: number, reps: number): string {
   }[level];
 }
 
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(path, { credentials: "include", ...options });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(data.error ?? `HTTP ${res.status}`);
-  }
-  return res.json() as Promise<T>;
-}
-
 export function useSrsItems() {
+  const { storage } = useTrackerStorage();
   const [items, setItems] = useState<SrsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,11 +48,11 @@ export function useSrsItems() {
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    apiFetch<SrsItem[]>("/api/srs")
+    storage.getSrsItems()
       .then(setItems)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [storage]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -110,6 +60,7 @@ export function useSrsItems() {
 }
 
 export function useStats() {
+  const { storage } = useTrackerStorage();
   const [stats, setStats] = useState<TrackerStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -117,11 +68,11 @@ export function useStats() {
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    apiFetch<TrackerStats>("/api/stats")
+    storage.getStats()
       .then(setStats)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [storage]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -129,6 +80,7 @@ export function useStats() {
 }
 
 export function useLogs() {
+  const { storage } = useTrackerStorage();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -136,23 +88,24 @@ export function useLogs() {
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    apiFetch<LogEntry[]>("/api/logs")
+    storage.getLogs()
       .then(setLogs)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [storage]);
 
   useEffect(() => { load(); }, [load]);
 
   const deleteLog = useCallback(async (id: number) => {
-    await apiFetch(`/api/logs/${id}`, { method: "DELETE" });
+    await storage.deleteLog(id);
     setLogs((prev) => prev.filter((l) => l.id !== id));
-  }, []);
+  }, [storage]);
 
   return { logs, loading, error, reload: load, deleteLog };
 }
 
 export function useTodayPlan() {
+  const { storage } = useTrackerStorage();
   const [plan, setPlan] = useState<DailyPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -160,37 +113,29 @@ export function useTodayPlan() {
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    apiFetch<DailyPlan>("/api/plans/today")
+    storage.getTodayPlan()
       .then(setPlan)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [storage]);
 
   useEffect(() => { load(); }, [load]);
 
   const patchPlan = useCallback(async (id: number, body: Partial<{ items: PlanItem[]; completed: boolean }>) => {
-    const updated = await apiFetch<DailyPlan>(`/api/plans/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const updated = await storage.patchPlan(id, body);
     setPlan(updated);
     return updated;
-  }, []);
+  }, [storage]);
 
   return { plan, loading, error, reload: load, patchPlan };
 }
 
-export async function postLog(body: {
-  surah: number;
-  ayahStart: number;
-  ayahEnd: number;
-  quality: number;
-  notes?: string;
-}): Promise<LogEntry> {
-  return apiFetch<LogEntry>("/api/logs", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+export function usePostLog() {
+  const { storage } = useTrackerStorage();
+  return useCallback(
+    (body: { surah: number; ayahStart: number; ayahEnd: number; quality: number; notes?: string }) =>
+      storage.createLog(body),
+    [storage]
+  );
 }
+

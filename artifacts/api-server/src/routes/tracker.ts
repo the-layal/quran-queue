@@ -109,6 +109,11 @@ router.get("/stats", async (req: Request, res: Response) => {
 
 // ── Daily Plans ───────────────────────────────────────────────────────────────
 
+router.get("/plans", async (req: Request, res: Response) => {
+  if (!isAuth(req, res)) return;
+  res.json(await storage.getPlans(req.user!.id));
+});
+
 router.get("/plans/today", async (req: Request, res: Response) => {
   if (!isAuth(req, res)) return;
   res.json(await storage.getTodayPlan(req.user!.id));

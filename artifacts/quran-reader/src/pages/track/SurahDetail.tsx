@@ -2,19 +2,9 @@ import { useEffect, useState } from "react";
 import { Loader2, AlertCircle, ChevronLeft } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import AppShell from "../../components/AppShell";
-import AuthRequired from "../../components/AuthRequired";
-
-interface SrsItem {
-  id: number;
-  surah: number;
-  ayahStart: number;
-  ayahEnd: number;
-  easeFactor: number;
-  interval: number;
-  repetitions: number;
-  nextReview: string;
-  lastReviewed: string | null;
-}
+import GuestBanner from "../../components/GuestBanner";
+import { useTrackerStorage } from "../../context/useTrackerStorage";
+import type { SrsItem } from "../../storage/trackerStorage";
 
 function masteryColor(ef: number, reps: number): string {
   if (reps === 0) return "bg-muted text-muted-foreground";
@@ -41,21 +31,20 @@ const MASTERY_LEVELS = [
 ];
 
 function SurahDetailContent({ surahNum }: { surahNum: number }) {
+  const { storage } = useTrackerStorage();
   const [items, setItems] = useState<SrsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [, navigate] = useLocation();
 
   useEffect(() => {
-    fetch("/api/srs", { credentials: "include" })
-      .then((r) => {
-        if (!r.ok) throw new Error("Failed to load library");
-        return r.json() as Promise<SrsItem[]>;
-      })
+    setLoading(true);
+    setError(null);
+    storage.getSrsItems()
       .then((all) => setItems(all.filter((i) => i.surah === surahNum)))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [surahNum]);
+  }, [surahNum, storage]);
 
   if (loading) {
     return (
@@ -196,9 +185,8 @@ export default function SurahDetailPage() {
       }
     >
       <main className="flex-1">
-        <AuthRequired>
-          <SurahDetailContent surahNum={surahNum} />
-        </AuthRequired>
+        <GuestBanner />
+        <SurahDetailContent surahNum={surahNum} />
       </main>
     </AppShell>
   );

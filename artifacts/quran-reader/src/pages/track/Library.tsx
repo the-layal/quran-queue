@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Library as LibraryIcon, Plus, Loader2, AlertCircle } from "lucide-react";
 import AppShell from "../../components/AppShell";
-import AuthRequired from "../../components/AuthRequired";
+import GuestBanner from "../../components/GuestBanner";
 import LogReviewModal from "../../components/LogReviewModal";
 import QuranGrid from "../../components/QuranGrid";
 import { useSrsItems, masteryColorClass, masteryLabel, masteryBadgeClass } from "../../hooks/useTracker";
@@ -127,9 +127,8 @@ export default function LibraryPage() {
   return (
     <AppShell centerContent={<span className="text-sm font-medium text-muted-foreground">Library</span>}>
       <main className="flex-1">
-        <AuthRequired>
-          <LibraryContent />
-        </AuthRequired>
+        <GuestBanner />
+        <LibraryContent />
       </main>
     </AppShell>
   );

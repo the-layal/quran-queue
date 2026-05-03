@@ -1,8 +1,8 @@
-import { BookOpen, Calendar, TrendingUp, LayoutDashboard, Loader2, AlertCircle, Plus } from "lucide-react";
+import { BookOpen, Calendar, TrendingUp, LayoutDashboard, Flame, Loader2, AlertCircle, Plus } from "lucide-react";
 import { useLocation } from "wouter";
 import AppShell from "../../components/AppShell";
-import AuthRequired from "../../components/AuthRequired";
 import QuranGrid from "../../components/QuranGrid";
+import GuestBanner from "../../components/GuestBanner";
 import { useStats, useSrsItems } from "../../hooks/useTracker";
 import { useState } from "react";
 import LogReviewModal from "../../components/LogReviewModal";
@@ -89,10 +89,10 @@ function DashboardContent() {
   const totalQuality = Object.values(stats.qualityDistribution).reduce((a, b) => a + b, 0);
 
   const statCards = [
-    { label: "Total Items",       value: stats.totalItems,            icon: <BookOpen className="w-5 h-5 text-primary" />,       desc: "Tracked segments" },
-    { label: "Due Today",         value: stats.dueToday,              icon: <Calendar className="w-5 h-5 text-orange-500" />,    desc: "Need review" },
-    { label: "Today's Reviews",   value: stats.todayReviews,          icon: <TrendingUp className="w-5 h-5 text-emerald-500" />, desc: "Completed today" },
-    { label: "Avg. Ease Factor",  value: stats.avgEaseFactor.toFixed(2), icon: <LayoutDashboard className="w-5 h-5 text-blue-500" />, desc: "Higher is better" },
+    { label: "Tracked Segments", value: stats.totalItems,               icon: <BookOpen className="w-5 h-5 text-primary" />,       desc: "SRS items" },
+    { label: "Due Today",        value: stats.dueToday,                 icon: <Calendar className="w-5 h-5 text-orange-500" />,    desc: "Need review" },
+    { label: "Today's Reviews",  value: stats.todayReviews,             icon: <TrendingUp className="w-5 h-5 text-emerald-500" />, desc: "Completed today" },
+    { label: "Day Streak",       value: `${stats.dayStreak}d`,          icon: <Flame className="w-5 h-5 text-red-500" />,          desc: stats.dayStreak > 0 ? "Keep it up!" : "Log a review to start" },
   ];
 
   return (
@@ -172,9 +172,8 @@ export default function Dashboard() {
   return (
     <AppShell centerContent={<span className="text-sm font-medium text-muted-foreground">Dashboard</span>}>
       <main className="flex-1">
-        <AuthRequired>
-          <DashboardContent />
-        </AuthRequired>
+        <GuestBanner />
+        <DashboardContent />
       </main>
     </AppShell>
   );
