@@ -106,7 +106,10 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const croppedViewBoxRef  = useRef<string | null>(null);
   const originalViewBoxRef = useRef<string | null>(null);
   const lineHeightMapRef   = useRef<Map<number, LineHeightInfo>>(new Map());
-  const [availH, setAvailH] = useState(0);
+  const baselineHRef = useRef(0);
+  const [baselineH, setBaselineH] = useState(0);
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
 
   // ── Smart Brush ─────────────────────────────────────────────────────────
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
@@ -452,17 +455,11 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     prevSvgSelectedRef.current = new Set();
   }, [svgText]);
 
-  // ── Measure wrapper height (stable, scrollbar-independent) ─────────────
+  // ── Measure wrapper height — stable baseline, immune to scale feedback ──
   useLayoutEffect(() => {
     const el = wrapperRef.current;
     if (!el) return;
     const ro = new ResizeObserver((entries) => {
-      // Use border-box block size so horizontal scrollbar appearance (which
-      // only changes the content area, not the border box) never triggers this
-      // callback.  Subtract the wrapper's vertical padding to obtain the same
-      // content-area height the SVG should fill.
-      // Fall back to getBoundingClientRect (border-box, also scrollbar-stable)
-      // when the array-form borderBoxSize API is unavailable.
       const borderBoxH = entries[0]?.borderBoxSize?.[0]?.blockSize
         ?? el.getBoundingClientRect().height;
       if (!borderBoxH) return;
@@ -470,13 +467,22 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       const h = borderBoxH
         - parseFloat(style.paddingTop)
         - parseFloat(style.paddingBottom);
-      if (h > 0) setAvailH(h);
+      if (h <= 0) return;
+      // Guard against scale-induced feedback: if the new measurement is
+      // approximately baseline × currentScale it means the wrapper grew because
+      // our own scaled content pushed it (can still happen on certain browsers
+      // before the min-height:0 CSS kicks in).  Ignore those updates so the
+      // baseline stays anchored to the natural unscaled viewport size.
+      const cur = baselineHRef.current;
+      if (cur > 0 && h > cur + 2 && Math.abs(h / cur - scaleRef.current) < 0.06) return;
+      baselineHRef.current = h;
+      setBaselineH(h);
     });
     ro.observe(el, { box: "border-box" });
     return () => ro.disconnect();
   }, []);
 
-  const containerHeight = Math.round((availH > 0 ? availH : 600) * scale);
+  const containerHeight = Math.round((baselineH > 0 ? baselineH : 600) * scale);
 
   // ── Fetch SVG page ──────────────────────────────────────────────────────
   useEffect(() => {
