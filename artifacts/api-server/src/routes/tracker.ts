@@ -556,7 +556,10 @@ router.get("/stats", async (req: Request, res: Response) => {
   }
   let memorizedPages = 0;
   for (const ref of Object.keys(latestVibeByRef)) {
-    if (latestVibeByRef[ref] >= 3) memorizedPages += getPageEquivalent(ref);
+    if (latestVibeByRef[ref] < 3) continue;
+    const rparts = ref.split(":");
+    if (rparts[0] === "ayah" && !(rparts[2] || "").includes("-")) continue;
+    memorizedPages += getPageEquivalent(ref);
   }
   memorizedPages = Math.round(memorizedPages * 10) / 10;
 

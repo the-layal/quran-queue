@@ -235,7 +235,24 @@ export class LocalTrackerStorage implements ITrackerStorage {
       return plan;
     }
 
-    const updated: DailyPlan = { ...plans[existingIdx], bandwidth };
+    const existing = plans[existingIdx];
+    const planned = [...(existing.plannedItems || [])];
+    let usedPages = planned.reduce((s, r) => s + getPageEquivalent(r), 0);
+    if (usedPages < bandwidth) {
+      const due = await this.getDueSrsItems();
+      const all = await this.getSrsItems();
+      for (const list of [due, all]) {
+        for (const item of list) {
+          if (usedPages >= bandwidth) break;
+          if (!planned.includes(item.reference)) {
+            planned.push(item.reference);
+            usedPages += getPageEquivalent(item.reference);
+          }
+        }
+        if (usedPages >= bandwidth) break;
+      }
+    }
+    const updated: DailyPlan = { ...existing, bandwidth, plannedItems: planned };
     plans[existingIdx] = updated;
     writePlans(plans);
     return updated;

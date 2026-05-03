@@ -44,6 +44,13 @@ export function getAyahsForReference(reference: string): PageAyahGroup[] {
     const sParts = surahVal.split("-");
     const sFrom = parseInt(sParts[0], 10) || 1;
     const sTo = sParts.length > 1 ? (parseInt(sParts[1], 10) || sFrom) : sFrom;
+    if (parts[2]) {
+      const ayahRangeParts = parts[2].split("-");
+      const aFrom = parseInt(ayahRangeParts[0], 10) || 1;
+      const aTo = ayahRangeParts.length > 1 ? (parseInt(ayahRangeParts[1], 10) || aFrom) : aFrom;
+      for (let a = aFrom; a <= aTo; a++) pushAyah(groups, sFrom, a);
+      return groups;
+    }
     for (let s = sFrom; s <= Math.min(sTo, 114); s++) {
       const cnt = SURAH_AYAH_COUNT[s] || 0;
       for (let a = 1; a <= cnt; a++) pushAyah(groups, s, a);
