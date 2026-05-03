@@ -230,14 +230,49 @@ function getOrderedWordIds(isMushaf: boolean): string[] {
     .map((x) => x.id);
 }
 
-const loadedQpcPages = new Set<number>();
+// Per-page promise cache. Every consumer awaits the same shared promise so
+// concurrent mounts (e.g. Mushaf → Reading switch while a prior load is still
+// in flight) don't race ahead and render with fallback glyphs (tofu).
+const qpcPagePromises = new Map<number, Promise<void>>();
+
+function loadQpcPage(pageNum: number): Promise<void> {
+  const cached = qpcPagePromises.get(pageNum);
+  if (cached) return cached;
+
+  const family = `QCFv2p${pageNum}`;
+  const url = `/api/font/qpc-v2/p${pageNum}.ttf`;
+  // display: "block" (NOT "swap") — QPC v2 glyphs use Private Use Area
+  // codepoints with no fallback. "swap" would paint tofu squares with a
+  // system serif until the real font arrives. "block" hides the text
+  // until the font loads, which combined with the loading screen below
+  // means users never see broken glyphs.
+  const face = new FontFace(family, `url(${url})`, {
+    display: "block",
+    style: "normal",
+    weight: "normal",
+  });
+  const p = face.load().then(
+    (loaded) => {
+      document.fonts.add(loaded);
+    },
+    (err) => {
+      // Drop from cache so a future mount can retry, but rethrow so
+      // consumers don't treat a failed load as "fonts ready" (which would
+      // re-introduce tofu rendering).
+      qpcPagePromises.delete(pageNum);
+      throw err;
+    },
+  );
+  qpcPagePromises.set(pageNum, p);
+  return p;
+}
 
 function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number): boolean {
   const [fontsReady, setFontsReady] = useState(false);
 
   useEffect(() => {
     if (ayahs.length === 0) {
-      setFontsReady(true);
+      setFontsReady(false);
       return;
     }
 
@@ -251,49 +286,27 @@ function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number): boolean {
       if (ayah.endMarkerPageNumber) pages.add(ayah.endMarkerPageNumber);
     }
 
-    if (pages.size === 0) {
-      setFontsReady(true);
-      return;
-    }
-
-    const pending: Promise<void>[] = [];
-
-    pages.forEach((pageNum) => {
-      if (loadedQpcPages.has(pageNum)) return;
-      loadedQpcPages.add(pageNum);
-      const family = `QCFv2p${pageNum}`;
-      const url = `/api/font/qpc-v2/p${pageNum}.ttf`;
-      const face = new FontFace(family, `url(${url})`, {
-        display: "swap",
-        style: "normal",
-        weight: "normal",
-      });
-      const p = face
-        .load()
-        .then((loaded) => {
-          document.fonts.add(loaded);
-        })
-        .catch(() => {
-          loadedQpcPages.delete(pageNum);
-        });
-      pending.push(p);
-    });
-
-    if (pending.length === 0) {
-      setFontsReady(true);
-      return;
-    }
-
     setFontsReady(false);
     let cancelled = false;
-    Promise.all(pending).then(() => {
-      if (!cancelled) setFontsReady(true);
-    });
+
+    const pending: Promise<void>[] = [];
+    pages.forEach((pageNum) => pending.push(loadQpcPage(pageNum)));
+
+    Promise.all(pending)
+      .then(() => (document.fonts ? document.fonts.ready : undefined))
+      .then(() => {
+        if (!cancelled) setFontsReady(true);
+      })
+      .catch(() => {
+        // Keep fontsReady=false on failure; loading screen stays up rather
+        // than painting tofu glyphs. A future mount will retry via the
+        // promise cache (already cleared above).
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [ayahs]);
+  }, [ayahs, surahNumber]);
 
   return fontsReady;
 }
@@ -414,7 +427,7 @@ function SurahReadingView({
 }) {
   const firstAyah = ayahs[0];
   const containerRef = useRef<HTMLDivElement>(null);
-  const fontsReady = useQpcFonts(ayahs);
+  const fontsReady = useQpcFonts(ayahs, surahNumber);
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
 
   const { translations, translationLoading, translationError } =
@@ -1198,6 +1211,10 @@ export default function QuranPage() {
 
         {!error && !isFirstLoad && !isMushaf && surahData && (
           <SurahReadingView
+            // Key on surah so a surah change remounts the view, resetting
+            // fontsReady=false synchronously before the first render — this
+            // prevents a one-frame paint with the previous surah's fonts.
+            key={currentSurah}
             surahNumber={currentSurah}
             ayahs={surahData.ayahs}
             chapter={chapter}
