@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useCallback, useState, useRef, type RefObje
 import {
   ChevronLeft,
   ChevronRight,
-  Settings,
   ListMusic,
   Moon,
   Sun,
@@ -657,40 +656,6 @@ function SurahReadingView({
   );
 }
 
-// ── Settings panel ────────────────────────────────────────────────────────────
-
-function SettingsPanel({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
-  if (!open) return null;
-  return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-card rounded-t-2xl border border-border shadow-xl p-6 max-w-lg mx-auto">
-        <div className="w-10 h-1 bg-muted-foreground/30 rounded-full mx-auto mb-5" />
-        <h2 className="text-base font-semibold mb-5">Settings</h2>
-
-        <div className="space-y-5">
-          <p className="text-sm text-muted-foreground">
-            Use the − / + buttons in the footer to zoom the page in or out.
-          </p>
-        </div>
-
-        <button
-          onClick={onClose}
-          className="mt-6 w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          Done
-        </button>
-      </div>
-    </>
-  );
-}
-
 // ── Page number input (mushaf mode only) ──────────────────────────────────────
 
 function PageInput({
@@ -845,7 +810,6 @@ export default function QuranPage() {
   const [darkMode, setDarkMode] = useState(() =>
     document.documentElement.classList.contains("dark")
   );
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [surahPickerOpen, setSurahPickerOpen] = useState(false);
   const [chapters, setChapters] = useState<ChapterMap>({});
 
@@ -1111,16 +1075,6 @@ export default function QuranPage() {
       >
         {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
       </button>
-
-      {isMushaf && (
-        <button
-          onClick={() => setSettingsOpen(true)}
-          className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-          aria-label="Settings"
-        >
-          <Settings className="w-5 h-5" />
-        </button>
-      )}
 
       <button
         onClick={() => setQueuePanelOpen(!queuePanelOpen)}
@@ -1426,11 +1380,6 @@ export default function QuranPage() {
           }
           window.scrollTo({ top: 0 });
         }}
-      />
-
-      <SettingsPanel
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
       />
 
       <ReviewQueuePanel chapters={chapters} queuePlayback={queuePlayback} />
