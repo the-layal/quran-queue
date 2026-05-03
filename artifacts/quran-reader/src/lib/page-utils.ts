@@ -89,6 +89,13 @@ function sumAyahFractions(surah: number, fromAyah: number, toAyah: number): numb
   return sum;
 }
 
+export const LINES_PER_PAGE = 15;
+
+export function getTotalPagesForAyahRange(surah: number, fromAyah: number, toAyah: number): number {
+  if (fromAyah > toAyah) return 0;
+  return Math.round(sumAyahFractions(surah, fromAyah, toAyah) * 100) / 100;
+}
+
 export function getPageEquivalent(reference: string): number {
   if (!reference) return 1;
   const parts = reference.split(":");

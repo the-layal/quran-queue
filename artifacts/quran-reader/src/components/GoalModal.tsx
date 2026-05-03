@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { X, ChevronRight, ChevronLeft, AlertTriangle } from "lucide-react";
 import { SURAHS } from "@/lib/quran-data";
+import { getTotalPagesForAyahRange, LINES_PER_PAGE } from "@/lib/page-utils";
 import type { CreateGoalInput } from "@/hooks/useGoals";
 
 interface GoalModalProps {
@@ -8,6 +9,8 @@ interface GoalModalProps {
   onClose: () => void;
   onCreate: (input: CreateGoalInput) => Promise<void>;
 }
+
+type PaceUnit = "ayahs" | "lines" | "pages";
 
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
@@ -26,6 +29,26 @@ function daysUntil(dateStr: string): number {
   return Math.ceil((target.getTime() - now.getTime()) / 86400000);
 }
 
+function ayahsToUnit(ayahs: number, unit: PaceUnit, totalAyahs: number, totalPages: number): number {
+  if (totalAyahs <= 0) return 0;
+  if (unit === "pages") return Math.round((ayahs / totalAyahs) * totalPages * 10) / 10;
+  if (unit === "lines") return Math.round((ayahs / totalAyahs) * totalPages * LINES_PER_PAGE);
+  return ayahs;
+}
+
+function unitToAyahs(val: number, unit: PaceUnit, totalAyahs: number, totalPages: number): number {
+  if (totalAyahs <= 0) return 1;
+  if (unit === "pages") return Math.max(1, Math.round((val / totalPages) * totalAyahs));
+  if (unit === "lines") return Math.max(1, Math.round((val / (totalPages * LINES_PER_PAGE)) * totalAyahs));
+  return Math.max(1, Math.round(val));
+}
+
+function formatPaceLabel(val: number, unit: PaceUnit): string {
+  if (unit === "pages") return `${val} page${val !== 1 ? "s" : ""}/day`;
+  if (unit === "lines") return `${val} line${val !== 1 ? "s" : ""}/day`;
+  return `${val} ayah${val !== 1 ? "s" : ""}/day`;
+}
+
 export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
   const [step, setStep] = useState(1);
   const [surahId, setSurahId] = useState<number | null>(null);
@@ -33,15 +56,30 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
   const [ayahEnd, setAyahEnd] = useState(1);
   const [targetDate, setTargetDate] = useState(addDays(30));
   const [dailyTarget, setDailyTarget] = useState(1);
+  const [paceUnit, setPaceUnit] = useState<PaceUnit>("ayahs");
   const [surahQuery, setSurahQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selectedSurah = SURAHS.find((s) => s.id === surahId);
   const totalAyahs = selectedSurah ? ayahEnd - ayahStart + 1 : 0;
+  const totalPages = selectedSurah && surahId
+    ? getTotalPagesForAyahRange(surahId, ayahStart, ayahEnd)
+    : 1;
+  const totalLines = Math.round(totalPages * LINES_PER_PAGE);
+
   const daysRemaining = daysUntil(targetDate);
   const paceNeeded = daysRemaining > 0 ? Math.ceil(totalAyahs / daysRemaining) : totalAyahs;
   const paceTooSlow = dailyTarget < paceNeeded;
+
+  const sliderMin = paceUnit === "pages" ? 0.5 : 1;
+  const sliderMax = paceUnit === "pages"
+    ? Math.max(0.5, totalPages)
+    : paceUnit === "lines"
+    ? Math.max(1, totalLines)
+    : Math.max(1, totalAyahs);
+  const sliderStep = paceUnit === "pages" ? 0.5 : 1;
+  const sliderValue = ayahsToUnit(dailyTarget, paceUnit, totalAyahs, totalPages);
 
   const filteredSurahs = useMemo(() => {
     const q = surahQuery.trim().toLowerCase();
@@ -90,6 +128,7 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
     setAyahEnd(1);
     setTargetDate(addDays(30));
     setDailyTarget(1);
+    setPaceUnit("ayahs");
     setSurahQuery("");
     setError(null);
     onClose();
@@ -244,34 +283,65 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1.5">
+              {/* Label row: "Daily Pace" + unit toggle + current value */}
+              <div className="flex items-center justify-between mb-2">
                 <label className="text-xs font-medium text-muted-foreground">Daily Pace</label>
-                <span className="text-xs tabular-nums text-muted-foreground">{dailyTarget} ayah{dailyTarget !== 1 ? "s" : ""}/day</span>
+                <div className="flex items-center gap-2">
+                  {/* Segmented unit toggle */}
+                  <div className="flex rounded-lg bg-muted p-0.5 text-xs">
+                    {(["ayahs", "lines", "pages"] as PaceUnit[]).map((unit) => (
+                      <button
+                        key={unit}
+                        onClick={() => setPaceUnit(unit)}
+                        className={`px-2 py-0.5 rounded-md capitalize transition-colors ${
+                          paceUnit === unit
+                            ? "bg-background text-foreground shadow-sm font-medium"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {unit}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="text-xs tabular-nums text-muted-foreground min-w-[80px] text-right">
+                    {formatPaceLabel(sliderValue, paceUnit)}
+                  </span>
+                </div>
               </div>
+
               <input
                 type="range"
-                min={1}
-                max={Math.max(1, totalAyahs)}
-                value={dailyTarget}
-                onChange={(e) => setDailyTarget(parseInt(e.target.value))}
+                min={sliderMin}
+                max={sliderMax}
+                step={sliderStep}
+                value={sliderValue}
+                onChange={(e) => {
+                  const raw = parseFloat(e.target.value);
+                  setDailyTarget(unitToAyahs(raw, paceUnit, totalAyahs, totalPages));
+                }}
                 className="w-full accent-primary cursor-pointer"
               />
+
               <div className="mt-2 p-2.5 rounded-lg bg-muted/60 text-xs">
                 {daysRemaining <= 0 ? (
                   <span className="text-destructive">Target date has already passed</span>
                 ) : (
                   <span>
-                    At {dailyTarget} ayah{dailyTarget !== 1 ? "s" : ""}/day you&apos;ll finish in{" "}
+                    At {formatPaceLabel(sliderValue, paceUnit)} you&apos;ll finish in{" "}
                     <strong>{Math.ceil(totalAyahs / dailyTarget)} day{Math.ceil(totalAyahs / dailyTarget) !== 1 ? "s" : ""}</strong>
                     {" "}(target: {daysRemaining} day{daysRemaining !== 1 ? "s" : ""})
                   </span>
                 )}
               </div>
+
               {paceTooSlow && daysRemaining > 0 && (
                 <div className="mt-2 flex items-start gap-2 p-2.5 rounded-lg bg-amber-500/10 text-xs text-amber-600 dark:text-amber-400">
                   <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
                   <span>
-                    You need at least {paceNeeded} ayah{paceNeeded !== 1 ? "s" : ""}/day to meet your deadline.
+                    You need at least {formatPaceLabel(
+                      ayahsToUnit(paceNeeded, paceUnit, totalAyahs, totalPages),
+                      paceUnit
+                    )} to meet your deadline.
                   </span>
                 </div>
               )}
