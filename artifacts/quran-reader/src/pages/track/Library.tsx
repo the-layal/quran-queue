@@ -287,38 +287,22 @@ export default function LibraryPage() {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="bg-card rounded-2xl border border-border/50 divide-y divide-border/40">
           {filteredSurahs.map((surah) => (
             <Link
               key={surah.id}
               href={`/track/library/${surah.id}`}
               data-testid={`card-surah-${surah.id}`}
-              className="bg-card p-4 rounded-2xl border border-border/50 flex items-center justify-between group hover:border-primary/30 transition-colors"
+              className="flex items-center gap-3 px-4 py-2.5 hover:bg-secondary/40 transition-colors"
             >
-              <div className="flex items-center gap-4">
-                <div className={cn(
-                  "w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm transition-colors",
-                  surahStatus[surah.id] === "completed"
-                    ? "bg-primary/20 text-primary group-hover:bg-primary group-hover:text-primary-foreground"
-                    : surahStatus[surah.id] === "in_progress"
-                      ? "bg-accent/15 text-accent group-hover:bg-accent group-hover:text-white"
-                      : "bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground",
-                )}>
-                  {surah.id}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-foreground">{surah.englishName}</h3>
-                    {statusBadge(surah.id)}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{surah.type} • {surah.ayahCount} Ayahs</p>
-                </div>
-              </div>
-              <span className="font-serif text-lg text-primary text-right" dir="rtl">{surah.name}</span>
+              <span className="w-7 text-xs font-medium text-muted-foreground text-right shrink-0">{surah.id}.</span>
+              <span className="flex-1 text-sm font-medium text-foreground">{surah.englishName}</span>
+              {statusBadge(surah.id)}
+              <span className="text-xs text-muted-foreground shrink-0">{surah.ayahCount} ayahs</span>
             </Link>
           ))}
           {filteredSurahs.length === 0 && (
-            <div className="col-span-full text-center py-12 text-muted-foreground">
+            <div className="text-center py-12 text-muted-foreground text-sm">
               No surahs match your search or filter.
             </div>
           )}
