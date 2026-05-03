@@ -1,4 +1,14 @@
-import type { ITrackerStorage, SrsItem, LogEntry, TrackerStats, DailyPlan, PlanItem, BackupData } from "./trackerStorage";
+import type {
+  ITrackerStorage,
+  Log,
+  SrsItem,
+  DailyPlan,
+  TrackerStats,
+  BackupData,
+  LogInput,
+  CompleteAdvancedInput,
+} from "./trackerStorage";
+import { getAyahsForReference } from "./referenceFanOut";
 
 const KEYS = {
   logs: "hafith_logs",
@@ -33,51 +43,58 @@ function nextId(): number {
   return next;
 }
 
-function today(): string {
+function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-// SM-2 algorithm (mirrors the server's implementation)
-function sm2(quality: number, easeFactor: number, interval: number, repetitions: number) {
-  let newEF = easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
-  if (newEF < 1.3) newEF = 1.3;
+function yesterdayStr(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
 
-  let newInterval: number;
-  let newRepetitions: number;
-
-  if (quality < 3) {
-    newRepetitions = 0;
-    newInterval = 1;
+// SM-2 mirroring server (easeFactor int * 100)
+function calculateNextReview(easeFactor: number, interval: number, repetitions: number, vibeScale: number) {
+  let newInterval = interval;
+  let newReps = repetitions;
+  if (vibeScale >= 3) {
+    if (repetitions === 0) newInterval = 1;
+    else if (repetitions === 1) newInterval = 6;
+    else newInterval = Math.round(interval * (easeFactor / 100));
+    newReps += 1;
   } else {
-    newRepetitions = repetitions + 1;
-    if (repetitions === 0) {
-      newInterval = 1;
-    } else if (repetitions === 1) {
-      newInterval = 6;
-    } else {
-      newInterval = Math.round(interval * newEF);
-    }
+    newReps = 0;
+    newInterval = 1;
   }
-
-  const nextReview = new Date();
-  nextReview.setDate(nextReview.getDate() + newInterval);
-
+  let newEase = easeFactor + (0.1 - (5 - vibeScale) * (0.08 + (5 - vibeScale) * 0.02)) * 100;
+  if (newEase < 130) newEase = 130;
+  const next = new Date();
+  next.setDate(next.getDate() + newInterval);
   return {
-    easeFactor: newEF,
+    easeFactor: Math.round(newEase),
     interval: newInterval,
-    repetitions: newRepetitions,
-    nextReview: nextReview.toISOString().slice(0, 10),
-    lastReviewed: today(),
+    repetitions: newReps,
+    nextReviewDate: next.toISOString(),
   };
+}
+
+function expandSurahRange(reference: string): string[] {
+  const m = reference.match(/^surah:(\d+)-(\d+)$/);
+  if (!m) return [reference];
+  const from = parseInt(m[1], 10);
+  const to = parseInt(m[2], 10);
+  if (from === to) return [`surah:${from}`];
+  const refs: string[] = [];
+  for (let s = from; s <= Math.min(to, 114); s++) refs.push(`surah:${s}`);
+  return refs;
 }
 
 export function recordAction(): void {
   const count = readJSON<number>(KEYS.actions, 0);
   writeJSON(KEYS.actions, count + 1);
   if (!localStorage.getItem(KEYS.firstActionDate)) {
-    writeJSON(KEYS.firstActionDate, today());
+    writeJSON(KEYS.firstActionDate, todayStr());
   }
-  // Dispatch a custom event so GuestBanner can reactively update
   window.dispatchEvent(new CustomEvent(HAFITH_ACTION_EVENT, { detail: { count: count + 1 } }));
 }
 
@@ -106,203 +123,327 @@ export function getDayStreakCount(): number {
   return Math.max(1, Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1);
 }
 
+function readLogs(): Log[] { return readJSON<Log[]>(KEYS.logs, []); }
+function writeLogs(v: Log[]): void { writeJSON(KEYS.logs, v); }
+function readSrs(): SrsItem[] { return readJSON<SrsItem[]>(KEYS.srs, []); }
+function writeSrs(v: SrsItem[]): void { writeJSON(KEYS.srs, v); }
+function readPlans(): DailyPlan[] { return readJSON<DailyPlan[]>(KEYS.plans, []); }
+function writePlans(v: DailyPlan[]): void { writeJSON(KEYS.plans, v); }
+
+function applyVibe(reference: string, type: string, vibeScale: number): void {
+  const srsItems = readSrs();
+  const refs = expandSurahRange(reference);
+  for (const ref of refs) {
+    const idx = srsItems.findIndex((i) => i.reference === ref);
+    if (idx === -1) {
+      const update = calculateNextReview(250, 0, 0, vibeScale);
+      srsItems.push({
+        id: nextId(),
+        type,
+        reference: ref,
+        easeFactor: update.easeFactor,
+        interval: update.interval,
+        repetitions: update.repetitions,
+        nextReviewDate: update.nextReviewDate,
+      });
+    } else {
+      const cur = srsItems[idx];
+      const u = calculateNextReview(cur.easeFactor, cur.interval, cur.repetitions, vibeScale);
+      srsItems[idx] = { ...cur, ...u };
+    }
+  }
+  writeSrs(srsItems);
+}
+
 export class LocalTrackerStorage implements ITrackerStorage {
-  async getLogs(): Promise<LogEntry[]> {
-    return readJSON<LogEntry[]>(KEYS.logs, []);
+  async getLogs(): Promise<Log[]> {
+    return readLogs();
   }
 
-  async createLog(body: { surah: number; ayahStart: number; ayahEnd: number; quality: number; notes?: string }): Promise<LogEntry> {
-    const logs = readJSON<LogEntry[]>(KEYS.logs, []);
-    const log: LogEntry = {
+  async createLog(input: LogInput): Promise<Log> {
+    const logs = readLogs();
+    const log: Log = {
       id: nextId(),
-      surah: body.surah,
-      ayahStart: body.ayahStart,
-      ayahEnd: body.ayahEnd,
-      quality: body.quality,
-      notes: body.notes ?? null,
+      type: input.type,
+      reference: input.reference,
+      vibeScale: input.vibeScale,
       createdAt: new Date().toISOString(),
     };
     logs.unshift(log);
-    writeJSON(KEYS.logs, logs);
-
-    // Update SRS item
-    const srsItems = readJSON<SrsItem[]>(KEYS.srs, []);
-    const existing = srsItems.find(
-      (i) => i.surah === body.surah && i.ayahStart === body.ayahStart && i.ayahEnd === body.ayahEnd
-    );
-    const current = existing ?? { easeFactor: 2.5, interval: 1, repetitions: 0 };
-    const updated = sm2(body.quality, current.easeFactor, current.interval, current.repetitions);
-
-    if (existing) {
-      const idx = srsItems.indexOf(existing);
-      srsItems[idx] = { ...existing, ...updated };
-    } else {
-      srsItems.push({
-        id: nextId(),
-        surah: body.surah,
-        ayahStart: body.ayahStart,
-        ayahEnd: body.ayahEnd,
-        ...updated,
-      });
-    }
-    writeJSON(KEYS.srs, srsItems);
-
+    writeLogs(logs);
+    applyVibe(input.reference, input.type, input.vibeScale);
     recordAction();
     return log;
   }
 
-  async deleteLog(id: number): Promise<void> {
-    const logs = readJSON<LogEntry[]>(KEYS.logs, []);
-    writeJSON(KEYS.logs, logs.filter((l) => l.id !== id));
-  }
-
   async getSrsItems(): Promise<SrsItem[]> {
-    return readJSON<SrsItem[]>(KEYS.srs, []);
+    return readSrs();
   }
 
-  async getStats(): Promise<TrackerStats> {
-    const t = today();
-    const allItems = readJSON<SrsItem[]>(KEYS.srs, []);
-    const totalItems = allItems.length;
-    const dueToday = allItems.filter((i) => i.nextReview <= t).length;
-    const avgEaseFactor = totalItems > 0
-      ? Math.round((allItems.reduce((s, i) => s + i.easeFactor, 0) / totalItems) * 100) / 100
-      : 0;
+  async getDueSrsItems(): Promise<SrsItem[]> {
+    const now = new Date();
+    return readSrs().filter((i) => new Date(i.nextReviewDate) <= now);
+  }
 
-    const allLogs = readJSON<LogEntry[]>(KEYS.logs, []);
-    const totalLogs = allLogs.length;
-    const todayReviews = allLogs.filter((l) => l.createdAt.slice(0, 10) === t).length;
+  async getTodayPlan(): Promise<DailyPlan | null> {
+    const t = todayStr();
+    const plans = readPlans();
+    return plans.find((p) => p.date === t) ?? null;
+  }
 
-    // Compute consecutive day streak ending today
-    const logDays = new Set(allLogs.map((l) => l.createdAt.slice(0, 10)));
-    let dayStreak = 0;
-    const cur = new Date();
-    while (logDays.has(cur.toISOString().slice(0, 10))) {
-      dayStreak++;
-      cur.setDate(cur.getDate() - 1);
+  async getAllPlans(): Promise<DailyPlan[]> {
+    return readPlans().slice().sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  async createOrUpdateTodayPlan(bandwidth: number): Promise<DailyPlan> {
+    const t = todayStr();
+    const plans = readPlans();
+    const existingIdx = plans.findIndex((p) => p.date === t);
+
+    if (existingIdx === -1) {
+      const carryover: string[] = [];
+      const yPlan = plans.find((p) => p.date === yesterdayStr());
+      if (yPlan) {
+        const completed = yPlan.completedItems || [];
+        for (const ref of yPlan.plannedItems || []) if (!completed.includes(ref)) carryover.push(ref);
+      }
+      // Local plan generator: just include carryover and fill from due SRS
+      // items by reference (no page-arithmetic since quran-meta is server-only).
+      const planned: string[] = [...carryover];
+      const due = await this.getDueSrsItems();
+      for (const item of due) {
+        if (planned.length >= bandwidth) break;
+        if (!planned.includes(item.reference)) planned.push(item.reference);
+      }
+      const plan: DailyPlan = {
+        id: nextId(),
+        date: t,
+        bandwidth,
+        plannedItems: planned,
+        completedItems: [],
+        extraRevisions: [],
+      };
+      plans.push(plan);
+      writePlans(plans);
+      return plan;
     }
 
-    const qualityDistribution: Record<number, number> = {};
-    for (const log of allLogs.slice(0, 100)) {
-      qualityDistribution[log.quality] = (qualityDistribution[log.quality] ?? 0) + 1;
-    }
-
-    return {
-      totalItems,
-      totalLogs,
-      dueToday,
-      avgEaseFactor,
-      todayReviews,
-      dayStreak,
-      qualityDistribution,
-      recentLogs: allLogs.slice(0, 10),
-    };
-  }
-
-  async getTodayPlan(): Promise<DailyPlan> {
-    const t = today();
-    const plans = readJSON<DailyPlan[]>(KEYS.plans, []);
-    const existing = plans.find((p) => p.planDate === t);
-    if (existing) return existing;
-
-    const srsItems = readJSON<SrsItem[]>(KEYS.srs, []);
-    const dueItems = srsItems.filter((i) => i.nextReview <= t).sort((a, b) => a.nextReview.localeCompare(b.nextReview));
-    const items: PlanItem[] = dueItems.map((item) => ({
-      srsItemId: item.id,
-      surah: item.surah,
-      ayahStart: item.ayahStart,
-      ayahEnd: item.ayahEnd,
-      completed: false,
-    }));
-
-    const plan: DailyPlan = {
-      id: nextId(),
-      planDate: t,
-      items,
-      completed: false,
-    };
-    plans.push(plan);
-    writeJSON(KEYS.plans, plans);
-    return plan;
-  }
-
-  async getPlans(): Promise<DailyPlan[]> {
-    return readJSON<DailyPlan[]>(KEYS.plans, []);
-  }
-
-  async patchPlan(id: number, updates: Partial<{ items: PlanItem[]; completed: boolean }>): Promise<DailyPlan> {
-    const plans = readJSON<DailyPlan[]>(KEYS.plans, []);
-    const idx = plans.findIndex((p) => p.id === id);
-    if (idx === -1) throw new Error("Plan not found");
-    const updated = { ...plans[idx], ...updates };
-    plans[idx] = updated;
-    writeJSON(KEYS.plans, plans);
-
-    if (updates.completed) recordAction();
+    const updated: DailyPlan = { ...plans[existingIdx], bandwidth };
+    plans[existingIdx] = updated;
+    writePlans(plans);
     return updated;
   }
 
+  async addMore(count: number): Promise<DailyPlan> {
+    const plan = await this.requireToday();
+    const due = await this.getDueSrsItems();
+    const all = await this.getSrsItems();
+    const candidates: string[] = [];
+    for (const list of [due, all]) {
+      for (const item of list) {
+        if (!plan.plannedItems.includes(item.reference) && !candidates.includes(item.reference)) {
+          candidates.push(item.reference);
+        }
+      }
+    }
+    plan.plannedItems = [...plan.plannedItems, ...candidates.slice(0, count)];
+    return this.replacePlan(plan);
+  }
+
+  async completeItem(reference: string, vibeScale: number): Promise<DailyPlan> {
+    const plan = await this.requireToday();
+    if (!plan.completedItems.includes(reference)) plan.completedItems.push(reference);
+    const type = reference.split(":")[0] || "page";
+    await this.createLog({ type, reference, vibeScale });
+    // Mirror server: fan out to per-ayah logs + SRS for richer per-ayah stats.
+    try {
+      const groups = getAyahsForReference(reference);
+      for (const g of groups) {
+        for (const ayah of g.ayahs) {
+          await this.createLog({ type: "ayah", reference: `ayah:${g.surah}:${ayah}`, vibeScale });
+        }
+      }
+    } catch {
+      // ignore fan-out errors — top-level log is already recorded.
+    }
+    return this.replacePlan(plan);
+  }
+
+  async completeItemAdvanced(input: CompleteAdvancedInput): Promise<DailyPlan> {
+    const plan = await this.requireToday();
+    if (!plan.completedItems.includes(input.reference)) plan.completedItems.push(input.reference);
+    for (const av of input.ayahVibes) {
+      await this.createLog({ type: "ayah", reference: `ayah:${av.surah}:${av.ayah}`, vibeScale: av.vibe });
+    }
+    if (input.ayahVibes.length > 0) {
+      const overall = Math.round(input.ayahVibes.reduce((s, a) => s + a.vibe, 0) / input.ayahVibes.length);
+      const type = input.reference.split(":")[0] || "page";
+      await this.createLog({ type, reference: input.reference, vibeScale: overall });
+    }
+    return this.replacePlan(plan);
+  }
+
+  async removeItem(reference: string): Promise<DailyPlan> {
+    const plan = await this.requireToday();
+    plan.plannedItems = plan.plannedItems.filter((r) => r !== reference);
+    plan.completedItems = plan.completedItems.filter((r) => r !== reference);
+    return this.replacePlan(plan);
+  }
+
+  async clearPlan(): Promise<DailyPlan> {
+    const plan = await this.requireToday();
+    plan.plannedItems = [...plan.completedItems];
+    return this.replacePlan(plan);
+  }
+
+  async logExtra(input: LogInput): Promise<DailyPlan> {
+    const t = todayStr();
+    const plans = readPlans();
+    let idx = plans.findIndex((p) => p.date === t);
+    if (idx === -1) {
+      const newPlan: DailyPlan = {
+        id: nextId(), date: t, bandwidth: 5,
+        plannedItems: [], completedItems: [], extraRevisions: [input.reference],
+      };
+      plans.push(newPlan);
+      idx = plans.length - 1;
+    } else {
+      const extras = plans[idx].extraRevisions || [];
+      if (!extras.includes(input.reference)) extras.push(input.reference);
+      plans[idx] = { ...plans[idx], extraRevisions: extras };
+    }
+    writePlans(plans);
+    await this.createLog(input);
+    return plans[idx];
+  }
+
+  async toggleHistoryItem(date: string, reference: string): Promise<DailyPlan> {
+    const plans = readPlans();
+    const idx = plans.findIndex((p) => p.date === date);
+    if (idx === -1) throw new Error("Plan not found");
+    const completed = new Set(plans[idx].completedItems || []);
+    if (completed.has(reference)) completed.delete(reference);
+    else completed.add(reference);
+    plans[idx] = { ...plans[idx], completedItems: Array.from(completed) };
+    writePlans(plans);
+    return plans[idx];
+  }
+
+  async getStats(): Promise<TrackerStats> {
+    // Without quran-meta on the client (server-only this task), provide a
+    // simple approximation: memorizedPages = count of references whose latest
+    // vibe >= 3, dueToday = uncompleted items in today's plan (or due SRS),
+    // dayStreak = consecutive days where today's plan is fully completed.
+    const allLogs = readLogs();
+    const latest: Record<string, number> = {};
+    for (let i = allLogs.length - 1; i >= 0; i--) latest[allLogs[i].reference] = allLogs[i].vibeScale;
+    let memorizedPages = 0;
+    for (const r of Object.keys(latest)) if (latest[r] >= 3) memorizedPages += 1;
+
+    const t = todayStr();
+    const plans = readPlans();
+    const todayPlan = plans.find((p) => p.date === t) ?? null;
+    let dueToday: number;
+    if (todayPlan) {
+      dueToday = Math.max(0, (todayPlan.plannedItems?.length ?? 0) - (todayPlan.completedItems?.length ?? 0));
+    } else {
+      dueToday = (await this.getDueSrsItems()).length;
+    }
+
+    const isActive = (p?: DailyPlan): boolean => {
+      if (!p) return false;
+      const planned = p.plannedItems || [];
+      const completed = p.completedItems || [];
+      const extras = p.extraRevisions || [];
+      return (planned.length > 0 && completed.length >= planned.length) || extras.length > 0;
+    };
+    let dayStreak = 0;
+    const cur = new Date();
+    cur.setDate(cur.getDate() - 1);
+    for (let d = 0; d < 365; d++) {
+      const ds = cur.toISOString().slice(0, 10);
+      const dp = plans.find((p) => p.date === ds);
+      if (isActive(dp)) {
+        dayStreak++;
+        cur.setDate(cur.getDate() - 1);
+      } else break;
+    }
+    if (isActive(todayPlan ?? undefined)) dayStreak++;
+
+    return { memorizedPages, dueToday, dayStreak };
+  }
+
   async backup(): Promise<BackupData> {
-    const logs = readJSON<LogEntry[]>(KEYS.logs, []);
-    const srsItems = readJSON<SrsItem[]>(KEYS.srs, []);
-    const dailyPlans = readJSON<DailyPlan[]>(KEYS.plans, []);
     return {
       version: 1,
       exportedAt: new Date().toISOString(),
-      logs,
-      srsItems,
-      dailyPlans,
+      logs: readLogs(),
+      srsItems: readSrs(),
+      dailyPlans: readPlans(),
     };
   }
 
   async restore(data: BackupData): Promise<void> {
+    if (data.version !== 1) throw new Error("Unsupported backup version");
     const logs = (data.logs ?? []).map((l) => ({
       id: nextId(),
-      surah: Number(l.surah),
-      ayahStart: Number(l.ayahStart),
-      ayahEnd: Number(l.ayahEnd),
-      quality: Number(l.quality),
-      notes: l.notes ?? null,
-      createdAt: String(l.createdAt),
-    }));
+      type: String(l.type ?? "page"),
+      reference: String(l.reference ?? ""),
+      vibeScale: Number(l.vibeScale ?? 3),
+      createdAt: String(l.createdAt ?? new Date().toISOString()),
+    })).filter((l) => l.reference);
     const srsItems = (data.srsItems ?? []).map((s) => ({
       id: nextId(),
-      surah: Number(s.surah),
-      ayahStart: Number(s.ayahStart),
-      ayahEnd: Number(s.ayahEnd),
-      easeFactor: Number(s.easeFactor) || 2.5,
-      interval: Number(s.interval) || 1,
-      repetitions: Number(s.repetitions) || 0,
-      nextReview: String(s.nextReview ?? "").slice(0, 10),
-      lastReviewed: s.lastReviewed ? String(s.lastReviewed).slice(0, 10) : null,
-    }));
+      type: String(s.type ?? "page"),
+      reference: String(s.reference ?? ""),
+      easeFactor: Number(s.easeFactor ?? 250),
+      interval: Number(s.interval ?? 1),
+      repetitions: Number(s.repetitions ?? 0),
+      nextReviewDate: String(s.nextReviewDate ?? new Date().toISOString()),
+    })).filter((s) => s.reference);
     const plans = (data.dailyPlans ?? []).map((p) => ({
       id: nextId(),
-      planDate: String(p.planDate ?? "").slice(0, 10),
-      items: Array.isArray(p.items) ? p.items : [],
-      completed: Boolean(p.completed),
-    }));
+      date: String(p.date ?? "").slice(0, 10),
+      bandwidth: Number(p.bandwidth ?? 5),
+      plannedItems: Array.isArray(p.plannedItems) ? p.plannedItems : [],
+      completedItems: Array.isArray(p.completedItems) ? p.completedItems : [],
+      extraRevisions: Array.isArray(p.extraRevisions) ? p.extraRevisions : [],
+    })).filter((p) => p.date);
 
-    writeJSON(KEYS.logs, logs);
-    writeJSON(KEYS.srs, srsItems);
-    writeJSON(KEYS.plans, plans);
+    writeLogs(logs);
+    writeSrs(srsItems);
+    writePlans(plans);
     if (logs.length > 0 && !localStorage.getItem(KEYS.firstActionDate)) {
-      writeJSON(KEYS.firstActionDate, today());
+      writeJSON(KEYS.firstActionDate, todayStr());
     }
   }
 
   async isEmpty(): Promise<boolean> {
-    const logs = readJSON<LogEntry[]>(KEYS.logs, []);
-    const srsItems = readJSON<SrsItem[]>(KEYS.srs, []);
-    const plans = readJSON<DailyPlan[]>(KEYS.plans, []);
-    // Ignore auto-created empty plans (created by getTodayPlan with no due items)
-    // so a new user's auto-initialized plan doesn't block migration.
-    const meaningfulPlans = plans.filter((p) => (p.items as PlanItem[]).length > 0 || p.completed);
-    return logs.length === 0 && srsItems.length === 0 && meaningfulPlans.length === 0;
+    const logs = readLogs();
+    const srs = readSrs();
+    const plans = readPlans();
+    const meaningfulPlans = plans.filter((p) => (p.plannedItems?.length ?? 0) > 0 || (p.completedItems?.length ?? 0) > 0 || (p.extraRevisions?.length ?? 0) > 0);
+    return logs.length === 0 && srs.length === 0 && meaningfulPlans.length === 0;
   }
 
   async clear(): Promise<void> {
-    Object.values(KEYS).forEach((key) => localStorage.removeItem(key));
+    Object.values(KEYS).forEach((k) => localStorage.removeItem(k));
+  }
+
+  // helpers
+  private async requireToday(): Promise<DailyPlan> {
+    const plan = await this.getTodayPlan();
+    if (!plan) throw new Error("No plan for today");
+    return plan;
+  }
+
+  private replacePlan(plan: DailyPlan): DailyPlan {
+    const plans = readPlans();
+    const idx = plans.findIndex((p) => p.id === plan.id);
+    if (idx === -1) plans.push(plan);
+    else plans[idx] = plan;
+    writePlans(plans);
+    return plan;
   }
 }
 

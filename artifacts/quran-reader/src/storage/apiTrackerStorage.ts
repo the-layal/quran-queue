@@ -1,87 +1,116 @@
-import type { ITrackerStorage, SrsItem, LogEntry, TrackerStats, DailyPlan, PlanItem, BackupData } from "./trackerStorage";
+import type {
+  ITrackerStorage,
+  Log,
+  SrsItem,
+  DailyPlan,
+  TrackerStats,
+  BackupData,
+  LogInput,
+  CompleteAdvancedInput,
+} from "./trackerStorage";
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(path, { credentials: "include", ...options });
   if (!res.ok) {
-    const data = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(data.error ?? `HTTP ${res.status}`);
+    const data = await res.json().catch(() => ({})) as { error?: string; message?: string };
+    throw new Error(data.error ?? data.message ?? `HTTP ${res.status}`);
   }
   return res.json() as Promise<T>;
 }
 
+function jsonPost<T>(path: string, body: unknown): Promise<T> {
+  return apiFetch<T>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export class ApiTrackerStorage implements ITrackerStorage {
-  async getLogs(): Promise<LogEntry[]> {
-    return apiFetch<LogEntry[]>("/api/logs");
+  getLogs(): Promise<Log[]> {
+    return apiFetch<Log[]>("/api/logs");
   }
 
-  async createLog(body: { surah: number; ayahStart: number; ayahEnd: number; quality: number; notes?: string }): Promise<LogEntry> {
-    return apiFetch<LogEntry>("/api/logs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+  createLog(input: LogInput): Promise<Log> {
+    return jsonPost<Log>("/api/logs", input);
   }
 
-  async deleteLog(id: number): Promise<void> {
-    await apiFetch(`/api/logs/${id}`, { method: "DELETE" });
-  }
-
-  async getSrsItems(): Promise<SrsItem[]> {
+  getSrsItems(): Promise<SrsItem[]> {
     return apiFetch<SrsItem[]>("/api/srs");
   }
 
-  async getStats(): Promise<TrackerStats> {
-    return apiFetch<TrackerStats>("/api/stats");
+  getDueSrsItems(): Promise<SrsItem[]> {
+    return apiFetch<SrsItem[]>("/api/srs/due");
   }
 
-  async getTodayPlan(): Promise<DailyPlan> {
-    return apiFetch<DailyPlan>("/api/plans/today");
+  getTodayPlan(): Promise<DailyPlan | null> {
+    return apiFetch<DailyPlan | null>("/api/plans/today");
   }
 
-  async getPlans(): Promise<DailyPlan[]> {
+  getAllPlans(): Promise<DailyPlan[]> {
     return apiFetch<DailyPlan[]>("/api/plans");
   }
 
-  async patchPlan(id: number, updates: Partial<{ items: PlanItem[]; completed: boolean }>): Promise<DailyPlan> {
-    return apiFetch<DailyPlan>(`/api/plans/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updates),
-    });
+  createOrUpdateTodayPlan(bandwidth: number): Promise<DailyPlan> {
+    return jsonPost<DailyPlan>("/api/plans/today", { bandwidth });
   }
 
-  async backup(): Promise<BackupData> {
-    const res = await fetch("/api/backup", { credentials: "include" });
-    if (!res.ok) throw new Error("Backup failed");
-    return res.json() as Promise<BackupData>;
+  addMore(count: number): Promise<DailyPlan> {
+    return jsonPost<DailyPlan>("/api/plans/today/add-more", { count });
+  }
+
+  completeItem(reference: string, vibeScale: number): Promise<DailyPlan> {
+    return jsonPost<DailyPlan>("/api/plans/today/complete", { reference, vibeScale });
+  }
+
+  completeItemAdvanced(input: CompleteAdvancedInput): Promise<DailyPlan> {
+    return jsonPost<DailyPlan>("/api/plans/today/complete-advanced", input);
+  }
+
+  removeItem(reference: string): Promise<DailyPlan> {
+    return jsonPost<DailyPlan>("/api/plans/today/remove-item", { reference });
+  }
+
+  clearPlan(): Promise<DailyPlan> {
+    return jsonPost<DailyPlan>("/api/plans/today/clear", {});
+  }
+
+  logExtra(input: LogInput): Promise<DailyPlan> {
+    return jsonPost<DailyPlan>("/api/plans/today/extra", input);
+  }
+
+  toggleHistoryItem(date: string, reference: string): Promise<DailyPlan> {
+    return jsonPost<DailyPlan>(`/api/plans/${encodeURIComponent(date)}/toggle-item`, { reference });
+  }
+
+  getStats(): Promise<TrackerStats> {
+    return apiFetch<TrackerStats>("/api/stats");
+  }
+
+  backup(): Promise<BackupData> {
+    return apiFetch<BackupData>("/api/backup");
   }
 
   async restore(data: BackupData): Promise<void> {
-    const res = await fetch("/api/restore", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({})) as { error?: string };
-      throw new Error(d.error ?? "Restore failed");
-    }
+    await jsonPost<unknown>("/api/backup/restore", data);
   }
 
   async isEmpty(): Promise<boolean> {
-    // Fail closed: let errors propagate so the migration flow aborts safely
-    // rather than incorrectly treating a reachable-but-populated account as empty.
-    const [stats, plans] = await Promise.all([this.getStats(), this.getPlans()]);
-    // Ignore auto-created empty plans (created by getTodayPlan with no due items).
-    const meaningfulPlans = plans.filter(
-      (p) => (p.items as PlanItem[]).length > 0 || p.completed
+    const [logs, srs, plans] = await Promise.all([
+      this.getLogs(),
+      this.getSrsItems(),
+      this.getAllPlans(),
+    ]);
+    const meaningfulPlans = plans.filter((p) =>
+      (p.plannedItems?.length ?? 0) > 0 ||
+      (p.completedItems?.length ?? 0) > 0 ||
+      (p.extraRevisions?.length ?? 0) > 0
     );
-    return stats.totalItems === 0 && stats.totalLogs === 0 && meaningfulPlans.length === 0;
+    return logs.length === 0 && srs.length === 0 && meaningfulPlans.length === 0;
   }
 
   async clear(): Promise<void> {
-    // No-op for API storage — clearing is handled by restoring an empty backup
+    // No-op for API: clearing is handled server-side via restore({version:1, ...empty}).
   }
 }
 

@@ -21,6 +21,7 @@
     "openid-client": "^6.8.4",
     "pino": "^9",
     "pino-http": "^10",
+    "quran-meta": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

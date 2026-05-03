@@ -48,15 +48,15 @@ export function TrackerStorageProvider({ children }: { children: ReactNode }) {
         await localTrackerStorage.clear();
         setMigration({ status: "done" });
       } else {
-        const [localStats, accountStats] = await Promise.all([
-          localTrackerStorage.getStats(),
-          apiTrackerStorage.getStats(),
+        const [localLogs, accountLogs] = await Promise.all([
+          localTrackerStorage.getLogs(),
+          apiTrackerStorage.getLogs(),
         ]);
         setMigration({
           status: "conflict",
           localData,
-          localLogCount: localStats.totalLogs,
-          accountLogCount: accountStats.totalLogs,
+          localLogCount: localLogs.length,
+          accountLogCount: accountLogs.length,
         });
       }
     } catch (e) {

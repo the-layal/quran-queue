@@ -1,74 +1,91 @@
-export interface SrsItem {
-  id: number;
-  surah: number;
-  ayahStart: number;
-  ayahEnd: number;
-  easeFactor: number;
-  interval: number;
-  repetitions: number;
-  nextReview: string;
-  lastReviewed: string | null;
-}
+// Tracker data model (Hafith reference + vibeScale).
+// Reference grammar: `page:N`, `page:N-M`, `ayah:S:N`, `ayah:S:N-M`,
+// `surah:S`, `surah:S-T`, `surah:S:N-M`. easeFactor is stored as int * 100.
 
-export interface LogEntry {
+export interface Log {
   id: number;
-  surah: number;
-  ayahStart: number;
-  ayahEnd: number;
-  quality: number;
-  notes: string | null;
+  userId?: string;
+  type: string;
+  reference: string;
+  vibeScale: number;
   createdAt: string;
 }
 
-export interface TrackerStats {
-  totalItems: number;
-  totalLogs: number;
-  dueToday: number;
-  avgEaseFactor: number;
-  todayReviews: number;
-  dayStreak: number;
-  qualityDistribution: Record<number, number>;
-  recentLogs: LogEntry[];
-}
-
-export interface PlanItem {
-  srsItemId: number;
-  surah: number;
-  ayahStart: number;
-  ayahEnd: number;
-  completed: boolean;
+export interface SrsItem {
+  id: number;
+  userId?: string;
+  type: string;
+  reference: string;
+  easeFactor: number;
+  interval: number;
+  repetitions: number;
+  nextReviewDate: string;
 }
 
 export interface DailyPlan {
   id: number;
-  planDate: string;
-  items: PlanItem[];
-  completed: boolean;
+  userId?: string;
+  date: string;
+  bandwidth: number;
+  plannedItems: string[];
+  completedItems: string[];
+  extraRevisions: string[];
+}
+
+export interface TrackerStats {
+  memorizedPages: number;
+  dueToday: number;
+  dayStreak: number;
 }
 
 export interface BackupData {
   version: number;
   exportedAt: string;
-  logs: LogEntry[];
+  logs: Log[];
   srsItems: SrsItem[];
   dailyPlans: DailyPlan[];
 }
 
-export interface ITrackerStorage {
-  getLogs(): Promise<LogEntry[]>;
-  createLog(body: { surah: number; ayahStart: number; ayahEnd: number; quality: number; notes?: string }): Promise<LogEntry>;
-  deleteLog(id: number): Promise<void>;
+export type LogInput = {
+  type: string;
+  reference: string;
+  vibeScale: number;
+};
 
+export type CompleteAdvancedInput = {
+  reference: string;
+  ayahVibes: Array<{ surah: number; ayah: number; vibe: number }>;
+};
+
+export interface ITrackerStorage {
+  // Logs
+  getLogs(): Promise<Log[]>;
+  createLog(input: LogInput): Promise<Log>;
+
+  // SRS items
   getSrsItems(): Promise<SrsItem[]>;
+  getDueSrsItems(): Promise<SrsItem[]>;
+
+  // Daily plans
+  getTodayPlan(): Promise<DailyPlan | null>;
+  getAllPlans(): Promise<DailyPlan[]>;
+  createOrUpdateTodayPlan(bandwidth: number): Promise<DailyPlan>;
+  addMore(count: number): Promise<DailyPlan>;
+  completeItem(reference: string, vibeScale: number): Promise<DailyPlan>;
+  completeItemAdvanced(input: CompleteAdvancedInput): Promise<DailyPlan>;
+  removeItem(reference: string): Promise<DailyPlan>;
+  clearPlan(): Promise<DailyPlan>;
+  logExtra(input: LogInput): Promise<DailyPlan>;
+  toggleHistoryItem(date: string, reference: string): Promise<DailyPlan>;
+
+  // Stats
   getStats(): Promise<TrackerStats>;
 
-  getTodayPlan(): Promise<DailyPlan>;
-  getPlans(): Promise<DailyPlan[]>;
-  patchPlan(id: number, updates: Partial<{ items: PlanItem[]; completed: boolean }>): Promise<DailyPlan>;
-
+  // Backup
   backup(): Promise<BackupData>;
   restore(data: BackupData): Promise<void>;
 
+  // Migration support
   isEmpty(): Promise<boolean>;
   clear(): Promise<void>;
 }

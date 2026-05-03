@@ -1,24 +1,20 @@
-import { useState, useEffect } from "react";
-import { History, Loader2, AlertCircle, Trash2 } from "lucide-react";
+import { History, Loader2, AlertCircle } from "lucide-react";
 import AppShell from "../../components/AppShell";
 import GuestBanner from "../../components/GuestBanner";
 import { useLogs } from "../../hooks/useTracker";
-import { useTrackerStorage } from "../../context/useTrackerStorage";
-import type { DailyPlan } from "../../storage/trackerStorage";
 
-const QUALITY_COLORS: Record<number, string> = {
-  0: "text-red-500", 1: "text-red-400", 2: "text-orange-400",
-  3: "text-yellow-500", 4: "text-emerald-500", 5: "text-green-500",
+const VIBE_LABEL: Record<number, string> = {
+  1: "Blackout", 2: "Wrong", 3: "Difficult", 4: "Hesitated", 5: "Perfect",
 };
-const QUALITY_LABELS: Record<number, string> = {
-  0: "Blackout", 1: "Wrong", 2: "Wrong (familiar)", 3: "Difficult", 4: "Hesitated", 5: "Perfect",
+const VIBE_COLOR: Record<number, string> = {
+  1: "text-red-500", 2: "text-orange-400", 3: "text-yellow-500", 4: "text-emerald-500", 5: "text-green-500",
 };
 
 function intensityClass(count: number): string {
   if (count === 0) return "bg-muted";
-  if (count <= 2)  return "bg-emerald-200 dark:bg-emerald-900";
-  if (count <= 5)  return "bg-emerald-400 dark:bg-emerald-700";
-  if (count <= 9)  return "bg-emerald-600 dark:bg-emerald-500";
+  if (count <= 2) return "bg-emerald-200 dark:bg-emerald-900";
+  if (count <= 5) return "bg-emerald-400 dark:bg-emerald-700";
+  if (count <= 9) return "bg-emerald-600 dark:bg-emerald-500";
   return "bg-emerald-800 dark:bg-emerald-400";
 }
 
@@ -33,57 +29,22 @@ function ActivityCalendar({ countByDate }: { countByDate: Record<string, number>
     const ds = d.toISOString().slice(0, 10);
     cells.push({ date: ds, count: countByDate[ds] ?? 0 });
   }
-
   const weeks: typeof cells[] = [];
   for (let w = 0; w < WEEKS; w++) weeks.push(cells.slice(w * 7, (w + 1) * 7));
-
-  const months: Array<{ label: string; col: number }> = [];
-  let lastMonth = "";
-  weeks.forEach((week, wi) => {
-    const m = week[0]?.date.slice(0, 7) ?? "";
-    if (m !== lastMonth) {
-      months.push({ label: new Date(week[0].date + "T12:00:00").toLocaleString("default", { month: "short" }), col: wi });
-      lastMonth = m;
-    }
-  });
 
   return (
     <div className="bg-card border border-border rounded-xl p-4">
       <h2 className="text-sm font-semibold mb-3">Activity — last 15 weeks</h2>
       <div className="overflow-x-auto">
-        <div className="inline-block min-w-0">
-          <div className="flex mb-1" style={{ paddingLeft: 18 }}>
-            {weeks.map((_, wi) => {
-              const m = months.find((m) => m.col === wi);
-              return (
-                <div key={wi} className="w-4 mr-0.5 text-[9px] text-muted-foreground leading-none flex-shrink-0">
-                  {m?.label ?? ""}
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex gap-0.5">
-            <div className="flex flex-col gap-0.5 mr-0.5">
-              {["", "M", "", "W", "", "F", ""].map((d, i) => (
-                <div key={i} className="w-4 h-4 text-[9px] text-muted-foreground leading-4 text-right pr-0.5">{d}</div>
+        <div className="flex gap-0.5">
+          {weeks.map((week, wi) => (
+            <div key={wi} className="flex flex-col gap-0.5">
+              {week.map(({ date, count }) => (
+                <div key={date} title={count > 0 ? `${date}: ${count} review${count !== 1 ? "s" : ""}` : date}
+                  className={`w-4 h-4 rounded-sm flex-shrink-0 ${intensityClass(count)}`} />
               ))}
             </div>
-            {weeks.map((week, wi) => (
-              <div key={wi} className="flex flex-col gap-0.5">
-                {week.map(({ date, count }) => (
-                  <div key={date} title={count > 0 ? `${date}: ${count} review${count !== 1 ? "s" : ""}` : date}
-                    className={`w-4 h-4 rounded-sm flex-shrink-0 ${intensityClass(count)}`} />
-                ))}
-              </div>
-            ))}
-          </div>
-          <div className="flex items-center gap-1.5 mt-2 justify-end">
-            <span className="text-[10px] text-muted-foreground">Less</span>
-            {["bg-muted", "bg-emerald-200 dark:bg-emerald-900", "bg-emerald-400 dark:bg-emerald-700", "bg-emerald-600 dark:bg-emerald-500", "bg-emerald-800 dark:bg-emerald-400"].map((cls, i) => (
-              <div key={i} className={`w-3 h-3 rounded-sm ${cls}`} />
-            ))}
-            <span className="text-[10px] text-muted-foreground">More</span>
-          </div>
+          ))}
         </div>
       </div>
     </div>
@@ -91,24 +52,11 @@ function ActivityCalendar({ countByDate }: { countByDate: Record<string, number>
 }
 
 function HistoryContent() {
-  const { logs, loading, error, reload, deleteLog } = useLogs();
-  const { storage } = useTrackerStorage();
-  const [plans, setPlans] = useState<DailyPlan[]>([]);
-  const [deleting, setDeleting] = useState<number | null>(null);
-
-  useEffect(() => {
-    storage.getPlans().then(setPlans).catch(() => setPlans([]));
-  }, [storage]);
-
-  const handleDelete = async (id: number) => {
-    setDeleting(id);
-    try { await deleteLog(id); } finally { setDeleting(null); }
-  };
+  const { logs, loading, error, reload } = useLogs();
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   }
-
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 px-4">
@@ -119,7 +67,6 @@ function HistoryContent() {
     );
   }
 
-  // Build countByDate from both logs and completed daily plans
   const countByDate: Record<string, number> = {};
   const grouped: Record<string, typeof logs> = {};
   for (const log of logs) {
@@ -128,14 +75,7 @@ function HistoryContent() {
     if (!grouped[date]) grouped[date] = [];
     grouped[date].push(log);
   }
-  // Supplement calendar with plan completion dates (each completed plan day counts as at least 1)
-  for (const plan of plans) {
-    if (plan.completed && plan.planDate) {
-      countByDate[plan.planDate] = Math.max(countByDate[plan.planDate] ?? 0, 1);
-    }
-  }
   const dates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
-  const hasActivity = logs.length > 0 || plans.some((p) => p.completed);
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
@@ -144,7 +84,7 @@ function HistoryContent() {
         <span className="text-xs text-muted-foreground">{logs.length} reviews</span>
       </div>
 
-      {hasActivity && <ActivityCalendar countByDate={countByDate} />}
+      {logs.length > 0 && <ActivityCalendar countByDate={countByDate} />}
 
       {dates.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
@@ -167,17 +107,12 @@ function HistoryContent() {
                   {dayLogs.map((log) => (
                     <div key={log.id} className="flex items-center gap-3 px-4 py-3">
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm">Surah {log.surah} · {log.ayahStart}–{log.ayahEnd}</div>
-                        {log.notes && <div className="text-xs text-muted-foreground truncate mt-0.5">{log.notes}</div>}
+                        <div className="text-sm font-medium truncate">{log.reference}</div>
+                        <div className="text-xs text-muted-foreground">{log.type}</div>
                       </div>
-                      <span className={`text-xs font-medium flex-shrink-0 ${QUALITY_COLORS[log.quality] ?? "text-muted-foreground"}`}>
-                        {QUALITY_LABELS[log.quality] ?? `Q${log.quality}`}
+                      <span className={`text-xs font-medium flex-shrink-0 ${VIBE_COLOR[log.vibeScale] ?? "text-muted-foreground"}`}>
+                        {VIBE_LABEL[log.vibeScale] ?? `V${log.vibeScale}`}
                       </span>
-                      <button onClick={() => handleDelete(log.id)} disabled={deleting === log.id}
-                        className="flex-shrink-0 p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors disabled:opacity-50"
-                        aria-label="Delete log">
-                        {deleting === log.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                      </button>
                     </div>
                   ))}
                 </div>

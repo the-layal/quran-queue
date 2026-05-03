@@ -1,36 +1,37 @@
 import { db, logsTable, srsItemsTable, dailyPlansTable } from "@workspace/db";
 import { eq, and, lte, desc } from "drizzle-orm";
-import type { Log, SrsItem, DailyPlan, InsertLog, InsertSrsItem } from "@workspace/db";
+import type { Log, SrsItem, DailyPlan, InsertLog, InsertSrsItem, InsertDailyPlan } from "@workspace/db";
 
-export type { Log, SrsItem, DailyPlan };
+export type { Log, SrsItem, DailyPlan, InsertLog, InsertSrsItem, InsertDailyPlan };
 
 export interface IStorage {
+  // Logs
   getLogs(userId: string): Promise<Log[]>;
-  createLog(values: Omit<InsertLog, "userId"> & { userId: string }): Promise<Log>;
-  deleteLog(id: number, userId: string): Promise<Log | undefined>;
+  createLog(values: InsertLog): Promise<Log>;
+  bulkCreateLogs(items: InsertLog[]): Promise<void>;
 
+  // SRS items
   getSrsItems(userId: string): Promise<SrsItem[]>;
-  getSrsItem(userId: string, surah: number, ayahStart: number, ayahEnd: number): Promise<SrsItem | undefined>;
-  upsertSrsItem(userId: string, surah: number, ayahStart: number, ayahEnd: number, updates: Partial<Omit<SrsItem, "id" | "userId" | "surah" | "ayahStart" | "ayahEnd">>): Promise<void>;
+  getAllSrsItems(): Promise<SrsItem[]>;
+  getDueSrsItems(userId: string): Promise<SrsItem[]>;
+  getSrsItemByReference(userId: string, reference: string): Promise<SrsItem | undefined>;
+  createSrsItem(item: InsertSrsItem): Promise<SrsItem>;
+  bulkCreateSrsItems(items: InsertSrsItem[]): Promise<void>;
+  updateSrsItem(id: number, item: Partial<SrsItem>): Promise<SrsItem>;
+  deleteSrsItem(id: number): Promise<void>;
 
-  getStats(userId: string): Promise<{
-    totalItems: number;
-    totalLogs: number;
-    dueToday: number;
-    avgEaseFactor: number;
-    todayReviews: number;
-    dayStreak: number;
-    recentLogs: Log[];
-    qualityDistribution: Record<number, number>;
-  }>;
+  // Daily plans
+  getDailyPlan(userId: string, date: string): Promise<DailyPlan | undefined>;
+  getAllDailyPlans(userId: string): Promise<DailyPlan[]>;
+  createDailyPlan(plan: InsertDailyPlan): Promise<DailyPlan>;
+  bulkCreateDailyPlans(items: InsertDailyPlan[]): Promise<void>;
+  restoreBackup(
+    userId: string,
+    rows: { logs: InsertLog[]; srsItems: InsertSrsItem[]; dailyPlans: InsertDailyPlan[] },
+  ): Promise<void>;
+  updateDailyPlan(id: number, plan: Partial<DailyPlan>): Promise<DailyPlan>;
 
-  getTodayPlan(userId: string): Promise<DailyPlan>;
-  getPlans(userId: string): Promise<DailyPlan[]>;
-  getPlan(id: number, userId: string): Promise<DailyPlan | undefined>;
-  patchPlan(id: number, userId: string, updates: Partial<Pick<DailyPlan, "items" | "completed">>): Promise<DailyPlan | undefined>;
-
-  backup(userId: string): Promise<{ logs: Log[]; srsItems: SrsItem[]; dailyPlans: DailyPlan[] }>;
-  restore(userId: string, data: { logs?: unknown[]; srsItems?: unknown[]; dailyPlans?: unknown[] }): Promise<void>;
+  deleteAllUserData(userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -43,125 +44,92 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async deleteLog(id: number, userId: string): Promise<Log | undefined> {
-    const [row] = await db.delete(logsTable).where(and(eq(logsTable.id, id), eq(logsTable.userId, userId))).returning();
-    return row;
+  async bulkCreateLogs(items: InsertLog[]): Promise<void> {
+    if (items.length === 0) return;
+    await db.insert(logsTable).values(items);
   }
 
   async getSrsItems(userId: string): Promise<SrsItem[]> {
-    return db.select().from(srsItemsTable).where(eq(srsItemsTable.userId, userId)).orderBy(srsItemsTable.nextReview);
+    return db.select().from(srsItemsTable).where(eq(srsItemsTable.userId, userId)).orderBy(srsItemsTable.nextReviewDate);
   }
 
-  async getSrsItem(userId: string, surah: number, ayahStart: number, ayahEnd: number): Promise<SrsItem | undefined> {
-    const [row] = await db.select().from(srsItemsTable).where(
-      and(eq(srsItemsTable.userId, userId), eq(srsItemsTable.surah, surah), eq(srsItemsTable.ayahStart, ayahStart), eq(srsItemsTable.ayahEnd, ayahEnd))
-    );
+  async getAllSrsItems(): Promise<SrsItem[]> {
+    return db.select().from(srsItemsTable);
+  }
+
+  async getDueSrsItems(userId: string): Promise<SrsItem[]> {
+    return db.select().from(srsItemsTable)
+      .where(and(eq(srsItemsTable.userId, userId), lte(srsItemsTable.nextReviewDate, new Date())))
+      .orderBy(srsItemsTable.nextReviewDate);
+  }
+
+  async getSrsItemByReference(userId: string, reference: string): Promise<SrsItem | undefined> {
+    const [row] = await db.select().from(srsItemsTable)
+      .where(and(eq(srsItemsTable.userId, userId), eq(srsItemsTable.reference, reference)));
     return row;
   }
 
-  async upsertSrsItem(userId: string, surah: number, ayahStart: number, ayahEnd: number, updates: Partial<Omit<SrsItem, "id" | "userId" | "surah" | "ayahStart" | "ayahEnd">>): Promise<void> {
-    const existing = await this.getSrsItem(userId, surah, ayahStart, ayahEnd);
-    if (existing) {
-      await db.update(srsItemsTable).set({ ...updates, updatedAt: new Date() }).where(eq(srsItemsTable.id, existing.id));
-    } else {
-      await db.insert(srsItemsTable).values({ userId, surah, ayahStart, ayahEnd, ...updates } as InsertSrsItem);
-    }
-  }
-
-  async getStats(userId: string) {
-    const today = new Date().toISOString().slice(0, 10);
-    const allItems = await this.getSrsItems(userId);
-    const totalItems = allItems.length;
-    const dueToday = allItems.filter((i) => i.nextReview <= today).length;
-    const avgEaseFactor = totalItems > 0 ? allItems.reduce((s, i) => s + i.easeFactor, 0) / totalItems : 0;
-
-    const allLogs = await db.select().from(logsTable).where(eq(logsTable.userId, userId)).orderBy(desc(logsTable.createdAt));
-    const todayReviews = allLogs.filter((l) => l.createdAt.toISOString().slice(0, 10) === today).length;
-
-    const qualityDistribution: Record<number, number> = {};
-    for (const log of allLogs.slice(0, 100)) {
-      qualityDistribution[log.quality] = (qualityDistribution[log.quality] ?? 0) + 1;
-    }
-
-    const totalLogs = allLogs.length;
-
-    // Compute consecutive day streak ending today
-    const logDaySet = new Set(allLogs.map((l) => l.createdAt.toISOString().slice(0, 10)));
-    let dayStreak = 0;
-    const cur = new Date();
-    while (logDaySet.has(cur.toISOString().slice(0, 10))) {
-      dayStreak++;
-      cur.setDate(cur.getDate() - 1);
-    }
-
-    return { totalItems, totalLogs, dueToday, avgEaseFactor: Math.round(avgEaseFactor * 100) / 100, todayReviews, dayStreak, recentLogs: allLogs.slice(0, 10), qualityDistribution };
-  }
-
-  async getPlans(userId: string): Promise<DailyPlan[]> {
-    return db.select().from(dailyPlansTable).where(eq(dailyPlansTable.userId, userId)).orderBy(desc(dailyPlansTable.planDate));
-  }
-
-  async getTodayPlan(userId: string): Promise<DailyPlan> {
-    const today = new Date().toISOString().slice(0, 10);
-    const [existing] = await db.select().from(dailyPlansTable).where(and(eq(dailyPlansTable.userId, userId), eq(dailyPlansTable.planDate, today)));
-    if (existing) return existing;
-
-    const dueItems = await db.select().from(srsItemsTable).where(and(eq(srsItemsTable.userId, userId), lte(srsItemsTable.nextReview, today))).orderBy(srsItemsTable.nextReview);
-    const items = dueItems.map((item) => ({ srsItemId: item.id, surah: item.surah, ayahStart: item.ayahStart, ayahEnd: item.ayahEnd, completed: false }));
-    const [plan] = await db.insert(dailyPlansTable).values({ userId, planDate: today, items }).returning();
-    return plan;
-  }
-
-  async getPlan(id: number, userId: string): Promise<DailyPlan | undefined> {
-    const [row] = await db.select().from(dailyPlansTable).where(and(eq(dailyPlansTable.id, id), eq(dailyPlansTable.userId, userId)));
+  async createSrsItem(item: InsertSrsItem): Promise<SrsItem> {
+    const [row] = await db.insert(srsItemsTable).values(item).returning();
     return row;
   }
 
-  async patchPlan(id: number, userId: string, updates: Partial<Pick<DailyPlan, "items" | "completed">>): Promise<DailyPlan | undefined> {
-    const [row] = await db.update(dailyPlansTable).set(updates).where(and(eq(dailyPlansTable.id, id), eq(dailyPlansTable.userId, userId))).returning();
+  async bulkCreateSrsItems(items: InsertSrsItem[]): Promise<void> {
+    if (items.length === 0) return;
+    await db.insert(srsItemsTable).values(items);
+  }
+
+  async updateSrsItem(id: number, item: Partial<SrsItem>): Promise<SrsItem> {
+    const [row] = await db.update(srsItemsTable).set(item).where(eq(srsItemsTable.id, id)).returning();
     return row;
   }
 
-  async backup(userId: string) {
-    const [logs, srsItems, dailyPlans] = await Promise.all([
-      this.getLogs(userId),
-      this.getSrsItems(userId),
-      db.select().from(dailyPlansTable).where(eq(dailyPlansTable.userId, userId)),
-    ]);
-    return { logs, srsItems, dailyPlans };
+  async deleteSrsItem(id: number): Promise<void> {
+    await db.delete(srsItemsTable).where(eq(srsItemsTable.id, id));
   }
 
-  async restore(userId: string, data: { logs?: unknown[]; srsItems?: unknown[]; dailyPlans?: unknown[] }): Promise<void> {
-    const logRows = (data.logs ?? []).map((l) => {
-      const r = l as Record<string, unknown>;
-      const rawDate = r.createdAt ?? r.created_at;
-      const createdAt = rawDate ? new Date(String(rawDate)) : new Date();
-      return {
-        userId,
-        surah: Number(r.surah),
-        ayahStart: Number(r.ayahStart),
-        ayahEnd: Number(r.ayahEnd),
-        quality: Number(r.quality),
-        notes: typeof r.notes === "string" ? r.notes : null,
-        createdAt: isNaN(createdAt.getTime()) ? new Date() : createdAt,
-      };
-    });
-    const srsRows = (data.srsItems ?? []).map((s) => {
-      const r = s as Record<string, unknown>;
-      return { userId, surah: Number(r.surah), ayahStart: Number(r.ayahStart), ayahEnd: Number(r.ayahEnd), easeFactor: Number(r.easeFactor) || 2.5, interval: Number(r.interval) || 1, repetitions: Number(r.repetitions) || 0, nextReview: String(r.nextReview ?? "").slice(0, 10), lastReviewed: r.lastReviewed ? String(r.lastReviewed).slice(0, 10) : null };
-    });
-    const planRows = (data.dailyPlans ?? []).map((p) => {
-      const r = p as Record<string, unknown>;
-      return { userId, planDate: String(r.planDate ?? "").slice(0, 10), items: Array.isArray(r.items) ? r.items : [], completed: Boolean(r.completed) };
-    });
+  async getDailyPlan(userId: string, date: string): Promise<DailyPlan | undefined> {
+    const [row] = await db.select().from(dailyPlansTable)
+      .where(and(eq(dailyPlansTable.userId, userId), eq(dailyPlansTable.date, date)));
+    return row;
+  }
 
+  async getAllDailyPlans(userId: string): Promise<DailyPlan[]> {
+    return db.select().from(dailyPlansTable).where(eq(dailyPlansTable.userId, userId)).orderBy(desc(dailyPlansTable.date));
+  }
+
+  async createDailyPlan(plan: InsertDailyPlan): Promise<DailyPlan> {
+    const [row] = await db.insert(dailyPlansTable).values(plan).returning();
+    return row;
+  }
+
+  async bulkCreateDailyPlans(items: InsertDailyPlan[]): Promise<void> {
+    if (items.length === 0) return;
+    await db.insert(dailyPlansTable).values(items);
+  }
+
+  async updateDailyPlan(id: number, plan: Partial<DailyPlan>): Promise<DailyPlan> {
+    const [row] = await db.update(dailyPlansTable).set(plan).where(eq(dailyPlansTable.id, id)).returning();
+    return row;
+  }
+
+  async deleteAllUserData(userId: string): Promise<void> {
+    await db.delete(logsTable).where(eq(logsTable.userId, userId));
+    await db.delete(srsItemsTable).where(eq(srsItemsTable.userId, userId));
+    await db.delete(dailyPlansTable).where(eq(dailyPlansTable.userId, userId));
+  }
+
+  async restoreBackup(
+    userId: string,
+    rows: { logs: InsertLog[]; srsItems: InsertSrsItem[]; dailyPlans: InsertDailyPlan[] },
+  ): Promise<void> {
     await db.transaction(async (tx) => {
       await tx.delete(logsTable).where(eq(logsTable.userId, userId));
       await tx.delete(srsItemsTable).where(eq(srsItemsTable.userId, userId));
       await tx.delete(dailyPlansTable).where(eq(dailyPlansTable.userId, userId));
-      if (logRows.length > 0) await tx.insert(logsTable).values(logRows);
-      if (srsRows.length > 0) await tx.insert(srsItemsTable).values(srsRows as InsertSrsItem[]);
-      if (planRows.length > 0) await tx.insert(dailyPlansTable).values(planRows);
+      if (rows.logs.length > 0) await tx.insert(logsTable).values(rows.logs);
+      if (rows.srsItems.length > 0) await tx.insert(srsItemsTable).values(rows.srsItems);
+      if (rows.dailyPlans.length > 0) await tx.insert(dailyPlansTable).values(rows.dailyPlans);
     });
   }
 }
