@@ -142,7 +142,7 @@ export default function LibraryPage() {
       <div className="p-4 w-full max-w-6xl mx-auto">
       <div className="mb-6 flex flex-col gap-4">
         <div className="flex items-center justify-between gap-4">
-          <div className="relative w-64 shrink-0">
+          <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
             <input
               type="text"
@@ -184,7 +184,7 @@ export default function LibraryPage() {
             <List size={12} /> Simple
           </button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {filterOptions.map((opt) => (
             <button
               key={opt.value}
