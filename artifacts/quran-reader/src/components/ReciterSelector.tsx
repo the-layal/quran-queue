@@ -3,6 +3,29 @@ import { User2, Check } from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
 import { RECITERS, getReciter } from "../data/reciters";
 
+const POPOVER_WIDTH = 256; // 16rem
+const MARGIN = 8; // min gap from viewport edge in px
+
+interface PopoverPos {
+  bottom: number;
+  left: number;
+  width: number;
+}
+
+function computePopoverPos(button: HTMLButtonElement): PopoverPos {
+  const rect = button.getBoundingClientRect();
+  const vw = window.innerWidth;
+  const width = Math.min(POPOVER_WIDTH, vw - MARGIN * 2);
+
+  // Prefer right-aligned to button; clamp so it never clips left or right edge.
+  let left = rect.right - width;
+  left = Math.max(MARGIN, Math.min(left, vw - width - MARGIN));
+
+  const bottom = window.innerHeight - rect.top + MARGIN;
+
+  return { bottom, left, width };
+}
+
 interface ReciterSelectorProps {
   style?: React.CSSProperties;
 }
@@ -11,11 +34,38 @@ export default function ReciterSelector({ style }: ReciterSelectorProps) {
   const selectedReciterId = useQuranStore((s) => s.selectedReciterId);
   const setSelectedReciterId = useQuranStore((s) => s.setSelectedReciterId);
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<PopoverPos | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const selected = getReciter(selectedReciterId);
 
+  const handleOpen = () => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    if (buttonRef.current) {
+      setPos(computePopoverPos(buttonRef.current));
+    }
+    setOpen(true);
+  };
+
+  // Recompute position on resize/scroll while open.
+  useEffect(() => {
+    if (!open || !buttonRef.current) return;
+    const update = () => {
+      if (buttonRef.current) setPos(computePopoverPos(buttonRef.current));
+    };
+    window.addEventListener("resize", update, { passive: true });
+    window.addEventListener("scroll", update, { passive: true, capture: true });
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open]);
+
+  // Close on outside click.
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
@@ -35,7 +85,7 @@ export default function ReciterSelector({ style }: ReciterSelectorProps) {
     <div className="relative flex-shrink-0" style={style}>
       <button
         ref={buttonRef}
-        onClick={() => setOpen((v) => !v)}
+        onClick={handleOpen}
         style={{ pointerEvents: "auto" }}
         className="h-7 rounded-lg flex items-center justify-center transition-colors border border-border text-muted-foreground hover:bg-muted px-2 gap-1"
         aria-label={`Reciter: ${selected.nameEn}`}
@@ -49,10 +99,16 @@ export default function ReciterSelector({ style }: ReciterSelectorProps) {
         </span>
       </button>
 
-      {open && (
+      {open && pos && (
         <div
           ref={popoverRef}
-          className="absolute bottom-full mb-2 right-0 z-[70] bg-card border border-border rounded-xl shadow-xl p-1.5 flex flex-col gap-0.5 w-[min(16rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] max-h-[60vh] overflow-y-auto overscroll-contain"
+          style={{
+            position: "fixed",
+            bottom: pos.bottom,
+            left: pos.left,
+            width: pos.width,
+          }}
+          className="z-[70] bg-card border border-border rounded-xl shadow-xl p-1.5 flex flex-col gap-0.5 max-h-[60vh] overflow-y-auto overscroll-contain"
           role="listbox"
           aria-label="Choose reciter"
         >
