@@ -623,15 +623,9 @@ function SurahReadingView({
 function SettingsPanel({
   open,
   onClose,
-  fontSize,
-  setFontSize,
-  isMushafMode,
 }: {
   open: boolean;
   onClose: () => void;
-  fontSize: number;
-  setFontSize: (n: number) => void;
-  isMushafMode: boolean;
 }) {
   if (!open) return null;
   return (
@@ -642,35 +636,9 @@ function SettingsPanel({
         <h2 className="text-base font-semibold mb-5">Settings</h2>
 
         <div className="space-y-5">
-          {!isMushafMode && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Font Size</span>
-                <span className="text-sm text-muted-foreground tabular-nums">
-                  {fontSize}px
-                </span>
-              </div>
-              <input
-                type="range"
-                min={24}
-                max={48}
-                step={2}
-                value={fontSize}
-                onChange={(e) => setFontSize(Number(e.target.value))}
-                className="w-full accent-primary cursor-pointer"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>Small</span>
-                <span>Large</span>
-              </div>
-            </div>
-          )}
-
-          {isMushafMode && (
-            <p className="text-sm text-muted-foreground">
-              Use the − / + buttons in the footer to zoom the page in or out.
-            </p>
-          )}
+          <p className="text-sm text-muted-foreground">
+            Use the − / + buttons in the footer to zoom the page in or out.
+          </p>
         </div>
 
         <button
@@ -982,6 +950,9 @@ export default function QuranPage() {
     updateSettings({ mushafScale: Math.max(0.75, Math.round((cur - 0.1) * 100) / 100) });
   };
 
+  const fontSizeUp = () => updateSettings({ fontSize: Math.min(48, settings.fontSize + 2) });
+  const fontSizeDown = () => updateSettings({ fontSize: Math.max(24, settings.fontSize - 2) });
+
   // Keyboard navigation
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -1102,13 +1073,15 @@ export default function QuranPage() {
         {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
       </button>
 
-      <button
-        onClick={() => setSettingsOpen(true)}
-        className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-        aria-label="Settings"
-      >
-        <Settings className="w-5 h-5" />
-      </button>
+      {isMushaf && (
+        <button
+          onClick={() => setSettingsOpen(true)}
+          className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+          aria-label="Settings"
+        >
+          <Settings className="w-5 h-5" />
+        </button>
+      )}
 
       <button
         onClick={() => setQueuePanelOpen(!queuePanelOpen)}
@@ -1342,33 +1315,59 @@ export default function QuranPage() {
             </div>
           </div>
         ) : (
-          <div className="flex items-center justify-between px-6 py-3 max-w-lg mx-auto">
-            <button
-              onClick={goPrevSurah}
-              disabled={currentSurah <= 1}
-              aria-label="Previous surah"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              Prev
-            </button>
+          <div className="max-w-lg mx-auto">
+            {/* ── Font size row ── */}
+            <div className="flex items-center justify-center gap-2 px-6 pt-2 pb-1">
+              <button
+                onClick={fontSizeDown}
+                disabled={settings.fontSize <= 24}
+                aria-label="Decrease font size"
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-base font-medium border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors leading-none"
+              >
+                −
+              </button>
+              <span className="text-xs tabular-nums text-muted-foreground w-10 text-center">
+                {settings.fontSize}px
+              </span>
+              <button
+                onClick={fontSizeUp}
+                disabled={settings.fontSize >= 48}
+                aria-label="Increase font size"
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-base font-medium border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors leading-none"
+              >
+                +
+              </button>
+            </div>
 
-            <button
-              onClick={() => setSurahPickerOpen(true)}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors tabular-nums"
-            >
-              {currentSurah} / {TOTAL_SURAHS}
-            </button>
+            {/* ── Surah nav row ── */}
+            <div className="flex items-center justify-between px-6 pb-3 pt-1">
+              <button
+                onClick={goPrevSurah}
+                disabled={currentSurah <= 1}
+                aria-label="Previous surah"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Prev
+              </button>
 
-            <button
-              onClick={goNextSurah}
-              disabled={currentSurah >= TOTAL_SURAHS}
-              aria-label="Next surah"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
-            >
-              Next
-              <ChevronRight className="w-4 h-4" />
-            </button>
+              <button
+                onClick={() => setSurahPickerOpen(true)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors tabular-nums"
+              >
+                {currentSurah} / {TOTAL_SURAHS}
+              </button>
+
+              <button
+                onClick={goNextSurah}
+                disabled={currentSurah >= TOTAL_SURAHS}
+                aria-label="Next surah"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+              >
+                Next
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         )}
       </footer>
@@ -1393,9 +1392,6 @@ export default function QuranPage() {
       <SettingsPanel
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        fontSize={settings.fontSize}
-        setFontSize={(n) => updateSettings({ fontSize: n })}
-        isMushafMode={isMushaf}
       />
 
       <ReviewQueuePanel chapters={chapters} queuePlayback={queuePlayback} />
