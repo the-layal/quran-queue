@@ -416,6 +416,7 @@ const KHATTAB_CDN =
 const translationCache = new Map<number, Map<number, string>>();
 const translationFetchPromises = new Map<number, Promise<Map<number, string>>>();
 
+
 export async function fetchSurahTranslation(
   surahNumber: number
 ): Promise<Map<number, string>> {

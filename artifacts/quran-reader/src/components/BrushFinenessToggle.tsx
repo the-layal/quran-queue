@@ -12,12 +12,16 @@ interface Props {
   hideActions?: boolean;
   compactLabels?: boolean;
   showTranslationButton?: boolean;
+  showTransliterationButton?: boolean;
+  showReadingTranslationButton?: boolean;
 }
 
 export default function BrushFinenessToggle({
   hideActions = false,
   compactLabels = false,
   showTranslationButton = false,
+  showTransliterationButton = false,
+  showReadingTranslationButton = false,
 }: Props) {
   const brushFineness    = useQuranStore((s) => s.brushFineness);
   const setBrushFineness = useQuranStore((s) => s.setBrushFineness);
@@ -26,6 +30,12 @@ export default function BrushFinenessToggle({
   const confirmSelection = useQuranStore((s) => s.confirmSelection);
   const showMushafTranslation = useQuranStore(
     (s) => s.settings.showMushafTranslation ?? false
+  );
+  const showTransliteration = useQuranStore(
+    (s) => s.settings.showTransliteration ?? false
+  );
+  const showTranslation = useQuranStore(
+    (s) => s.settings.showTranslation ?? false
   );
   const updateSettings   = useQuranStore((s) => s.updateSettings);
 
@@ -52,25 +62,63 @@ export default function BrushFinenessToggle({
         ))}
       </div>
 
-      {/* Translation hover popover toggle ("Aa") — Mushaf mode only */}
+      {/* Reading mode: Translation + Transliteration pill buttons */}
+      {(showReadingTranslationButton || (showTransliterationButton && !showTranslationButton)) && (
+        <div className="flex items-center rounded-lg border border-border bg-muted/50 p-0.5 gap-0.5">
+          {showReadingTranslationButton && (
+            <button
+              onClick={() => updateSettings({ showTranslation: !showTranslation })}
+              title={showTranslation ? "Hide translation" : "Show translation"}
+              aria-label="Toggle translation"
+              aria-pressed={showTranslation}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                showTranslation
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              En
+            </button>
+          )}
+          {showTransliterationButton && !showTranslationButton && (
+            <button
+              onClick={() => updateSettings({ showTransliteration: !showTransliteration })}
+              title={showTransliteration ? "Hide transliteration" : "Show transliteration"}
+              aria-label="Toggle transliteration"
+              aria-pressed={showTransliteration}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                showTransliteration
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Tr
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Mushaf mode: Translation hover popover toggle ("Aa") */}
       {showTranslationButton && (
-        <button
-          onClick={() => updateSettings({ showMushafTranslation: !showMushafTranslation })}
-          title={
-            showMushafTranslation
-              ? "Hide translation popover"
-              : "Show translation when hovering a word"
-          }
-          aria-label="Toggle translation popover"
-          aria-pressed={showMushafTranslation}
-          className={`flex items-center justify-center w-7 h-7 rounded-lg text-xs font-semibold border transition-colors flex-shrink-0 ${
-            showMushafTranslation
-              ? "bg-primary/15 border-primary text-primary"
-              : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-          }`}
-        >
-          Aa
-        </button>
+        <div className="flex items-center rounded-lg border border-border bg-muted/50 p-0.5 gap-0.5">
+          <button
+            onClick={() => updateSettings({ showMushafTranslation: !showMushafTranslation })}
+            title={
+              showMushafTranslation
+                ? "Hide translation popover"
+                : "Show translation when hovering a word"
+            }
+            aria-label="Toggle translation popover"
+            aria-pressed={showMushafTranslation}
+            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+              showMushafTranslation
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Aa
+          </button>
+        </div>
       )}
 
       {/* X / ✓ action pair — only visible when words are selected and not suppressed */}

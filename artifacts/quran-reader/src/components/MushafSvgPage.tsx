@@ -995,7 +995,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   // Position the popover above or below the tap, keeping it on-screen.
   const popoverStyle = translationPopover
     ? (() => {
-        const POPOVER_H = 120; // estimated popover height
+        const POPOVER_H = 120;
         const POPOVER_W = 300;
         const MARGIN = 12;
         const vw = window.innerWidth;
@@ -1100,6 +1100,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
           </div>
         </div>
       )}
+
     </div>
   );
 }
