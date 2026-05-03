@@ -500,8 +500,9 @@ function SurahReadingView({
     }
 
     const revealedSet = new Set(manuallyRevealedIds);
-    // Context-only hides the user's active selection OR any locked (confirmed)
-    // selection — see MushafSvgPage for the same rationale.
+    // Context-only: during playback hides only the currently recited word;
+    // when paused/stopped falls back to hiding the active selection OR any
+    // locked (confirmed) selection — see MushafSvgPage for the same pattern.
     const contextHideSet = new Set([...selectedWordIds, ...lockedContextIds]);
 
     allWords.forEach((el) => {
