@@ -6,6 +6,7 @@ import queuesRouter from "./queues";
 import authRouter from "./auth";
 import trackerRouter from "./tracker";
 import qfAuthRouter from "./qfAuth";
+import goalsRouter from "./goals";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(queuesRouter);
 router.use(authRouter);
 router.use(trackerRouter);
 router.use(qfAuthRouter);
+router.use(goalsRouter);
 
 export default router;

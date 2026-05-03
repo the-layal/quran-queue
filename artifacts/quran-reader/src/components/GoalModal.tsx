@@ -1,0 +1,294 @@
+import { useState, useMemo } from "react";
+import { X, ChevronRight, ChevronLeft, AlertTriangle } from "lucide-react";
+import { SURAHS } from "@/lib/quran-data";
+import type { CreateGoalInput } from "@/hooks/useGoals";
+
+interface GoalModalProps {
+  open: boolean;
+  onClose: () => void;
+  onCreate: (input: CreateGoalInput) => Promise<void>;
+}
+
+function todayStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDays(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function daysUntil(dateStr: string): number {
+  const target = new Date(dateStr + "T00:00:00");
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return Math.ceil((target.getTime() - now.getTime()) / 86400000);
+}
+
+export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
+  const [step, setStep] = useState(1);
+  const [surahId, setSurahId] = useState<number | null>(null);
+  const [ayahStart, setAyahStart] = useState(1);
+  const [ayahEnd, setAyahEnd] = useState(1);
+  const [targetDate, setTargetDate] = useState(addDays(30));
+  const [dailyTarget, setDailyTarget] = useState(1);
+  const [surahQuery, setSurahQuery] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const selectedSurah = SURAHS.find((s) => s.id === surahId);
+  const totalAyahs = selectedSurah ? ayahEnd - ayahStart + 1 : 0;
+  const daysRemaining = daysUntil(targetDate);
+  const paceNeeded = daysRemaining > 0 ? Math.ceil(totalAyahs / daysRemaining) : totalAyahs;
+  const paceTooSlow = dailyTarget < paceNeeded;
+
+  const filteredSurahs = useMemo(() => {
+    const q = surahQuery.trim().toLowerCase();
+    if (!q) return SURAHS;
+    return SURAHS.filter(
+      (s) =>
+        String(s.id).startsWith(q) ||
+        s.englishName.toLowerCase().includes(q) ||
+        s.name.includes(surahQuery)
+    );
+  }, [surahQuery]);
+
+  function selectSurah(id: number) {
+    const s = SURAHS.find((x) => x.id === id)!;
+    setSurahId(id);
+    setAyahStart(1);
+    setAyahEnd(s.ayahCount);
+    setDailyTarget(Math.max(1, Math.ceil(s.ayahCount / Math.max(1, daysUntil(targetDate)))));
+    setStep(2);
+  }
+
+  async function handleCreate() {
+    if (!surahId) return;
+    setCreating(true);
+    setError(null);
+    try {
+      await onCreate({
+        surahNumber: surahId,
+        ayahStart,
+        ayahEnd,
+        targetDate,
+        dailyTarget,
+      });
+      handleClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to create goal");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  function handleClose() {
+    setStep(1);
+    setSurahId(null);
+    setAyahStart(1);
+    setAyahEnd(1);
+    setTargetDate(addDays(30));
+    setDailyTarget(1);
+    setSurahQuery("");
+    setError(null);
+    onClose();
+  }
+
+  if (!open) return null;
+
+  return (
+    <>
+      <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={handleClose} />
+      <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 bg-card rounded-2xl border border-border shadow-2xl max-w-md mx-auto max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            {step > 1 && (
+              <button onClick={() => setStep(step - 1)} className="p-1 rounded-lg hover:bg-muted text-muted-foreground">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            )}
+            <h2 className="text-base font-semibold">
+              {step === 1 && "Choose Surah"}
+              {step === 2 && "Set Ayah Range"}
+              {step === 3 && "Set Target"}
+            </h2>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex gap-1">
+              {[1, 2, 3].map((s) => (
+                <div key={s} className={`w-1.5 h-1.5 rounded-full transition-colors ${s <= step ? "bg-primary" : "bg-muted"}`} />
+              ))}
+            </div>
+            <button onClick={handleClose} className="p-1 rounded-lg hover:bg-muted text-muted-foreground">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Step 1: Surah picker */}
+        {step === 1 && (
+          <div className="flex flex-col flex-1 min-h-0 px-5 pb-5">
+            <input
+              type="text"
+              placeholder="Search surah name or number…"
+              value={surahQuery}
+              onChange={(e) => setSurahQuery(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-muted text-sm focus:outline-none focus:ring-2 focus:ring-primary mb-3 flex-shrink-0"
+              autoFocus
+            />
+            <div className="overflow-y-auto flex-1 -mx-1 px-1">
+              {filteredSurahs.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => selectSurah(s.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted/60 transition-colors text-left mb-0.5 ${surahId === s.id ? "bg-accent/40" : ""}`}
+                >
+                  <div className="w-7 h-7 rounded-full border border-border flex items-center justify-center text-xs font-medium text-muted-foreground flex-shrink-0">
+                    {s.id}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium leading-tight">{s.englishName}</div>
+                    <div className="text-xs text-muted-foreground">{s.ayahCount} ayahs</div>
+                  </div>
+                  <span className="font-quran text-base text-foreground/70 flex-shrink-0" dir="rtl" lang="ar">
+                    {s.name}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Ayah range */}
+        {step === 2 && selectedSurah && (
+          <div className="px-5 pb-5 space-y-5">
+            <div className="p-3 rounded-xl bg-muted/50 text-sm">
+              <span className="font-medium">{selectedSurah.englishName}</span>
+              <span className="text-muted-foreground ml-1">({selectedSurah.ayahCount} ayahs)</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1.5">First Ayah</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={selectedSurah.ayahCount}
+                  value={ayahStart}
+                  onChange={(e) => {
+                    const v = Math.max(1, Math.min(selectedSurah.ayahCount, parseInt(e.target.value) || 1));
+                    setAyahStart(v);
+                    if (ayahEnd < v) setAyahEnd(v);
+                  }}
+                  className="w-full px-3 py-2 rounded-xl bg-muted text-sm focus:outline-none focus:ring-2 focus:ring-primary text-center"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1.5">Last Ayah</label>
+                <input
+                  type="number"
+                  min={ayahStart}
+                  max={selectedSurah.ayahCount}
+                  value={ayahEnd}
+                  onChange={(e) => {
+                    const v = Math.max(ayahStart, Math.min(selectedSurah.ayahCount, parseInt(e.target.value) || ayahStart));
+                    setAyahEnd(v);
+                  }}
+                  className="w-full px-3 py-2 rounded-xl bg-muted text-sm focus:outline-none focus:ring-2 focus:ring-primary text-center"
+                />
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground text-center">
+              {ayahEnd - ayahStart + 1} ayah{ayahEnd - ayahStart + 1 !== 1 ? "s" : ""} selected
+            </p>
+
+            <button
+              onClick={() => setStep(3)}
+              className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+            >
+              Next
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Step 3: Target date + pace */}
+        {step === 3 && selectedSurah && (
+          <div className="px-5 pb-5 space-y-5">
+            <div className="p-3 rounded-xl bg-muted/50 text-sm">
+              <span className="font-medium">{selectedSurah.englishName}</span>
+              <span className="text-muted-foreground ml-1">
+                {ayahStart === 1 && ayahEnd === selectedSurah.ayahCount
+                  ? "(full surah)"
+                  : `(ayahs ${ayahStart}–${ayahEnd})`}
+              </span>
+              <span className="text-muted-foreground ml-1">· {totalAyahs} ayahs</span>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1.5">Target Date</label>
+              <input
+                type="date"
+                min={todayStr()}
+                value={targetDate}
+                onChange={(e) => {
+                  setTargetDate(e.target.value);
+                  const d = daysUntil(e.target.value);
+                  if (d > 0) setDailyTarget(Math.max(1, Math.ceil(totalAyahs / d)));
+                }}
+                className="w-full px-3 py-2 rounded-xl bg-muted text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Daily Pace</label>
+                <span className="text-xs tabular-nums text-muted-foreground">{dailyTarget} ayah{dailyTarget !== 1 ? "s" : ""}/day</span>
+              </div>
+              <input
+                type="range"
+                min={1}
+                max={Math.max(1, totalAyahs)}
+                value={dailyTarget}
+                onChange={(e) => setDailyTarget(parseInt(e.target.value))}
+                className="w-full accent-primary cursor-pointer"
+              />
+              <div className="mt-2 p-2.5 rounded-lg bg-muted/60 text-xs">
+                {daysRemaining <= 0 ? (
+                  <span className="text-destructive">Target date has already passed</span>
+                ) : (
+                  <span>
+                    At {dailyTarget} ayah{dailyTarget !== 1 ? "s" : ""}/day you&apos;ll finish in{" "}
+                    <strong>{Math.ceil(totalAyahs / dailyTarget)} day{Math.ceil(totalAyahs / dailyTarget) !== 1 ? "s" : ""}</strong>
+                    {" "}(target: {daysRemaining} day{daysRemaining !== 1 ? "s" : ""})
+                  </span>
+                )}
+              </div>
+              {paceTooSlow && daysRemaining > 0 && (
+                <div className="mt-2 flex items-start gap-2 p-2.5 rounded-lg bg-amber-500/10 text-xs text-amber-600 dark:text-amber-400">
+                  <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                  <span>
+                    You need at least {paceNeeded} ayah{paceNeeded !== 1 ? "s" : ""}/day to meet your deadline.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {error && <p className="text-xs text-destructive">{error}</p>}
+
+            <button
+              onClick={handleCreate}
+              disabled={creating || daysRemaining <= 0}
+              className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {creating ? "Creating…" : "Create Goal"}
+            </button>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}

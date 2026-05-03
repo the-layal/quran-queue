@@ -102,6 +102,12 @@ router.post("/logs", async (req: Request, res: Response) => {
       await storage.updateSrsItem(srsItem.id, update);
     }
 
+    // Update goal progress for direct ayah logs
+    const ayahMatch = input.reference.match(/^ayah:(\d+):(\d+)$/);
+    if (ayahMatch) {
+      await updateGoalProgressForAyah(userId, parseInt(ayahMatch[1], 10), parseInt(ayahMatch[2], 10));
+    }
+
     res.status(201).json(log);
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -412,6 +418,32 @@ async function applyVibeToReference(userId: string, type: string, reference: str
   }
 }
 
+async function updateGoalProgressForAyah(userId: string, surahNumber: number, ayahNumber: number): Promise<void> {
+  try {
+    const goals = await storage.getGoals(userId);
+    const matching = goals.filter(
+      (g) =>
+        g.status === "active" &&
+        g.surahNumber === surahNumber &&
+        g.ayahStart <= ayahNumber &&
+        g.ayahEnd >= ayahNumber,
+    );
+    for (const goal of matching) {
+      const completed = new Set<number>(goal.completedAyahsList || []);
+      if (completed.has(ayahNumber)) continue;
+      completed.add(ayahNumber);
+      const newList = Array.from(completed);
+      const total = goal.ayahEnd - goal.ayahStart + 1;
+      await storage.updateGoal(goal.id, {
+        completedAyahsList: newList,
+        status: newList.length >= total ? "complete" : "active",
+      });
+    }
+  } catch {
+    // non-critical — don't block the response
+  }
+}
+
 router.post("/plans/today/complete", async (req: Request, res: Response) => {
   if (!isAuth(req, res)) return;
   try {
@@ -432,6 +464,7 @@ router.post("/plans/today/complete", async (req: Request, res: Response) => {
       for (const ayah of group.ayahs) {
         const ayahRef = `ayah:${group.surah}:${ayah}`;
         await applyVibeToReference(userId, "ayah", ayahRef, input.vibeScale);
+        await updateGoalProgressForAyah(userId, group.surah, ayah);
       }
     }
 
@@ -470,6 +503,7 @@ router.post("/plans/today/complete-advanced", async (req: Request, res: Response
     for (const av of input.ayahVibes) {
       const ayahRef = `ayah:${av.surah}:${av.ayah}`;
       await applyVibeToReference(userId, "ayah", ayahRef, av.vibe);
+      await updateGoalProgressForAyah(userId, av.surah, av.ayah);
     }
 
     const overallVibe = Math.round(input.ayahVibes.reduce((s, a) => s + a.vibe, 0) / input.ayahVibes.length);
