@@ -1109,7 +1109,11 @@ export default function QuranPage() {
     document.documentElement.classList.toggle("dark", isDark);
   };
 
-  const isFirstLoad = !isMushaf && isLoading && !surahData;
+  // Show the loading screen whenever we're in reading mode without data,
+  // not just while a fetch is in flight. Closes the brief blank frame
+  // between switching to Reading mode and the loadSurah effect setting
+  // isLoading=true on a cold-cache surah.
+  const isFirstLoad = !isMushaf && !surahData;
 
   const rightActions = (
     <>
