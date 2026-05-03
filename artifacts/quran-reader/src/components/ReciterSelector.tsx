@@ -52,7 +52,7 @@ export default function ReciterSelector({ style }: ReciterSelectorProps) {
       {open && (
         <div
           ref={popoverRef}
-          className="absolute bottom-full mb-2 right-0 z-[70] bg-card border border-border rounded-xl shadow-xl p-1.5 flex flex-col gap-0.5 min-w-[16rem] max-h-[60vh] overflow-y-auto"
+          className="absolute bottom-full mb-2 right-0 z-[70] bg-card border border-border rounded-xl shadow-xl p-1.5 flex flex-col gap-0.5 w-[min(16rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] max-h-[60vh] overflow-y-auto overscroll-contain"
           role="listbox"
           aria-label="Choose reciter"
         >
