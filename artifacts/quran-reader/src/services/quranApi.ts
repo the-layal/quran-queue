@@ -457,3 +457,45 @@ export async function fetchPageTransliterations(
     pageTransliterationsPromise.delete(pageNumber);
   }
 }
+
+// ── The Clear Quran by Dr. Mustafa Khattab ──────────────────────────────────
+//
+// Source: fawazahmed0/quran-api (CDN-hosted edition "eng-mustafakhattaba")
+// This is the "Allah edition" — uses "Allah" rather than "God".
+// Attribution: © Dr. Mustafa Khattab, The Clear Quran
+// Per the license: users of the data must credit Dr. Mustafa Khattab.
+//
+// Endpoint: GET /{surahNumber}.json → { chapter: [{ chapter, verse, text }] }
+
+const KHATTAB_CDN =
+  "https://cdn.jsdelivr.net/gh/fawazahmed0/quran-api@1/editions/eng-mustafakhattaba";
+
+const translationCache = new Map<number, Map<number, string>>();
+const translationFetchPromises = new Map<number, Promise<Map<number, string>>>();
+
+export async function fetchSurahTranslation(
+  surahNumber: number
+): Promise<Map<number, string>> {
+  if (translationCache.has(surahNumber)) return translationCache.get(surahNumber)!;
+  if (translationFetchPromises.has(surahNumber)) return translationFetchPromises.get(surahNumber)!;
+
+  const promise = (async (): Promise<Map<number, string>> => {
+    const res = await fetch(`${KHATTAB_CDN}/${surahNumber}.json`);
+    if (!res.ok) throw new Error(`Translation fetch failed: ${res.status}`);
+    const data: { chapter: { chapter: number; verse: number; text: string }[] } =
+      await res.json();
+    const map = new Map<number, string>();
+    for (const entry of data.chapter) {
+      map.set(entry.verse, entry.text);
+    }
+    translationCache.set(surahNumber, map);
+    return map;
+  })();
+
+  translationFetchPromises.set(surahNumber, promise);
+  try {
+    return await promise;
+  } finally {
+    translationFetchPromises.delete(surahNumber);
+  }
+}

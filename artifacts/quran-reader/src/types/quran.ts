@@ -107,6 +107,7 @@ export interface Settings {
   fontSize: number;
   showTranslation: boolean;
   showTransliteration: boolean;
+  showMushafTranslation?: boolean;
   mushafScale: number;
 }
 

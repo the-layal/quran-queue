@@ -21,6 +21,7 @@ import AppShell from "../components/AppShell";
 import { useQuranStore } from "../store/quranStore";
 import {
   fetchSurahVerses,
+  fetchSurahTranslation,
   loadChapters,
   TOTAL_PAGES,
   TOTAL_SURAHS,
@@ -301,10 +302,12 @@ function VerseBlock({
   ayah,
   fontSize,
   showTransliteration,
+  translation,
 }: {
   ayah: QuranAyah;
   fontSize: number;
   showTransliteration: boolean;
+  translation?: string;
 }) {
   return (
     <div className="verse-block flex items-start gap-3">
@@ -315,7 +318,7 @@ function VerseBlock({
         </div>
       </div>
 
-      {/* Right: Arabic text block */}
+      {/* Right: Arabic text block + optional translation */}
       <div className="flex-1">
         <div
           className="quran-text text-right"
@@ -364,9 +367,51 @@ function VerseBlock({
             {ayah.transliteration}
           </p>
         )}
+        {translation !== undefined && (
+          <p
+            className={`verse-translation${
+              showTransliteration && ayah.transliteration ? " with-separator" : ""
+            }`}
+          >
+            {translation}
+          </p>
+        )}
       </div>
     </div>
   );
+}
+
+// ── Translation hook (reading mode) ──────────────────────────────────────────
+
+function useReadingTranslation(surahNumber: number, enabled: boolean) {
+  const [translations, setTranslations] = useState<Map<number, string>>(new Map());
+  const [translationLoading, setTranslationLoading] = useState(false);
+  const [translationError, setTranslationError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!enabled) {
+      setTranslations(new Map());
+      setTranslationLoading(false);
+      setTranslationError(null);
+      return;
+    }
+    let cancelled = false;
+    setTranslationLoading(true);
+    setTranslationError(null);
+    fetchSurahTranslation(surahNumber)
+      .then((map) => {
+        if (!cancelled) { setTranslations(map); setTranslationLoading(false); }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setTranslationError(err instanceof Error ? err.message : "Failed to load translation");
+          setTranslationLoading(false);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [surahNumber, enabled]);
+
+  return { translations, translationLoading, translationError };
 }
 
 // ── Surah reading view ────────────────────────────────────────────────────────
@@ -377,17 +422,22 @@ function SurahReadingView({
   chapter,
   fontSize,
   showTransliteration,
+  showTranslation,
 }: {
   surahNumber: number;
   ayahs: QuranAyah[];
   chapter: ChapterInfo | undefined;
   fontSize: number;
   showTransliteration: boolean;
+  showTranslation: boolean;
 }) {
   const firstAyah = ayahs[0];
   const containerRef = useRef<HTMLDivElement>(null);
   const fontsReady = useQpcFonts(ayahs);
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
+
+  const { translations, translationLoading, translationError } =
+    useReadingTranslation(surahNumber, showTranslation);
   const playbackActiveIds = useQuranStore((s) => s.playbackActiveIds);
   const playbackCurrentWordId = useQuranStore((s) => s.playbackCurrentWordId);
   const blindReviewMode = useQuranStore((s) => s.blindReviewMode);
@@ -514,6 +564,20 @@ function SurahReadingView({
         </div>
       )}
 
+      {showTranslation && translationError && (
+        <div className="flex items-center gap-2 text-xs text-destructive bg-destructive/10 rounded-lg px-3 py-2 mb-4">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+          Translation unavailable: {translationError}
+        </div>
+      )}
+
+      {showTranslation && translationLoading && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground px-1 mb-2">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          Loading translation…
+        </div>
+      )}
+
       <div className="surah-verses">
         {ayahs.map((ayah) => (
           <VerseBlock
@@ -521,9 +585,20 @@ function SurahReadingView({
             ayah={ayah}
             fontSize={fontSize}
             showTransliteration={showTransliteration}
+            translation={
+              showTranslation && !translationLoading && !translationError
+                ? translations.get(ayah.numberInSurah)
+                : undefined
+            }
           />
         ))}
       </div>
+
+      {showTranslation && (
+        <div className="text-center text-xs text-muted-foreground/60 mt-6 pb-2 italic">
+          Translation: The Clear Quran © Dr. Mustafa Khattab
+        </div>
+      )}
 
       <div className="text-center text-xs text-muted-foreground mt-10 pb-4 tracking-widest">
         ﴾ {surahInfo?.englishName ?? ""} ﴿
@@ -594,25 +669,30 @@ function SettingsPanel({
             </p>
           )}
 
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-medium">Show Translation</div>
-              <div className="text-xs text-muted-foreground">
-                Sahih International (coming soon)
+          {!isMushafMode && (
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium">Show Translation</div>
+                <div className="text-xs text-muted-foreground">
+                  The Clear Quran — Dr. Mustafa Khattab
+                </div>
               </div>
+              <button
+                onClick={() => setShowTranslation(!showTranslation)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  showTranslation ? "bg-primary" : "bg-muted"
+                }`}
+                aria-checked={showTranslation}
+                role="switch"
+              >
+                <span
+                  className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${
+                    showTranslation ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
             </div>
-            <button
-              onClick={undefined}
-              disabled
-              className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors bg-muted cursor-not-allowed opacity-50"
-              aria-checked={false}
-              role="switch"
-            >
-              <span
-                className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${showTranslation ? "translate-x-6" : "translate-x-1"}`}
-              />
-            </button>
-          </div>
+          )}
 
           <div className="flex items-center justify-between">
             <div>
@@ -1143,6 +1223,7 @@ export default function QuranPage() {
             chapter={chapter}
             fontSize={settings.fontSize}
             showTransliteration={settings.showTransliteration}
+            showTranslation={settings.showTranslation}
           />
         )}
       </main>
@@ -1151,6 +1232,32 @@ export default function QuranPage() {
       <footer ref={footerRef} className={`${isMushaf ? "fixed inset-x-0 bottom-0" : "sticky bottom-0"} z-30 bg-background/90 backdrop-blur-sm border-t border-border`}>
         {/* Controls row — pill pinned at absolute centre; blind section flows right from pill edge */}
         <div ref={controlsRowRef} className="relative flex items-center py-1.5 border-b border-border/40 px-2 min-h-[38px]">
+          {/* "T" translation toggle — Mushaf mode only, right edge */}
+          {isMushaf && (
+            <div className="absolute right-2 z-10">
+              <button
+                onClick={() =>
+                  updateSettings({
+                    showMushafTranslation: !(settings.showMushafTranslation ?? false),
+                  })
+                }
+                title={
+                  (settings.showMushafTranslation ?? false)
+                    ? "Hide translation popover"
+                    : "Show translation on tap"
+                }
+                aria-pressed={settings.showMushafTranslation ?? false}
+                className={`px-2.5 py-0.5 rounded-md text-xs font-semibold transition-all ${
+                  settings.showMushafTranslation
+                    ? "bg-primary/15 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground border border-border/60"
+                }`}
+              >
+                T
+              </button>
+            </div>
+          )}
+
           {/* Left edge: X / ✓ when words are selected */}
           {hasSelection && (
             <div className="absolute left-2 flex items-center gap-1 z-20">

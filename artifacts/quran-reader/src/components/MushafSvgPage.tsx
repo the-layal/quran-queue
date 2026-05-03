@@ -3,7 +3,7 @@ import { Loader2, AlertCircle, X } from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
 import { useSmartBrush } from "../hooks/useSmartBrush";
 import { hasArabicLetter } from "../utils/arabicUtils";
-import { fetchPageTransliterations } from "../services/quranApi";
+import { fetchPageTransliterations, fetchSurahTranslation } from "../services/quranApi";
 
 interface MushafSvgPageProps {
   pageNumber: number;
@@ -130,7 +130,22 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const popoverRef = useRef<HTMLDivElement>(null);
   const jsonToSvgWordsMapRef = useRef(jsonToSvgWordsMap);
   jsonToSvgWordsMapRef.current = jsonToSvgWordsMap;
+  const showMushafTranslation = useQuranStore(
+    (s) => s.settings.showMushafTranslation ?? false
+  );
   const brush = useSmartBrush("mushaf", containerRef as RefObject<HTMLElement | null>);
+
+  // ── Translation popover ──────────────────────────────────────────────────
+  const [translationPopover, setTranslationPopover] = useState<{
+    ayahKey: string;
+    surahNumber: number;
+    ayahNumber: number;
+    text: string | null;
+    loading: boolean;
+    error: boolean;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const svgWordQuery = (nid: string, container: Element) => {
     const [s, a, w] = nid.split(":");
@@ -427,6 +442,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     croppedViewBoxRef.current         = null;
     originalViewBoxRef.current        = null;
     lineHeightMapRef.current          = new Map();
+    setTranslationPopover(null);
   }, [pageNumber]);
 
   // Inject SVG text into the container manually so that React never resets it
@@ -826,10 +842,22 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   // Active-word toggle using the browser's native hit-tester.
   // Called from handlePointerUp when the pointer didn't move (single tap).
   // We can't use onClick because preventDefault() in onPointerDown suppresses it.
+  const showMushafTranslationRef = useRef(showMushafTranslation);
+  showMushafTranslationRef.current = showMushafTranslation;
+
   const handleTap = useCallback(
     (clientX: number, clientY: number) => {
       const el = document.elementFromPoint(clientX, clientY);
       if (!el) return;
+
+      const wordGroup = el.closest('[data-word-index-in-ayah][data-type="text"]');
+      const wordId = wordGroup ? (wordGroup as HTMLElement).id : null;
+
+      if (!wordGroup) {
+        // Tap on empty area — dismiss BOTH popovers
+        setPopover(null);
+        setTranslationPopover(null);
+      }
 
       // Transliteration popover — accepts taps on any glyph carrying
       // data-surah/data-aya, including end-of-ayah markers (which lack
@@ -866,17 +894,54 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       }
 
       // Active-word toggle still requires a real word group (not end markers).
-      const wordGroup = el.closest('[data-word-index-in-ayah][data-type="text"]');
       if (!wordGroup) return;
-      const wordId = (wordGroup as HTMLElement).id;
       if (activeWordIdRef.current === wordId) {
         wordGroup.classList.remove("md-word-active");
         activeWordIdRef.current = null;
+        setTranslationPopover(null);
         return;
       }
       clearActiveWord();
       wordGroup.classList.add("md-word-active");
       activeWordIdRef.current = wordId;
+
+      // Show translation popover if enabled
+      if (showMushafTranslationRef.current && wordId) {
+        const parts = wordId.split(":");
+        const surahNum = parseInt(parts[0], 10);
+        const ayahNum = parseInt(parts[1], 10);
+        if (surahNum > 0 && ayahNum > 0) {
+          const ayahKey = `${surahNum}:${ayahNum}`;
+          setTranslationPopover({
+            ayahKey,
+            surahNumber: surahNum,
+            ayahNumber: ayahNum,
+            text: null,
+            loading: true,
+            error: false,
+            x: clientX,
+            y: clientY,
+          });
+          fetchSurahTranslation(surahNum)
+            .then((map) => {
+              const text = map.get(ayahNum) ?? null;
+              setTranslationPopover((prev) =>
+                prev?.ayahKey === ayahKey
+                  ? { ...prev, text, loading: false }
+                  : prev
+              );
+            })
+            .catch(() => {
+              setTranslationPopover((prev) =>
+                prev?.ayahKey === ayahKey
+                  ? { ...prev, loading: false, error: true }
+                  : prev
+              );
+            });
+        }
+      } else {
+        setTranslationPopover(null);
+      }
     },
     [clearActiveWord, showTransliteration]
   );
@@ -975,6 +1040,21 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     [brush, handleTap]
   );
 
+  // ── Translation popover position ─────────────────────────────────────────
+  // Position the popover above or below the tap, keeping it on-screen.
+  const popoverStyle = translationPopover
+    ? (() => {
+        const POPOVER_H = 120; // estimated popover height
+        const POPOVER_W = 300;
+        const MARGIN = 12;
+        const vw = window.innerWidth;
+        const { x, y } = translationPopover;
+        const top = y - POPOVER_H - MARGIN > MARGIN ? y - POPOVER_H - MARGIN : y + MARGIN;
+        const left = Math.max(MARGIN, Math.min(vw - POPOVER_W - MARGIN, x - POPOVER_W / 2));
+        return { position: "fixed" as const, top, left, width: POPOVER_W, zIndex: 60 };
+      })()
+    : null;
+
   // ── Render ──────────────────────────────────────────────────────────────
   return (
     <div ref={wrapperRef} className="mushaf-svg-wrapper flex-1 overflow-auto">
@@ -1066,6 +1146,48 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
             >
               <X className="w-3.5 h-3.5" />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Translation popover — fixed overlay, dismissable */}
+      {translationPopover && popoverStyle && (
+        <div className="mushaf-translation-popover" style={popoverStyle}>
+          <div className="mushaf-translation-popover-inner">
+            <div className="mushaf-translation-popover-header">
+              <span className="mushaf-translation-popover-ref">
+                {translationPopover.surahNumber}:{translationPopover.ayahNumber}
+              </span>
+              <button
+                onClick={() => setTranslationPopover(null)}
+                className="mushaf-translation-popover-close"
+                aria-label="Close translation"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {translationPopover.loading && (
+              <div className="mushaf-translation-popover-loading">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Loading…</span>
+              </div>
+            )}
+            {!translationPopover.loading && translationPopover.error && (
+              <div className="mushaf-translation-popover-error">
+                <AlertCircle className="w-4 h-4" />
+                <span>Could not load translation</span>
+              </div>
+            )}
+            {!translationPopover.loading && !translationPopover.error && (
+              <>
+                <p className="mushaf-translation-popover-text">
+                  {translationPopover.text ?? "—"}
+                </p>
+                <div className="mushaf-translation-popover-attribution">
+                  The Clear Quran — Dr. Mustafa Khattab
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

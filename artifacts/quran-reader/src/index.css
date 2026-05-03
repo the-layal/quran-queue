@@ -254,6 +254,102 @@
   content: " —";
 }
 
+/* ── Translation text — reading mode ─────────────────────────────────────── */
+
+.verse-translation {
+  font-family: var(--app-font-sans);
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: hsl(var(--muted-foreground));
+  text-align: left;
+  direction: ltr;
+  margin-top: 0.6rem;
+  font-style: italic;
+}
+
+.verse-translation.with-separator {
+  padding-top: 0.5rem;
+  border-top: 1px solid hsl(var(--border) / 0.5);
+}
+
+/* ── Translation popover — Mushaf mode ───────────────────────────────────── */
+
+.mushaf-translation-popover {
+  pointer-events: auto;
+}
+
+.mushaf-translation-popover-inner {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.mushaf-translation-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem 0.35rem;
+  border-bottom: 1px solid hsl(var(--border) / 0.6);
+}
+
+.mushaf-translation-popover-ref {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: hsl(var(--primary));
+  font-family: var(--app-font-sans);
+  letter-spacing: 0.03em;
+}
+
+.mushaf-translation-popover-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 6px;
+  color: hsl(var(--muted-foreground));
+  transition: background-color 0.1s;
+}
+
+.mushaf-translation-popover-close:hover {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+
+.mushaf-translation-popover-loading,
+.mushaf-translation-popover-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+  font-family: var(--app-font-sans);
+}
+
+.mushaf-translation-popover-error {
+  color: hsl(var(--destructive));
+}
+
+.mushaf-translation-popover-text {
+  font-family: var(--app-font-sans);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: hsl(var(--card-foreground));
+  padding: 0.65rem 0.75rem 0.35rem;
+  font-style: italic;
+}
+
+.mushaf-translation-popover-attribution {
+  font-family: var(--app-font-sans);
+  font-size: 0.65rem;
+  color: hsl(var(--muted-foreground) / 0.7);
+  text-align: right;
+  padding: 0 0.75rem 0.5rem;
+}
+
 .quran-page-content {
   min-height: calc(100vh - 120px);
 }
