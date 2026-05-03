@@ -6,7 +6,7 @@ import { Search, CalendarClock, PenLine, LayoutGrid, List } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 import { useLogs } from "@/hooks/useTracker";
-import { getAyahsForPages } from "@/lib/page-utils";
+import { getAyahsForReference } from "@/storage/referenceFanOut";
 import { LogModal } from "@/components/LogModal";
 
 type StatusFilter = "all" | "not_started" | "in_progress" | "completed";
@@ -53,55 +53,15 @@ export default function LibraryPage() {
 
     const sorted = [...logs].reverse();
     for (const log of sorted) {
-      const ref = log.reference;
       const logDate = new Date(log.createdAt);
-
-      const processAyah = (sid: number, a: number) => {
-        if (!loggedAyahs[sid]) loggedAyahs[sid] = new Set();
-        loggedAyahs[sid].add(a);
-        ayahVibes[`${sid}:${a}`] = log.vibeScale;
-        const key = `${sid}:${a}`;
-        if (!ayahDates[key] || logDate > ayahDates[key]) ayahDates[key] = logDate;
-      };
-
-      const ayahMatch = ref.match(/^ayah:(\d+):(.+)$/);
-      if (ayahMatch) {
-        const sid = parseInt(ayahMatch[1], 10);
-        const parts = ayahMatch[2].split("-");
-        const start = parseInt(parts[0], 10);
-        const end = parts.length > 1 ? parseInt(parts[1], 10) : start;
-        for (let a = start; a <= end; a++) processAyah(sid, a);
-      }
-
-      const surahRangeMatch = ref.match(/^surah:(\d+):(.+)$/);
-      if (surahRangeMatch) {
-        const sid = parseInt(surahRangeMatch[1], 10);
-        const parts = surahRangeMatch[2].split("-");
-        const start = parseInt(parts[0], 10);
-        const end = parts.length > 1 ? parseInt(parts[1], 10) : start;
-        for (let a = start; a <= end; a++) processAyah(sid, a);
-      }
-
-      const surahMatch = ref.match(/^surah:(\d+)(?:-(\d+))?$/);
-      if (surahMatch) {
-        const fromId = parseInt(surahMatch[1], 10);
-        const toId = surahMatch[2] ? parseInt(surahMatch[2], 10) : fromId;
-        for (let sid = fromId; sid <= toId; sid++) {
-          const surah = SURAHS.find((s) => s.id === sid);
-          if (surah) for (let a = 1; a <= surah.ayahCount; a++) processAyah(sid, a);
-        }
-      }
-
-      if (ref.startsWith("page:")) {
-        const pagePart = ref.slice(5);
-        const pageRangeParts = pagePart.split("-");
-        const fromPage = parseInt(pageRangeParts[0], 10);
-        const toPage = pageRangeParts.length > 1 ? parseInt(pageRangeParts[1], 10) : fromPage;
-        if (!isNaN(fromPage) && !isNaN(toPage)) {
-          const pages: number[] = [];
-          for (let p = fromPage; p <= toPage; p++) pages.push(p);
-          const groups = getAyahsForPages(pages);
-          for (const g of groups) for (const a of g.ayahs) processAyah(g.surah, a);
+      const groups = getAyahsForReference(log.reference);
+      for (const g of groups) {
+        for (const a of g.ayahs) {
+          if (!loggedAyahs[g.surah]) loggedAyahs[g.surah] = new Set();
+          loggedAyahs[g.surah].add(a);
+          ayahVibes[`${g.surah}:${a}`] = log.vibeScale;
+          const key = `${g.surah}:${a}`;
+          if (!ayahDates[key] || logDate > ayahDates[key]) ayahDates[key] = logDate;
         }
       }
     }

@@ -5,8 +5,9 @@ import { SURAHS } from "@/lib/quran-data";
 import { ArrowLeft, BookOpen, Calendar, LayoutGrid } from "lucide-react";
 import { useState, useMemo } from "react";
 import { LogModal } from "@/components/LogModal";
-import { useLogs } from "@/hooks/useTracker";
+import { useLogs, useSrsItems } from "@/hooks/useTracker";
 import { getAyahsForPages } from "@/lib/page-utils";
+import { getAyahsForReference } from "@/storage/referenceFanOut";
 import { format } from "date-fns";
 
 type ViewMode = "standard" | "by_date";
@@ -20,6 +21,45 @@ export default function SurahDetail() {
   const [selectedAyah, setSelectedAyah] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("standard");
   const { data: logs } = useLogs();
+  const { data: srsItems } = useSrsItems();
+
+  const surahSrsItems = useMemo(() => {
+    if (!srsItems) return [];
+    return srsItems
+      .filter((it) => {
+        const groups = getAyahsForReference(it.reference);
+        return groups.some((g) => g.surah === surahId);
+      })
+      .sort((a, b) => a.nextReviewDate.localeCompare(b.nextReviewDate));
+  }, [srsItems, surahId]);
+
+  function formatSegmentLabel(ref: string): string {
+    const parts = ref.split(":");
+    const type = parts[0];
+    if (type === "ayah") return `Ayahs ${parts[2] ?? ""}`;
+    if (type === "surah") {
+      if (parts[2]) return `Ayahs ${parts[2]}`;
+      return parts[1]?.includes("-") ? `Surahs ${parts[1]}` : `Whole surah`;
+    }
+    if (type === "page") return `Page ${parts[1] ?? ""}`;
+    return ref;
+  }
+
+  function formatRelativeDate(dateStr: string): string {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const target = new Date(d);
+    target.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((target.getTime() - today.getTime()) / 86400000);
+    if (diffDays === 0) return "Today";
+    if (diffDays === 1) return "Tomorrow";
+    if (diffDays === -1) return "Yesterday";
+    if (diffDays < 0) return `${-diffDays}d overdue`;
+    return `In ${diffDays}d`;
+  }
 
   const { masteryMap, dateMap } = useMemo(() => {
     const mMap: Record<number, number> = {};
@@ -228,6 +268,41 @@ export default function SurahDetail() {
                 No ayahs have been reviewed yet.
               </div>
             )}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-8">
+        <h3 className="font-serif font-bold text-lg text-foreground mb-4">Tracked Segments</h3>
+        {surahSrsItems.length === 0 ? (
+          <div className="bg-card p-6 rounded-3xl border border-border/50 text-sm text-muted-foreground text-center">
+            No tracked segments yet. Log a review to start spaced repetition for this surah.
+          </div>
+        ) : (
+          <div className="bg-card rounded-3xl border border-border/50 divide-y divide-border/50">
+            {surahSrsItems.map((it) => (
+              <div
+                key={it.id}
+                data-testid={`srs-item-${it.id}`}
+                className="flex flex-wrap items-center gap-3 p-4"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{formatSegmentLabel(it.reference)}</p>
+                  <p className="text-xs text-muted-foreground">{it.reference}</p>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="px-2 py-1 rounded-md bg-primary/10 text-primary font-semibold" title="Ease factor">
+                    EF {(it.easeFactor / 100).toFixed(2)}
+                  </span>
+                  <span className="px-2 py-1 rounded-md bg-secondary/40 text-foreground font-semibold" title="Repetitions">
+                    {it.repetitions} rep{it.repetitions === 1 ? "" : "s"}
+                  </span>
+                  <span className="px-2 py-1 rounded-md bg-accent/10 text-accent font-semibold" title={`Next review: ${it.nextReviewDate}`}>
+                    {formatRelativeDate(it.nextReviewDate)}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
