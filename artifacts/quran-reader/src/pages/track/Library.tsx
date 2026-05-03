@@ -141,8 +141,8 @@ export default function LibraryPage() {
       <GuestBanner />
       <div className="p-4 max-w-6xl mx-auto">
       <div className="mb-6 flex flex-col gap-4">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="relative w-full sm:w-64">
+        <div className="flex items-center justify-between gap-4">
+          <div className="relative w-64 shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
             <input
               type="text"
@@ -162,8 +162,8 @@ export default function LibraryPage() {
             Log Review
           </button>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex gap-2 flex-wrap">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <div className="flex gap-2 overflow-x-auto">
             {filterOptions.map((opt) => (
               <button
                 key={opt.value}
