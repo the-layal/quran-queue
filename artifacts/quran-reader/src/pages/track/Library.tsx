@@ -302,11 +302,7 @@ export default function LibraryPage() {
                   title={`${surah.id}. ${surah.englishName} — ${surah.ayahCount} ayahs`}
                   className={cn(
                     "aspect-square rounded-xl flex items-center justify-center text-sm font-semibold border transition-all duration-200 cursor-pointer hover:scale-110",
-                    surahStatus[surah.id] === "completed"
-                      ? "bg-primary/20 text-primary border-primary/30"
-                      : surahStatus[surah.id] === "in_progress"
-                        ? "bg-accent/15 text-accent border-accent/30"
-                        : "bg-secondary/30 text-muted-foreground border-border hover:border-primary/50",
+                    getHeatmapColor(surah.id),
                   )}
                 >
                   {surah.id}
