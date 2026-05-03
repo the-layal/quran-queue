@@ -3,7 +3,7 @@ import { Loader2, AlertCircle, X } from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
 import { useSmartBrush } from "../hooks/useSmartBrush";
 import { hasArabicLetter } from "../utils/arabicUtils";
-import { fetchPageTransliterations, fetchSurahTranslation } from "../services/quranApi";
+import { fetchSurahTranslation } from "../services/quranApi";
 
 interface MushafSvgPageProps {
   pageNumber: number;
@@ -117,22 +117,14 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const jsonToSvgWordsMap = useQuranStore((s) => s.jsonToSvgWordsMap);
   const blindReviewMode = useQuranStore((s) => s.blindReviewMode);
   const manuallyRevealedIds = useQuranStore((s) => s.manuallyRevealedIds);
-  const showTransliteration = useQuranStore((s) => s.settings.showTransliteration);
-
-  // ── Transliteration popover ─────────────────────────────────────────────
-  const [translitMap, setTranslitMap] = useState<Record<string, string>>({});
-  const [translitLoading, setTranslitLoading] = useState(false);
-  const [translitError, setTranslitError] = useState<string | null>(null);
-  const [popover, setPopover] = useState<
-    | { ayahKey: string; x: number; y: number; placement: "above" | "below" }
-    | null
-  >(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
   const jsonToSvgWordsMapRef = useRef(jsonToSvgWordsMap);
   jsonToSvgWordsMapRef.current = jsonToSvgWordsMap;
   const showMushafTranslation = useQuranStore(
     (s) => s.settings.showMushafTranslation ?? false
   );
+  const showMushafTranslationRef = useRef(showMushafTranslation);
+  showMushafTranslationRef.current = showMushafTranslation;
+  const translationPopoverAyahKeyRef = useRef<string | null>(null);
   const brush = useSmartBrush("mushaf", containerRef as RefObject<HTMLElement | null>);
 
   // ── Translation popover ──────────────────────────────────────────────────
@@ -819,6 +811,53 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       rect.setAttribute("y",      String(normY - padY));
       rect.setAttribute("width",  String(bbox.width  + padX * 2));
       rect.setAttribute("height", String(normH + padY * 2));
+
+      // Translation hover popover — show ayah translation while a word is hovered.
+      // Short-circuit early when the hovered ayah is already the active popover
+      // ayah so rapid hover across same-ayah words doesn't refire fetches.
+      if (showMushafTranslationRef.current) {
+        const wordId = (wordEl as HTMLElement).id; // "surah:ayah:wordIndex"
+        if (wordId) {
+          const parts = wordId.split(":");
+          const surahNum = parseInt(parts[0], 10);
+          const ayahNum  = parseInt(parts[1], 10);
+          if (surahNum > 0 && ayahNum > 0) {
+            const ayahKey = `${surahNum}:${ayahNum}`;
+            if (translationPopoverAyahKeyRef.current !== ayahKey) {
+              translationPopoverAyahKeyRef.current = ayahKey;
+              const r = (wordEl as Element).getBoundingClientRect();
+              const x = r.left + r.width / 2;
+              const y = r.top;
+              setTranslationPopover({
+                ayahKey,
+                surahNumber: surahNum,
+                ayahNumber: ayahNum,
+                text: null,
+                loading: true,
+                error: false,
+                x,
+                y,
+              });
+              fetchSurahTranslation(surahNum)
+                .then((map) => {
+                  const text = map.get(ayahNum) ?? null;
+                  setTranslationPopover((prev) =>
+                    prev?.ayahKey === ayahKey
+                      ? { ...prev, text, loading: false }
+                      : prev
+                  );
+                })
+                .catch(() => {
+                  setTranslationPopover((prev) =>
+                    prev?.ayahKey === ayahKey
+                      ? { ...prev, loading: false, error: true }
+                      : prev
+                  );
+                });
+            }
+          }
+        }
+      }
     },
     [getWordGroup, clearHoverWord, removeHoverRect]
   );
@@ -835,6 +874,8 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       }
       clearHoverWord();
       removeHoverRect();
+      translationPopoverAyahKeyRef.current = null;
+      setTranslationPopover(null);
     },
     [getWordGroup, clearHoverWord, removeHoverRect]
   );
@@ -842,9 +883,6 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   // Active-word toggle using the browser's native hit-tester.
   // Called from handlePointerUp when the pointer didn't move (single tap).
   // We can't use onClick because preventDefault() in onPointerDown suppresses it.
-  const showMushafTranslationRef = useRef(showMushafTranslation);
-  showMushafTranslationRef.current = showMushafTranslation;
-
   const handleTap = useCallback(
     (clientX: number, clientY: number) => {
       const el = document.elementFromPoint(clientX, clientY);
@@ -853,162 +891,43 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       const wordGroup = el.closest('[data-word-index-in-ayah][data-type="text"]');
       const wordId = wordGroup ? (wordGroup as HTMLElement).id : null;
 
-      if (!wordGroup) {
-        // Tap on empty area — dismiss BOTH popovers
-        setPopover(null);
-        setTranslationPopover(null);
-      }
-
-      // Transliteration popover — accepts taps on any glyph carrying
-      // data-surah/data-aya, including end-of-ayah markers (which lack
-      // data-word-index-in-ayah). Independent from active-word toggle.
-      // Use functional setState so re-tap toggles correctly without depending
-      // on the latest `popover` value (which would stale-close this callback).
-      if (showTransliteration) {
-        const ayahHit = el.closest('[data-surah][data-aya]') as Element | null;
-        if (ayahHit) {
-          const s = ayahHit.getAttribute("data-surah");
-          const a = ayahHit.getAttribute("data-aya");
-          if (s && a) {
-            const ayahKey = `${parseInt(s, 10)}:${parseInt(a, 10)}`;
-            const rect = ayahHit.getBoundingClientRect();
-            const margin = 12;
-            const halfMaxW = 160; // matches max-w-xs (~20rem) / 2
-            const x = Math.max(
-              margin + halfMaxW,
-              Math.min(window.innerWidth - margin - halfMaxW, rect.left + rect.width / 2)
-            );
-            const flipBelow = rect.top < 140;
-            setPopover((prev) =>
-              prev && prev.ayahKey === ayahKey
-                ? null
-                : {
-                    ayahKey,
-                    x,
-                    y: flipBelow ? rect.bottom : rect.top,
-                    placement: flipBelow ? "below" : "above",
-                  }
-            );
-          }
-        }
-      }
-
       // Active-word toggle still requires a real word group (not end markers).
       if (!wordGroup) return;
       if (activeWordIdRef.current === wordId) {
         wordGroup.classList.remove("md-word-active");
         activeWordIdRef.current = null;
-        setTranslationPopover(null);
         return;
       }
       clearActiveWord();
       wordGroup.classList.add("md-word-active");
       activeWordIdRef.current = wordId;
-
-      // Show translation popover if enabled
-      if (showMushafTranslationRef.current && wordId) {
-        const parts = wordId.split(":");
-        const surahNum = parseInt(parts[0], 10);
-        const ayahNum = parseInt(parts[1], 10);
-        if (surahNum > 0 && ayahNum > 0) {
-          const ayahKey = `${surahNum}:${ayahNum}`;
-          setTranslationPopover({
-            ayahKey,
-            surahNumber: surahNum,
-            ayahNumber: ayahNum,
-            text: null,
-            loading: true,
-            error: false,
-            x: clientX,
-            y: clientY,
-          });
-          fetchSurahTranslation(surahNum)
-            .then((map) => {
-              const text = map.get(ayahNum) ?? null;
-              setTranslationPopover((prev) =>
-                prev?.ayahKey === ayahKey
-                  ? { ...prev, text, loading: false }
-                  : prev
-              );
-            })
-            .catch(() => {
-              setTranslationPopover((prev) =>
-                prev?.ayahKey === ayahKey
-                  ? { ...prev, loading: false, error: true }
-                  : prev
-              );
-            });
-        }
-      } else {
-        setTranslationPopover(null);
-      }
     },
-    [clearActiveWord, showTransliteration]
+    [clearActiveWord]
   );
 
-  // Lazy-fetch transliterations for this page when the toggle is on.
+  // Close translation popover when toggled off, page changes, or on Esc/scroll/resize.
   useEffect(() => {
-    if (!showTransliteration) return;
-    let cancelled = false;
-    setTranslitError(null);
-    setTranslitLoading(true);
-    fetchPageTransliterations(pageNumber)
-      .then((map) => {
-        if (!cancelled) {
-          setTranslitMap(map);
-          setTranslitLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setTranslitError(err instanceof Error ? err.message : "Failed to load transliteration");
-          setTranslitLoading(false);
-        }
-      });
-    return () => { cancelled = true; };
-  }, [pageNumber, showTransliteration]);
+    if (!showMushafTranslation) {
+      translationPopoverAyahKeyRef.current = null;
+      setTranslationPopover(null);
+    }
+  }, [showMushafTranslation, pageNumber]);
 
-  // Close popover on page change or when toggle is turned off.
   useEffect(() => {
-    setPopover(null);
-  }, [pageNumber, showTransliteration]);
-
-  // Close popover on outside click / Esc / scroll / resize.
-  // Scroll & resize close the popover because its position is captured in
-  // viewport coords at tap time and would otherwise drift away from the word.
-  useEffect(() => {
-    if (!popover) return;
-    const onDown = (e: MouseEvent | TouchEvent) => {
-      const t = e.target as Node | null;
-      if (!t) return;
-      if (popoverRef.current?.contains(t)) return;
-      // Inside the mushaf container: only let handleTap manage the popover when
-      // the click resolves to an actual word. Clicks on blank page area should
-      // still close the popover (matches outside-click expectations).
-      if (containerRef.current?.contains(t)) {
-        const ayahHit =
-          t instanceof Element ? t.closest('[data-surah][data-aya]') : null;
-        if (ayahHit) return;
-      }
-      setPopover(null);
+    const close = () => {
+      translationPopoverAyahKeyRef.current = null;
+      setTranslationPopover(null);
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPopover(null);
-    };
-    const close = () => setPopover(null);
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("touchstart", onDown);
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
     document.addEventListener("keydown", onKey);
     window.addEventListener("scroll", close, true);
     window.addEventListener("resize", close);
     return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("touchstart", onDown);
       document.removeEventListener("keydown", onKey);
       window.removeEventListener("scroll", close, true);
       window.removeEventListener("resize", close);
     };
-  }, [popover]);
+  }, []);
 
   // Track pointer-down position so onPointerUp can detect a single tap.
   const tapStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -1097,56 +1016,6 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
           />
-        </div>
-      )}
-
-      {popover && (
-        <div
-          ref={popoverRef}
-          className="fixed z-50 max-w-xs rounded-lg border border-border bg-card text-card-foreground shadow-lg p-3"
-          style={{
-            left: `${popover.x}px`,
-            top: `${popover.y}px`,
-            transform:
-              popover.placement === "above"
-                ? "translate(-50%, calc(-100% - 10px))"
-                : "translate(-50%, 10px)",
-          }}
-          role="dialog"
-          aria-modal="false"
-          aria-label={`Transliteration for ayah ${popover.ayahKey}`}
-          dir="ltr"
-        >
-          <div className="flex items-start gap-2">
-            <div className="flex-1 min-w-0">
-              <div id={`translit-label-${popover.ayahKey}`} className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
-                Ayah {popover.ayahKey} · Transliteration
-              </div>
-              {translitLoading && !translitMap[popover.ayahKey] ? (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Loading…
-                </div>
-              ) : translitError && !translitMap[popover.ayahKey] ? (
-                <div className="text-xs text-destructive">{translitError}</div>
-              ) : translitMap[popover.ayahKey] ? (
-                <p className="text-sm italic leading-snug break-words">
-                  {translitMap[popover.ayahKey]}
-                </p>
-              ) : (
-                <div className="text-xs text-muted-foreground">
-                  No transliteration available.
-                </div>
-              )}
-            </div>
-            <button
-              onClick={() => setPopover(null)}
-              className="flex-shrink-0 -mt-1 -mr-1 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              aria-label="Close transliteration"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
         </div>
       )}
 

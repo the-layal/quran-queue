@@ -385,21 +385,6 @@ export async function fetchMushafPage(pageNumber: number): Promise<MushafPageDat
 export const TOTAL_PAGES = 604;
 export const TOTAL_SURAHS = 114;
 
-// ── Page transliterations (mushaf popover) ───────────────────────────────────
-// Lazy fetch + module-level cache, separate from SVG rendering.
-// Returns a map "S:A" → concatenated transliteration string for every ayah on
-// the requested page.
-//
-// Source: Quran.com `verses/by_page` with `word_fields=transliteration`. We
-// concatenate per-word transliterations (filtering null end-marker words) into
-// a single ayah string. This is the same source used by Quran.com itself
-// (community-maintained, free to use) and matches the per-word transliteration
-// already returned by `fetchSurahVerses` for reading mode, so the two surfaces
-// stay text-consistent.
-
-const pageTransliterationsCache = new Map<number, Record<string, string>>();
-const pageTransliterationsPromise = new Map<number, Promise<Record<string, string>>>();
-
 interface QuranComTransliterationWord {
   char_type_name: "word" | "end";
   location: string;
@@ -414,48 +399,6 @@ interface QuranComTransliterationVerse {
 interface QuranComTransliterationResponse {
   verses: QuranComTransliterationVerse[];
   pagination: { next_page: number | null };
-}
-
-export async function fetchPageTransliterations(
-  pageNumber: number
-): Promise<Record<string, string>> {
-  const cached = pageTransliterationsCache.get(pageNumber);
-  if (cached) return cached;
-  const inFlight = pageTransliterationsPromise.get(pageNumber);
-  if (inFlight) return inFlight;
-
-  const promise = (async () => {
-    const result: Record<string, string> = {};
-    let page = 1;
-    while (true) {
-      const url =
-        `${QURANCOM_BASE}/verses/by_page/${pageNumber}` +
-        `?words=true&word_fields=transliteration,location&per_page=50&page=${page}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Quran.com API error: ${res.status}`);
-      const data: QuranComTransliterationResponse = await res.json();
-      for (const verse of data.verses) {
-        const parts: string[] = [];
-        for (const w of verse.words) {
-          if (w.char_type_name === "word" && w.transliteration?.text) {
-            parts.push(w.transliteration.text);
-          }
-        }
-        if (parts.length) result[verse.verse_key] = parts.join(" ");
-      }
-      if (data.pagination.next_page === null) break;
-      page++;
-    }
-    pageTransliterationsCache.set(pageNumber, result);
-    return result;
-  })();
-
-  pageTransliterationsPromise.set(pageNumber, promise);
-  try {
-    return await promise;
-  } finally {
-    pageTransliterationsPromise.delete(pageNumber);
-  }
 }
 
 // ── The Clear Quran by Dr. Mustafa Khattab ──────────────────────────────────

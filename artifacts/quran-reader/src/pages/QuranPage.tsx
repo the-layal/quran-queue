@@ -301,12 +301,10 @@ function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number): boolean {
 function VerseBlock({
   ayah,
   fontSize,
-  showTransliteration,
   translation,
 }: {
   ayah: QuranAyah;
   fontSize: number;
-  showTransliteration: boolean;
   translation?: string;
 }) {
   return (
@@ -358,23 +356,8 @@ function VerseBlock({
           )}
         </div>
 
-        {showTransliteration && ayah.transliteration && (
-          <p
-            dir="ltr"
-            lang="en"
-            className="mt-2 text-sm italic text-muted-foreground leading-relaxed select-text"
-          >
-            {ayah.transliteration}
-          </p>
-        )}
         {translation !== undefined && (
-          <p
-            className={`verse-translation${
-              showTransliteration && ayah.transliteration ? " with-separator" : ""
-            }`}
-          >
-            {translation}
-          </p>
+          <p className="verse-translation">{translation}</p>
         )}
       </div>
     </div>
@@ -421,14 +404,12 @@ function SurahReadingView({
   ayahs,
   chapter,
   fontSize,
-  showTransliteration,
   showTranslation,
 }: {
   surahNumber: number;
   ayahs: QuranAyah[];
   chapter: ChapterInfo | undefined;
   fontSize: number;
-  showTransliteration: boolean;
   showTranslation: boolean;
 }) {
   const firstAyah = ayahs[0];
@@ -584,7 +565,6 @@ function SurahReadingView({
             key={`${surahNumber}:${ayah.numberInSurah}`}
             ayah={ayah}
             fontSize={fontSize}
-            showTransliteration={showTransliteration}
             translation={
               showTranslation && !translationLoading && !translationError
                 ? translations.get(ayah.numberInSurah)
@@ -616,8 +596,8 @@ function SettingsPanel({
   setFontSize,
   showTranslation,
   setShowTranslation,
-  showTransliteration,
-  setShowTransliteration,
+  showMushafTranslation,
+  setShowMushafTranslation,
   isMushafMode,
 }: {
   open: boolean;
@@ -626,8 +606,8 @@ function SettingsPanel({
   setFontSize: (n: number) => void;
   showTranslation: boolean;
   setShowTranslation: (v: boolean) => void;
-  showTransliteration: boolean;
-  setShowTransliteration: (v: boolean) => void;
+  showMushafTranslation: boolean;
+  setShowMushafTranslation: (v: boolean) => void;
   isMushafMode: boolean;
 }) {
   if (!open) return null;
@@ -694,30 +674,30 @@ function SettingsPanel({
             </div>
           )}
 
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-medium">Show Transliteration</div>
-              <div className="text-xs text-muted-foreground">
-                {isMushafMode
-                  ? "Tap a word in the page to see its ayah transliteration"
-                  : "English phonetic spelling under each ayah"}
+          {isMushafMode && (
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium">Show Translation Popover</div>
+                <div className="text-xs text-muted-foreground">
+                  Hover a word to see its ayah translation
+                </div>
               </div>
-            </div>
-            <button
-              onClick={() => setShowTransliteration(!showTransliteration)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                showTransliteration ? "bg-primary" : "bg-muted"
-              }`}
-              aria-checked={showTransliteration}
-              role="switch"
-            >
-              <span
-                className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${
-                  showTransliteration ? "translate-x-6" : "translate-x-1"
+              <button
+                onClick={() => setShowMushafTranslation(!showMushafTranslation)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  showMushafTranslation ? "bg-primary" : "bg-muted"
                 }`}
-              />
-            </button>
-          </div>
+                aria-checked={showMushafTranslation}
+                role="switch"
+              >
+                <span
+                  className={`inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${
+                    showMushafTranslation ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+          )}
         </div>
 
         <button
@@ -1222,7 +1202,6 @@ export default function QuranPage() {
             ayahs={surahData.ayahs}
             chapter={chapter}
             fontSize={settings.fontSize}
-            showTransliteration={settings.showTransliteration}
             showTranslation={settings.showTranslation}
           />
         )}
@@ -1232,32 +1211,6 @@ export default function QuranPage() {
       <footer ref={footerRef} className={`${isMushaf ? "fixed inset-x-0 bottom-0" : "sticky bottom-0"} z-30 bg-background/90 backdrop-blur-sm border-t border-border`}>
         {/* Controls row — pill pinned at absolute centre; blind section flows right from pill edge */}
         <div ref={controlsRowRef} className="relative flex items-center py-1.5 border-b border-border/40 px-2 min-h-[38px]">
-          {/* "T" translation toggle — Mushaf mode only, right edge */}
-          {isMushaf && (
-            <div className="absolute right-2 z-10">
-              <button
-                onClick={() =>
-                  updateSettings({
-                    showMushafTranslation: !(settings.showMushafTranslation ?? false),
-                  })
-                }
-                title={
-                  (settings.showMushafTranslation ?? false)
-                    ? "Hide translation popover"
-                    : "Show translation on tap"
-                }
-                aria-pressed={settings.showMushafTranslation ?? false}
-                className={`px-2.5 py-0.5 rounded-md text-xs font-semibold transition-all ${
-                  settings.showMushafTranslation
-                    ? "bg-primary/15 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground border border-border/60"
-                }`}
-              >
-                T
-              </button>
-            </div>
-          )}
-
           {/* Left edge: X / ✓ when words are selected */}
           {hasSelection && (
             <div className="absolute left-2 flex items-center gap-1 z-20">
@@ -1284,7 +1237,7 @@ export default function QuranPage() {
             className="absolute z-10"
             style={{ left: `calc(50% - ${pillAnchor}px)`, transform: "translateX(-50%)" }}
           >
-            <BrushFinenessToggle hideActions compactLabels={compactPill} showTransliterationButton={isMushaf} />
+            <BrushFinenessToggle hideActions compactLabels={compactPill} showTranslationButton={isMushaf} />
           </div>
 
           {/* Blind section — starts flush right of pill, grows rightward; pill never shifts */}
@@ -1451,8 +1404,8 @@ export default function QuranPage() {
         setFontSize={(n) => updateSettings({ fontSize: n })}
         showTranslation={settings.showTranslation}
         setShowTranslation={(v) => updateSettings({ showTranslation: v })}
-        showTransliteration={settings.showTransliteration}
-        setShowTransliteration={(v) => updateSettings({ showTransliteration: v })}
+        showMushafTranslation={settings.showMushafTranslation ?? false}
+        setShowMushafTranslation={(v) => updateSettings({ showMushafTranslation: v })}
         isMushafMode={isMushaf}
       />
 

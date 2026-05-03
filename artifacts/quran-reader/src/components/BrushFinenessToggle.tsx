@@ -11,20 +11,22 @@ const TIERS: { value: BrushFineness; label: string; short: string; title: string
 interface Props {
   hideActions?: boolean;
   compactLabels?: boolean;
-  showTransliterationButton?: boolean;
+  showTranslationButton?: boolean;
 }
 
 export default function BrushFinenessToggle({
   hideActions = false,
   compactLabels = false,
-  showTransliterationButton = false,
+  showTranslationButton = false,
 }: Props) {
   const brushFineness    = useQuranStore((s) => s.brushFineness);
   const setBrushFineness = useQuranStore((s) => s.setBrushFineness);
   const selectedWordIds  = useQuranStore((s) => s.selectedWordIds);
   const clearSelection   = useQuranStore((s) => s.clearSelection);
   const confirmSelection = useQuranStore((s) => s.confirmSelection);
-  const showTransliteration = useQuranStore((s) => s.settings.showTransliteration);
+  const showMushafTranslation = useQuranStore(
+    (s) => s.settings.showMushafTranslation ?? false
+  );
   const updateSettings   = useQuranStore((s) => s.updateSettings);
 
   const hasSelection = selectedWordIds.length > 0;
@@ -50,15 +52,19 @@ export default function BrushFinenessToggle({
         ))}
       </div>
 
-      {/* Transliteration "Aa" toggle — mushaf mode only */}
-      {showTransliterationButton && (
+      {/* Translation hover popover toggle ("Aa") — Mushaf mode only */}
+      {showTranslationButton && (
         <button
-          onClick={() => updateSettings({ showTransliteration: !showTransliteration })}
-          title={showTransliteration ? "Hide transliteration popover" : "Show transliteration popover (tap a word)"}
-          aria-label="Toggle transliteration"
-          aria-pressed={showTransliteration}
+          onClick={() => updateSettings({ showMushafTranslation: !showMushafTranslation })}
+          title={
+            showMushafTranslation
+              ? "Hide translation popover"
+              : "Show translation when hovering a word"
+          }
+          aria-label="Toggle translation popover"
+          aria-pressed={showMushafTranslation}
           className={`flex items-center justify-center w-7 h-7 rounded-lg text-xs font-semibold border transition-colors flex-shrink-0 ${
-            showTransliteration
+            showMushafTranslation
               ? "bg-primary/15 border-primary text-primary"
               : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
           }`}
