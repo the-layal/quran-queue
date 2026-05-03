@@ -12,6 +12,7 @@ import NotFound from "@/pages/not-found";
 import { Toaster } from "@/components/ui/toaster";
 import { TrackerStorageProvider } from "@/context/TrackerStorageContext";
 import { queryClient } from "@/lib/queryClient";
+import FeatureTour from "@/components/FeatureTour";
 
 function Router() {
   return (
@@ -36,6 +37,7 @@ function App() {
         <TrackerStorageProvider>
           <Router />
           <Toaster />
+          <FeatureTour />
         </TrackerStorageProvider>
       </QueryClientProvider>
     </WouterRouter>

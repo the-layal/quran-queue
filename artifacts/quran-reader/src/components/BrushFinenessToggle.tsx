@@ -42,7 +42,7 @@ export default function BrushFinenessToggle({
   const hasSelection = selectedWordIds.length > 0;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2" data-tour="highlight-controls">
       {/* Fineness pill toggle */}
       <div className="flex items-center rounded-lg border border-border bg-muted/50 p-0.5 gap-0.5">
         {TIERS.map(({ value, label, short, title }) => (

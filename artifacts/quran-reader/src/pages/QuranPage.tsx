@@ -1057,6 +1057,7 @@ export default function QuranPage() {
     <>
       <button
         onClick={handleModeSwitch}
+        data-tour="mode-toggle"
         className={`p-2 rounded-lg hover:bg-muted transition-colors ${isMushaf ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
         aria-label={isMushaf ? "Switch to Reading mode" : "Switch to Mushaf mode"}
         title={isMushaf ? "Reading mode" : "Mushaf mode"}
@@ -1078,6 +1079,7 @@ export default function QuranPage() {
 
       <button
         onClick={() => setQueuePanelOpen(!queuePanelOpen)}
+        data-tour="queue-button"
         className={`p-2 rounded-lg transition-colors ${
           queuePanelOpen
             ? "bg-primary/15 text-primary"

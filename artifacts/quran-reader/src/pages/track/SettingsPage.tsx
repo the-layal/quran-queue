@@ -1,12 +1,13 @@
 import { useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
 import GuestBanner from "@/components/GuestBanner";
-import { Download, Upload, ShieldCheck, AlertTriangle, CheckCircle2, Loader2, Link2, Unlink, ExternalLink } from "lucide-react";
+import { Download, Upload, ShieldCheck, AlertTriangle, CheckCircle2, Loader2, Link2, Unlink, ExternalLink, Compass } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useQueryClient } from "@tanstack/react-query";
 import type { BackupData } from "@/storage/trackerStorage";
 import { useQFConnection } from "@/hooks/useQFConnection";
+import { TOUR_START_EVENT } from "@/components/FeatureTour";
 
 type RestoreState = "idle" | "confirm" | "loading" | "done" | "error";
 
@@ -102,10 +103,32 @@ export default function SettingsPage() {
     setImportedCounts(null);
   }
 
+  function handleStartTour() {
+    window.dispatchEvent(new Event(TOUR_START_EVENT));
+  }
+
   return (
     <AppShell>
       <GuestBanner />
       <div className="p-4 max-w-xl mx-auto space-y-6">
+        <div className="bg-card rounded-2xl border border-border/50 p-6">
+          <div className="flex items-center gap-2 mb-1">
+            <Compass size={18} className="text-primary" />
+            <h2 className="font-serif font-semibold text-foreground text-lg">App Tour</h2>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4">
+            Get a guided walkthrough of Hafith's key features.
+          </p>
+          <button
+            data-testid="button-start-tour"
+            onClick={handleStartTour}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            <Compass size={15} />
+            Take the tour
+          </button>
+        </div>
+
         <div className="bg-card rounded-2xl border border-border/50 p-6">
           <h2 className="font-serif font-semibold text-foreground text-lg mb-4">Account</h2>
           <div className="flex items-center gap-4">

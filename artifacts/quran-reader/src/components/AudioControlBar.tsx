@@ -383,6 +383,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
       style={{ pointerEvents: "none" }}
       role="region"
       aria-label="Audio playback controls"
+      data-tour="audio-bar"
     >
       {/*
        * ── Primary row ──────────────────────────────────────────────────────
