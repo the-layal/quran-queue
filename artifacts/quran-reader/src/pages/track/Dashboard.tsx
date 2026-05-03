@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import AppShell from "@/components/AppShell";
 import GuestBanner from "@/components/GuestBanner";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
@@ -6,6 +6,7 @@ import { useTrackerStorage } from "@/context/useTrackerStorage";
 import type { DailyPlan, TrackerStats } from "@/storage/trackerStorage";
 import { Trophy, ArrowRight, PenLine, CheckCircle2, Play, Flame, Plus, Target, X, ChevronDown, ChevronUp, Link2 } from "lucide-react";
 import { TOTAL_PAGES, SURAHS } from "@/lib/quran-data";
+import { getAyahsForReference } from "@/lib/page-utils";
 import { Link } from "wouter";
 import { LogModal } from "@/components/LogModal";
 import GoalModal from "@/components/GoalModal";
@@ -53,7 +54,37 @@ function daysUntil(dateStr: string): number {
   return Math.ceil((target.getTime() - now.getTime()) / 86400000);
 }
 
-function GoalCard({ goal, onDelete }: { goal: Goal; onDelete: (id: number) => void }) {
+/**
+ * Count how many ayahs within the goal's [ayahStart, ayahEnd] range appear in
+ * today's planned items (by expanding every reference via getAyahsForReference).
+ */
+function countTodayAyahsForGoal(goal: Goal, plannedItems: string[]): number {
+  const inPlan = new Set<number>();
+  for (const ref of plannedItems) {
+    try {
+      const groups = getAyahsForReference(ref);
+      for (const group of groups) {
+        if (group.surah !== goal.surahNumber) continue;
+        for (const a of group.ayahs) {
+          if (a >= goal.ayahStart && a <= goal.ayahEnd) inPlan.add(a);
+        }
+      }
+    } catch {
+      // ignore unparseable refs
+    }
+  }
+  return inPlan.size;
+}
+
+function GoalCard({
+  goal,
+  onDelete,
+  todayPlannedItems,
+}: {
+  goal: Goal;
+  onDelete: (id: number) => void;
+  todayPlannedItems: string[];
+}) {
   const [expanded, setExpanded] = useState(false);
   const surah = SURAHS.find((s) => s.id === goal.surahNumber);
   const totalAyahs = goal.ayahEnd - goal.ayahStart + 1;
@@ -65,14 +96,26 @@ function GoalCard({ goal, onDelete }: { goal: Goal; onDelete: (id: number) => vo
   const isOverdue = days < 0 && !isComplete;
   const isSynced = !!goal.qfGoalId;
 
-  // Limit dot display to 60 ayahs; show ellipsis if more
+  // Today's contribution: ayahs in this goal's range that are in today's plan
+  const todayCount = useMemo(
+    () => countTodayAyahsForGoal(goal, todayPlannedItems),
+    [goal, todayPlannedItems],
+  );
+
+  // Limit dot display to 80 ayahs before switching to compact squares
   const displayDots = totalAyahs <= 80;
 
   return (
-    <div className={cn(
-      "bg-background rounded-2xl p-4 border flex flex-col gap-2.5",
-      isComplete ? "border-primary/40 bg-primary/5" : isOverdue ? "border-destructive/30" : "border-border/50",
-    )}>
+    <div
+      className={cn(
+        "bg-background rounded-2xl p-4 border flex flex-col gap-2.5",
+        isComplete
+          ? "border-primary/40 bg-primary/5"
+          : isOverdue
+          ? "border-destructive/30"
+          : "border-border/50",
+      )}
+    >
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -94,10 +137,14 @@ function GoalCard({ goal, onDelete }: { goal: Goal; onDelete: (id: number) => vo
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           {isComplete && (
-            <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/15 text-primary px-2 py-0.5 rounded-full">Done</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/15 text-primary px-2 py-0.5 rounded-full">
+              Done
+            </span>
           )}
           {isOverdue && (
-            <span className="text-[10px] font-bold uppercase tracking-wider bg-destructive/15 text-destructive px-2 py-0.5 rounded-full">Overdue</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider bg-destructive/15 text-destructive px-2 py-0.5 rounded-full">
+              Overdue
+            </span>
           )}
           <button
             onClick={() => onDelete(goal.id)}
@@ -113,12 +160,17 @@ function GoalCard({ goal, onDelete }: { goal: Goal; onDelete: (id: number) => vo
       <div className="space-y-1">
         <div className="h-1.5 bg-muted rounded-full overflow-hidden">
           <div
-            className={cn("h-full rounded-full transition-all", isComplete ? "bg-primary" : "bg-primary/70")}
+            className={cn(
+              "h-full rounded-full transition-all",
+              isComplete ? "bg-primary" : "bg-primary/70",
+            )}
             style={{ width: `${progressPct}%` }}
           />
         </div>
         <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-          <span className="tabular-nums">{completedCount}/{totalAyahs} ayahs</span>
+          <span className="tabular-nums">
+            {completedCount}/{totalAyahs} ayahs
+          </span>
           <span>
             {isComplete
               ? "Completed"
@@ -131,10 +183,20 @@ function GoalCard({ goal, onDelete }: { goal: Goal; onDelete: (id: number) => vo
         </div>
       </div>
 
-      {/* Daily target */}
+      {/* Daily target + today's contribution */}
       {!isComplete && (
-        <div className="text-[11px] text-muted-foreground">
-          Target pace: <span className="font-medium text-foreground">{goal.dailyTarget} ayah{goal.dailyTarget !== 1 ? "s" : ""}/day</span>
+        <div className="flex items-center justify-between text-[11px]">
+          <span className="text-muted-foreground">
+            Pace:{" "}
+            <span className="font-medium text-foreground">
+              {goal.dailyTarget} ayah{goal.dailyTarget !== 1 ? "s" : ""}/day
+            </span>
+          </span>
+          {todayCount > 0 && (
+            <span className="text-primary font-medium">
+              +{todayCount} today
+            </span>
+          )}
         </div>
       )}
 
@@ -143,7 +205,11 @@ function GoalCard({ goal, onDelete }: { goal: Goal; onDelete: (id: number) => vo
         onClick={() => setExpanded((v) => !v)}
         className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
       >
-        {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        {expanded ? (
+          <ChevronUp className="w-3 h-3" />
+        ) : (
+          <ChevronDown className="w-3 h-3" />
+        )}
         {expanded ? "Hide" : "Show"} ayah breakdown
       </button>
 
@@ -173,7 +239,8 @@ function GoalCard({ goal, onDelete }: { goal: Goal; onDelete: (id: number) => vo
           ) : (
             <div className="space-y-1.5">
               <p className="text-[11px] text-muted-foreground">
-                {completedCount} of {totalAyahs} ayahs memorized ({progressPct}%)
+                {completedCount} of {totalAyahs} ayahs memorized ({progressPct}
+                %)
               </p>
               <div className="flex flex-wrap gap-0.5">
                 {Array.from({ length: totalAyahs }, (_, i) => {
@@ -209,23 +276,37 @@ export default function Dashboard() {
   const { goals, reload: reloadGoals, createGoal, deleteGoal } = useGoals();
 
   const reload = useCallback(async () => {
-    const [s, p] = await Promise.all([storage.getStats(), storage.getTodayPlan()]);
+    const [s, p] = await Promise.all([
+      storage.getStats(),
+      storage.getTodayPlan(),
+    ]);
     setStats(s);
     setTodayPlan(p);
   }, [storage]);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    reload();
+  }, [reload]);
 
   const memorizedPages = stats?.memorizedPages || 0;
   const dueToday = stats?.dueToday || 0;
   const dayStreak = stats?.dayStreak || 0;
 
   const progressData = [
-    { name: "Memorized", value: memorizedPages || 0, color: "hsl(var(--primary))" },
-    { name: "Remaining", value: Math.max(0, TOTAL_PAGES - memorizedPages) || 1, color: "hsl(var(--secondary))" },
+    {
+      name: "Memorized",
+      value: memorizedPages || 0,
+      color: "hsl(var(--primary))",
+    },
+    {
+      name: "Remaining",
+      value: Math.max(0, TOTAL_PAGES - memorizedPages) || 1,
+      color: "hsl(var(--secondary))",
+    },
   ];
 
-  const percentage = TOTAL_PAGES > 0 ? Math.floor((memorizedPages / TOTAL_PAGES) * 100) : 0;
+  const percentage =
+    TOTAL_PAGES > 0 ? Math.floor((memorizedPages / TOTAL_PAGES) * 100) : 0;
   const plannedItems = todayPlan?.plannedItems || [];
   const completedItems = todayPlan?.completedItems || [];
 
@@ -242,11 +323,21 @@ export default function Dashboard() {
             <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
             <div className="flex flex-col md:flex-row items-center justify-between gap-8 relative z-10">
               <div className="flex-1 w-full text-center md:text-left">
-                <h3 className="text-sm font-bold tracking-widest text-accent uppercase mb-2">Total Progress</h3>
-                <h2 className="text-4xl md:text-5xl font-serif text-foreground mb-1" data-testid="text-memorized-pages">
-                  {memorizedPages} <span className="text-xl md:text-2xl text-muted-foreground">/ {TOTAL_PAGES} pages</span>
+                <h3 className="text-sm font-bold tracking-widest text-accent uppercase mb-2">
+                  Total Progress
+                </h3>
+                <h2
+                  className="text-4xl md:text-5xl font-serif text-foreground mb-1"
+                  data-testid="text-memorized-pages"
+                >
+                  {memorizedPages}{" "}
+                  <span className="text-xl md:text-2xl text-muted-foreground">
+                    / {TOTAL_PAGES} pages
+                  </span>
                 </h2>
-                <p className="text-xs text-muted-foreground mb-4">Only memorization rated 3+ counts toward progress</p>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Only memorization rated 3+ counts toward progress
+                </p>
                 <p className="text-muted-foreground max-w-sm mx-auto md:mx-0 leading-relaxed">
                   {memorizedPages > 0
                     ? `MashaAllah, you have memorized ${percentage}% of the Quran. Keep up the consistency.`
@@ -256,13 +347,27 @@ export default function Dashboard() {
                 <div className="flex gap-4 mt-8 justify-center md:justify-start">
                   <div className="bg-background rounded-2xl px-5 py-4 flex-1 max-w-[140px] border border-border/50 text-center">
                     <Trophy className="w-6 h-6 text-accent mx-auto mb-2" />
-                    <p className="text-2xl font-bold text-foreground" data-testid="text-due-today">{dueToday}</p>
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Due Today</p>
+                    <p
+                      className="text-2xl font-bold text-foreground"
+                      data-testid="text-due-today"
+                    >
+                      {dueToday}
+                    </p>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
+                      Due Today
+                    </p>
                   </div>
                   <div className="bg-background rounded-2xl px-5 py-4 flex-1 max-w-[140px] border border-border/50 text-center">
                     <Flame className="w-6 h-6 text-primary mx-auto mb-2" />
-                    <p className="text-2xl font-bold text-foreground" data-testid="text-day-streak">{dayStreak}</p>
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Day Streak</p>
+                    <p
+                      className="text-2xl font-bold text-foreground"
+                      data-testid="text-day-streak"
+                    >
+                      {dayStreak}
+                    </p>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
+                      Day Streak
+                    </p>
                   </div>
                 </div>
               </div>
@@ -270,16 +375,34 @@ export default function Dashboard() {
               <div className="w-64 h-64 relative flex-shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={progressData} cx="50%" cy="50%" innerRadius={75} outerRadius={100} stroke="none" paddingAngle={5} dataKey="value" cornerRadius={10}>
+                    <Pie
+                      data={progressData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={75}
+                      outerRadius={100}
+                      stroke="none"
+                      paddingAngle={5}
+                      dataKey="value"
+                      cornerRadius={10}
+                    >
                       {progressData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }} />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: "12px",
+                        border: "none",
+                        boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+                      }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex items-center justify-center flex-col pointer-events-none">
-                  <span className="text-3xl font-serif font-bold text-foreground">{percentage}%</span>
+                  <span className="text-3xl font-serif font-bold text-foreground">
+                    {percentage}%
+                  </span>
                 </div>
               </div>
             </div>
@@ -289,8 +412,14 @@ export default function Dashboard() {
           <div className="flex flex-col gap-6">
             <div className="bg-card rounded-3xl p-6 border border-border/50 flex-1">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="font-serif font-bold text-lg text-foreground">Daily Plan</h3>
-                <Link href="/track/plan" className="text-primary hover:text-primary/80 transition-colors p-2 rounded-full hover:bg-primary/10" data-testid="link-daily-plan">
+                <h3 className="font-serif font-bold text-lg text-foreground">
+                  Daily Plan
+                </h3>
+                <Link
+                  href="/track/plan"
+                  className="text-primary hover:text-primary/80 transition-colors p-2 rounded-full hover:bg-primary/10"
+                  data-testid="link-daily-plan"
+                >
                   <ArrowRight size={20} />
                 </Link>
               </div>
@@ -308,22 +437,49 @@ export default function Dashboard() {
                         data-testid={`dashboard-plan-item-${idx}`}
                         className={cn(
                           "flex items-center gap-3 p-3 rounded-xl border border-transparent transition-colors",
-                          isDone ? "opacity-50" : "hover:bg-secondary/30 hover:border-border/50",
+                          isDone
+                            ? "opacity-50"
+                            : "hover:bg-secondary/30 hover:border-border/50",
                         )}
                       >
-                        <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", isDone ? "bg-primary/15 text-primary" : "bg-primary/10 text-primary")}>
-                          {isDone ? <CheckCircle2 size={16} /> : <Play size={14} className="ml-0.5" />}
+                        <div
+                          className={cn(
+                            "w-8 h-8 rounded-lg flex items-center justify-center",
+                            isDone
+                              ? "bg-primary/15 text-primary"
+                              : "bg-primary/10 text-primary",
+                          )}
+                        >
+                          {isDone ? (
+                            <CheckCircle2 size={16} />
+                          ) : (
+                            <Play size={14} className="ml-0.5" />
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className={cn("text-sm font-semibold text-foreground truncate", isDone && "line-through text-muted-foreground")}>
+                          <p
+                            className={cn(
+                              "text-sm font-semibold text-foreground truncate",
+                              isDone &&
+                                "line-through text-muted-foreground",
+                            )}
+                          >
                             {formatReference(ref)}
                           </p>
                         </div>
-                        {isDone && <span className="text-[9px] uppercase tracking-wider font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">Done</span>}
+                        {isDone && (
+                          <span className="text-[9px] uppercase tracking-wider font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                            Done
+                          </span>
+                        )}
                       </div>
                     );
                   })}
-                  {plannedItems.length > 5 && <p className="text-xs text-muted-foreground text-center pt-1">+{plannedItems.length - 5} more</p>}
+                  {plannedItems.length > 5 && (
+                    <p className="text-xs text-muted-foreground text-center pt-1">
+                      +{plannedItems.length - 5} more
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-10">
@@ -331,7 +487,9 @@ export default function Dashboard() {
                     <Trophy size={24} />
                   </div>
                   <p className="text-foreground font-medium">No plan yet</p>
-                  <p className="text-sm text-muted-foreground mt-1">Generate a daily plan to get started.</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Generate a daily plan to get started.
+                  </p>
                 </div>
               )}
 
@@ -351,7 +509,9 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
               <Target className="w-5 h-5 text-primary" />
-              <h3 className="font-serif font-bold text-lg text-foreground">Memorization Goals</h3>
+              <h3 className="font-serif font-bold text-lg text-foreground">
+                Memorization Goals
+              </h3>
               {goals.length > 0 && (
                 <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-medium">
                   {activeGoals.length} active
@@ -374,7 +534,9 @@ export default function Dashboard() {
                 <Target size={22} />
               </div>
               <p className="text-foreground font-medium">No goals yet</p>
-              <p className="text-sm text-muted-foreground mt-1 mb-4">Set a memorization goal to track your progress ayah by ayah.</p>
+              <p className="text-sm text-muted-foreground mt-1 mb-4">
+                Set a memorization goal to track your progress ayah by ayah.
+              </p>
               <button
                 onClick={() => setIsGoalModalOpen(true)}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
@@ -386,10 +548,20 @@ export default function Dashboard() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {activeGoals.map((g) => (
-                <GoalCard key={g.id} goal={g} onDelete={deleteGoal} />
+                <GoalCard
+                  key={g.id}
+                  goal={g}
+                  onDelete={deleteGoal}
+                  todayPlannedItems={plannedItems}
+                />
               ))}
               {completedGoals.map((g) => (
-                <GoalCard key={g.id} goal={g} onDelete={deleteGoal} />
+                <GoalCard
+                  key={g.id}
+                  goal={g}
+                  onDelete={deleteGoal}
+                  todayPlannedItems={plannedItems}
+                />
               ))}
             </div>
           )}
@@ -410,7 +582,6 @@ export default function Dashboard() {
         onClose={() => {
           setIsLogModalOpen(false);
           reload();
-          // Reload goals so per-ayah progress updates appear immediately
           reloadGoals();
         }}
       />
@@ -419,9 +590,10 @@ export default function Dashboard() {
         onClose={() => setIsGoalModalOpen(false)}
         onCreate={async (input) => {
           await createGoal(input);
-          // After a short delay, re-fetch goals to pick up the qfGoalId
-          // that is written asynchronously after the server response.
-          setTimeout(() => { reloadGoals(); }, 3000);
+          // Re-fetch after a short delay to pick up qfGoalId written async
+          setTimeout(() => {
+            reloadGoals();
+          }, 3000);
         }}
       />
     </AppShell>

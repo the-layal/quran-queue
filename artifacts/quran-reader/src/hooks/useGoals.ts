@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "./useAuth";
+import { getAyahsForReference } from "@/lib/page-utils";
 
 export interface Goal {
   id: number;
@@ -65,22 +66,35 @@ function readGuestLogs(): LocalLog[] {
 }
 
 /**
- * Reconcile guest goals' completedAyahsList against all local ayah logs.
+ * Reconcile guest goals' completedAyahsList against all local logs.
+ * Uses getAyahsForReference to expand page, surah, ayah-range, and single-ayah
+ * references so any review type advances goal progress.
  * Returns updated goals (and persists them to localStorage if anything changed).
  */
 function reconcileGuestGoals(goals: Goal[]): Goal[] {
   if (goals.length === 0) return goals;
 
   const logs = readGuestLogs();
-  // Build a map of surahNumber -> Set<ayahNumber> for all ayah logs
+  // Build a map of surahNumber -> Set<ayahNumber> by expanding every log reference
   const ayahMap = new Map<number, Set<number>>();
   for (const log of logs) {
-    const m = log.reference?.match(/^ayah:(\d+):(\d+)$/);
-    if (!m) continue;
-    const s = parseInt(m[1], 10);
-    const a = parseInt(m[2], 10);
-    if (!ayahMap.has(s)) ayahMap.set(s, new Set());
-    ayahMap.get(s)!.add(a);
+    if (!log.reference) continue;
+    try {
+      const groups = getAyahsForReference(log.reference);
+      for (const group of groups) {
+        if (!ayahMap.has(group.surah)) ayahMap.set(group.surah, new Set());
+        for (const a of group.ayahs) ayahMap.get(group.surah)!.add(a);
+      }
+    } catch {
+      // fallback: try direct single-ayah parse
+      const m = log.reference.match(/^ayah:(\d+):(\d+)$/);
+      if (m) {
+        const s = parseInt(m[1], 10);
+        const a = parseInt(m[2], 10);
+        if (!ayahMap.has(s)) ayahMap.set(s, new Set());
+        ayahMap.get(s)!.add(a);
+      }
+    }
   }
 
   let changed = false;

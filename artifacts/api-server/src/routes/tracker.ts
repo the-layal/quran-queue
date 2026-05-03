@@ -103,10 +103,12 @@ router.post("/logs", async (req: Request, res: Response) => {
       await storage.updateSrsItem(srsItem.id, update);
     }
 
-    // Update goal progress for direct ayah logs
-    const ayahMatch = input.reference.match(/^ayah:(\d+):(\d+)$/);
-    if (ayahMatch) {
-      await updateGoalProgressForAyah(userId, parseInt(ayahMatch[1], 10), parseInt(ayahMatch[2], 10));
+    // Expand any reference type (ayah, ayah range, page, surah) and update all matching goals
+    const ayahGroups = getAyahsForReference(input.reference);
+    for (const group of ayahGroups) {
+      for (const ayah of group.ayahs) {
+        await updateGoalProgressForAyah(userId, group.surah, ayah);
+      }
     }
 
     res.status(201).json(log);
