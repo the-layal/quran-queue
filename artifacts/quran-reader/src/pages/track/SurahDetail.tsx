@@ -6,7 +6,6 @@ import { ArrowLeft, BookOpen, Calendar, LayoutGrid } from "lucide-react";
 import { useState, useMemo } from "react";
 import { LogModal } from "@/components/LogModal";
 import { useLogs, useSrsItems } from "@/hooks/useTracker";
-import { getAyahsForPages } from "@/lib/page-utils";
 import { getAyahsForReference } from "@/storage/referenceFanOut";
 import { format } from "date-fns";
 
@@ -67,54 +66,18 @@ export default function SurahDetail() {
     if (!logs) return { masteryMap: mMap, dateMap: dMap };
     const sorted = [...logs].reverse();
     for (const log of sorted) {
-      const ref = log.reference;
-      const setAyah = (a: number) => {
-        mMap[a] = log.vibeScale;
-        const logDate = new Date(log.createdAt);
-        if (!dMap[a] || logDate > dMap[a]) dMap[a] = logDate;
-      };
-      if (ref.startsWith(`ayah:${surahId}:`)) {
-        const rangePart = ref.split(":").slice(2).join(":");
-        const parts = rangePart.split("-");
-        const start = parseInt(parts[0], 10);
-        const end = parts.length > 1 ? parseInt(parts[1], 10) : start;
-        if (!isNaN(start) && !isNaN(end)) for (let a = start; a <= end; a++) setAyah(a);
-      }
-      if (ref.startsWith(`surah:${surahId}:`)) {
-        const rangePart = ref.split(":").slice(2).join(":");
-        const parts = rangePart.split("-");
-        const start = parseInt(parts[0], 10);
-        const end = parts.length > 1 ? parseInt(parts[1], 10) : start;
-        if (!isNaN(start) && !isNaN(end)) for (let a = start; a <= end; a++) setAyah(a);
-      }
-      if (ref === `surah:${surahId}`) {
-        for (let a = 1; a <= surah.ayahCount; a++) setAyah(a);
-      }
-      const surahRangeMatch = ref.match(/^surah:(\d+)-(\d+)$/);
-      if (surahRangeMatch) {
-        const fromSurah = parseInt(surahRangeMatch[1], 10);
-        const toSurah = parseInt(surahRangeMatch[2], 10);
-        if (surahId >= fromSurah && surahId <= toSurah) {
-          for (let a = 1; a <= surah.ayahCount; a++) setAyah(a);
-        }
-      }
-      if (ref.startsWith("page:")) {
-        const pagePart = ref.slice(5);
-        const pageRangeParts = pagePart.split("-");
-        const fromPage = parseInt(pageRangeParts[0], 10);
-        const toPage = pageRangeParts.length > 1 ? parseInt(pageRangeParts[1], 10) : fromPage;
-        if (!isNaN(fromPage) && !isNaN(toPage)) {
-          const pages: number[] = [];
-          for (let p = fromPage; p <= toPage; p++) pages.push(p);
-          const groups = getAyahsForPages(pages);
-          for (const g of groups) {
-            if (g.surah === surahId) for (const a of g.ayahs) setAyah(a);
-          }
+      const logDate = new Date(log.createdAt);
+      const groups = getAyahsForReference(log.reference);
+      for (const g of groups) {
+        if (g.surah !== surahId) continue;
+        for (const a of g.ayahs) {
+          mMap[a] = log.vibeScale;
+          if (!dMap[a] || logDate > dMap[a]) dMap[a] = logDate;
         }
       }
     }
     return { masteryMap: mMap, dateMap: dMap };
-  }, [logs, surahId, surah.ayahCount]);
+  }, [logs, surahId]);
 
   const oldestReviewDate = useMemo(() => {
     const dates = Object.values(dateMap);
