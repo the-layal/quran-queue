@@ -830,40 +830,45 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     (clientX: number, clientY: number) => {
       const el = document.elementFromPoint(clientX, clientY);
       if (!el) return;
-      const wordGroup = el.closest('[data-word-index-in-ayah][data-type="text"]');
-      if (!wordGroup) return;
-      const wordId = (wordGroup as HTMLElement).id;
 
-      // Transliteration popover — anchored to this word's bounding box.
-      // Independent from active-word toggle; both can fire on the same tap.
+      // Transliteration popover — accepts taps on any glyph carrying
+      // data-surah/data-aya, including end-of-ayah markers (which lack
+      // data-word-index-in-ayah). Independent from active-word toggle.
       // Use functional setState so re-tap toggles correctly without depending
       // on the latest `popover` value (which would stale-close this callback).
       if (showTransliteration) {
-        const s = wordGroup.getAttribute("data-surah");
-        const a = wordGroup.getAttribute("data-aya");
-        if (s && a) {
-          const ayahKey = `${parseInt(s, 10)}:${parseInt(a, 10)}`;
-          const rect = (wordGroup as Element).getBoundingClientRect();
-          const margin = 12;
-          const halfMaxW = 160; // matches max-w-xs (~20rem) / 2
-          const x = Math.max(
-            margin + halfMaxW,
-            Math.min(window.innerWidth - margin - halfMaxW, rect.left + rect.width / 2)
-          );
-          const flipBelow = rect.top < 140;
-          setPopover((prev) =>
-            prev && prev.ayahKey === ayahKey
-              ? null
-              : {
-                  ayahKey,
-                  x,
-                  y: flipBelow ? rect.bottom : rect.top,
-                  placement: flipBelow ? "below" : "above",
-                }
-          );
+        const ayahHit = el.closest('[data-surah][data-aya]') as Element | null;
+        if (ayahHit) {
+          const s = ayahHit.getAttribute("data-surah");
+          const a = ayahHit.getAttribute("data-aya");
+          if (s && a) {
+            const ayahKey = `${parseInt(s, 10)}:${parseInt(a, 10)}`;
+            const rect = ayahHit.getBoundingClientRect();
+            const margin = 12;
+            const halfMaxW = 160; // matches max-w-xs (~20rem) / 2
+            const x = Math.max(
+              margin + halfMaxW,
+              Math.min(window.innerWidth - margin - halfMaxW, rect.left + rect.width / 2)
+            );
+            const flipBelow = rect.top < 140;
+            setPopover((prev) =>
+              prev && prev.ayahKey === ayahKey
+                ? null
+                : {
+                    ayahKey,
+                    x,
+                    y: flipBelow ? rect.bottom : rect.top,
+                    placement: flipBelow ? "below" : "above",
+                  }
+            );
+          }
         }
       }
 
+      // Active-word toggle still requires a real word group (not end markers).
+      const wordGroup = el.closest('[data-word-index-in-ayah][data-type="text"]');
+      if (!wordGroup) return;
+      const wordId = (wordGroup as HTMLElement).id;
       if (activeWordIdRef.current === wordId) {
         wordGroup.classList.remove("md-word-active");
         activeWordIdRef.current = null;
@@ -916,11 +921,9 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       // the click resolves to an actual word. Clicks on blank page area should
       // still close the popover (matches outside-click expectations).
       if (containerRef.current?.contains(t)) {
-        const wordHit =
-          t instanceof Element
-            ? t.closest('[data-word-index-in-ayah][data-type="text"]')
-            : null;
-        if (wordHit) return;
+        const ayahHit =
+          t instanceof Element ? t.closest('[data-surah][data-aya]') : null;
+        if (ayahHit) return;
       }
       setPopover(null);
     };
