@@ -436,6 +436,7 @@ function SurahReadingView({
   const playbackCurrentWordId = useQuranStore((s) => s.playbackCurrentWordId);
   const blindReviewMode = useQuranStore((s) => s.blindReviewMode);
   const manuallyRevealedIds = useQuranStore((s) => s.manuallyRevealedIds);
+  const lockedContextIds = useQuranStore((s) => s.lockedContextIds);
 
   // Brush pointer handlers — must be called before any early return
   const brush = useSmartBrush("reading", containerRef as RefObject<HTMLElement | null>);
@@ -499,9 +500,9 @@ function SurahReadingView({
     }
 
     const revealedSet = new Set(manuallyRevealedIds);
-    // Context-only hides exactly the user's selection. The selection is the
-    // single source of truth — see MushafSvgPage for the same rationale.
-    const contextHideSet = new Set(selectedWordIds);
+    // Context-only hides the user's active selection OR any locked (confirmed)
+    // selection — see MushafSvgPage for the same rationale.
+    const contextHideSet = new Set([...selectedWordIds, ...lockedContextIds]);
 
     allWords.forEach((el) => {
       const wordId = el.id;
@@ -516,7 +517,7 @@ function SurahReadingView({
       }
       el.classList.toggle("word-hidden", hide);
     });
-  }, [blindReviewMode, manuallyRevealedIds, playbackCurrentWordId, selectedWordIds, surahNumber]);
+  }, [blindReviewMode, manuallyRevealedIds, playbackCurrentWordId, selectedWordIds, lockedContextIds, surahNumber]);
 
   const surahInfo = chapter
     ? {
@@ -831,6 +832,7 @@ export default function QuranPage() {
   const blindReviewMode = useQuranStore((s) => s.blindReviewMode);
   const manuallyRevealedIds = useQuranStore((s) => s.manuallyRevealedIds);
   const clearManualReveals = useQuranStore((s) => s.clearManualReveals);
+  const clearLockedContext = useQuranStore((s) => s.clearLockedContext);
   const revealWords = useQuranStore((s) => s.revealWords);
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
   const confirmSelection = useQuranStore((s) => s.confirmSelection);
@@ -1037,9 +1039,12 @@ export default function QuranPage() {
     return () => window.removeEventListener("keydown", handler);
   });
 
-  // Clear manual reveals on page/surah navigation and when leaving blind mode
+  // Clear manual reveals and locked context on page/surah navigation.
+  // This is the central catch-all for any indirect setCurrentPage/setCurrentSurah
+  // call that doesn't go through a navigation handler that calls clearSelection().
   useEffect(() => {
     clearManualReveals();
+    clearLockedContext();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, currentSurah]);
 
@@ -1346,7 +1351,7 @@ export default function QuranPage() {
                   return (
                     <button
                       key={p}
-                      onClick={() => setCurrentPage(p)}
+                      onClick={() => { clearSelection(); setCurrentPage(p); }}
                       className={`w-8 h-8 rounded-lg text-xs font-medium transition-colors ${
                         p === currentPage
                           ? "bg-primary text-primary-foreground"
@@ -1409,6 +1414,7 @@ export default function QuranPage() {
         chapters={chapters}
         currentSurah={currentSurah}
         onSelect={(n) => {
+          clearSelection();
           setCurrentSurah(n);
           if (isMushaf) {
             const startPage = chapters[n]?.mushafStartPage;

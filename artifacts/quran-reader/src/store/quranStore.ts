@@ -95,9 +95,11 @@ interface QuranStore {
 
   blindReviewMode: BlindReviewMode;
   manuallyRevealedIds: string[];
+  lockedContextIds: string[];
   setBlindReviewMode: (mode: BlindReviewMode) => void;
   revealWords: (ids: string[]) => void;
   clearManualReveals: () => void;
+  clearLockedContext: () => void;
 }
 
 function genId(): string {
@@ -156,12 +158,19 @@ export const useQuranStore = create<QuranStore>()(
 
       blindReviewMode: "default",
       manuallyRevealedIds: [],
-      setBlindReviewMode: (blindReviewMode) => set({ blindReviewMode }),
+      lockedContextIds: [],
+      setBlindReviewMode: (blindReviewMode) =>
+        set((state) => ({
+          blindReviewMode,
+          // Leaving context-only mode clears the locked set so all words show again.
+          lockedContextIds: blindReviewMode === "context-only" ? state.lockedContextIds : [],
+        })),
       revealWords: (ids) =>
         set((state) => ({
           manuallyRevealedIds: Array.from(new Set([...state.manuallyRevealedIds, ...ids])),
         })),
       clearManualReveals: () => set({ manuallyRevealedIds: [] }),
+      clearLockedContext: () => set({ lockedContextIds: [] }),
 
       setCurrentSurah: (surah) =>
         set({ currentSurah: Math.max(1, Math.min(114, surah)) }),
@@ -195,10 +204,19 @@ export const useQuranStore = create<QuranStore>()(
 
       setSelectedWordIds: (ids) => set({ selectedWordIds: ids }),
       setBrushFineness: (brushFineness) => set({ brushFineness }),
-      clearSelection: () => set({ selectedWordIds: [] }),
-      confirmSelection: () => {
-        set({ selectedWordIds: [] });
-      },
+      clearSelection: () => set({ selectedWordIds: [], lockedContextIds: [] }),
+      confirmSelection: () =>
+        set((state) => {
+          if (state.blindReviewMode === "context-only") {
+            // Freeze the hidden set so context-only keeps words hidden after
+            // the green selection highlight is cleared.
+            return {
+              lockedContextIds: state.selectedWordIds,
+              selectedWordIds: [],
+            };
+          }
+          return { selectedWordIds: [] };
+        }),
 
       setPlaybackHighlightMode: (playbackHighlightMode) => set({ playbackHighlightMode }),
       setPlaybackHighlightEnabled: (playbackHighlightEnabled) => set({ playbackHighlightEnabled }),

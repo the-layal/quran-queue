@@ -283,6 +283,9 @@ export function useQueuePlayback(): QueuePlaybackState {
       useQuranStore.getState().setActiveQueueItemId(item.id);
       useQuranStore.getState().setSelectedWordIds(item.selectedWordIds);
       useQuranStore.getState().setBrushFineness(item.brushFineness);
+      // Clear any manually-locked context so queue items drive hiding via
+      // selectedWordIds only, not a stale lockedContextIds from a prior confirm.
+      useQuranStore.getState().clearLockedContext();
     }
 
     function clearHighlights() {
