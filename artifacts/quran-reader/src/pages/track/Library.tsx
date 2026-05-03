@@ -153,38 +153,36 @@ export default function LibraryPage() {
               className="w-full pl-9 pr-4 py-2 bg-card border border-border/50 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
             />
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="flex gap-1 bg-card border border-border/50 rounded-lg p-0.5">
-              <button
-                data-testid="button-library-view-standard"
-                onClick={() => setView("standard")}
-                className={cn(
-                  "px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1",
-                  view === "standard" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <LayoutGrid size={12} /> Standard
-              </button>
-              <button
-                data-testid="button-library-view-simple"
-                onClick={() => setView("simple")}
-                className={cn(
-                  "px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1",
-                  view === "simple" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <List size={12} /> Simple
-              </button>
-            </div>
-            <button
-              data-testid="button-library-log-review"
-              onClick={() => setIsLogModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold shadow-lg shadow-primary/25 hover:shadow-xl hover:-translate-y-0.5 transition-all"
-            >
-              <PenLine size={16} />
-              Log Review
-            </button>
-          </div>
+          <button
+            data-testid="button-library-log-review"
+            onClick={() => setIsLogModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold shadow-lg shadow-primary/25 hover:shadow-xl hover:-translate-y-0.5 transition-all shrink-0"
+          >
+            <PenLine size={16} />
+            Log Review
+          </button>
+        </div>
+        <div className="flex gap-1 bg-card border border-border/50 rounded-lg p-0.5 self-start">
+          <button
+            data-testid="button-library-view-standard"
+            onClick={() => setView("standard")}
+            className={cn(
+              "px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1",
+              view === "standard" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <LayoutGrid size={12} /> Standard
+          </button>
+          <button
+            data-testid="button-library-view-simple"
+            onClick={() => setView("simple")}
+            className={cn(
+              "px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1",
+              view === "simple" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <List size={12} /> Simple
+          </button>
         </div>
         <div className="flex items-center gap-2">
           {filterOptions.map((opt) => (
