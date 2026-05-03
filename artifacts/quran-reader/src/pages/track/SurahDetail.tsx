@@ -173,8 +173,8 @@ export default function SurahDetail() {
       </div>
 
       <div>
-        <div className="flex flex-wrap justify-between items-center gap-y-2 mb-4">
-          <div className="flex items-center gap-3">
+        <div className="mb-4 space-y-2">
+          <div className="flex items-center justify-between gap-3">
             <h3 className="font-serif font-bold text-lg text-foreground">Ayah Heatmap</h3>
             <div className="flex gap-1 bg-card border border-border/50 rounded-lg p-0.5">
               <button
