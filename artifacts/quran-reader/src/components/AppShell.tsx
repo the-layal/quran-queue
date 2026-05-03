@@ -255,48 +255,48 @@ export default function AppShell({ children, rightActions, centerContent }: AppS
         </nav>
 
         <VersePanel />
-      </div>
 
-      <div className="border-t border-border px-4 py-4">
-        {isLoading ? (
-          <div className="h-10 rounded-lg bg-muted animate-pulse" />
-        ) : isAuthenticated && user ? (
-          <div className="flex items-center gap-3">
-            {user.profileImageUrl ? (
-              <img
-                src={user.profileImageUrl}
-                alt={displayName ?? "User"}
-                className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-              />
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                <User className="w-4 h-4 text-primary" />
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium truncate">{displayName}</div>
-              {user.email && (
-                <div className="text-xs text-muted-foreground truncate">{user.email}</div>
+        <div className="px-4 pb-4">
+          {isLoading ? (
+            <div className="h-10 rounded-lg bg-muted animate-pulse" />
+          ) : isAuthenticated && user ? (
+            <div className="flex items-center gap-3">
+              {user.profileImageUrl ? (
+                <img
+                  src={user.profileImageUrl}
+                  alt={displayName ?? "User"}
+                  className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                  <User className="w-4 h-4 text-primary" />
+                </div>
               )}
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">{displayName}</div>
+                {user.email && (
+                  <div className="text-xs text-muted-foreground truncate">{user.email}</div>
+                )}
+              </div>
+              <button
+                onClick={logout}
+                className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors flex-shrink-0"
+                aria-label="Sign out"
+                title="Sign out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
+          ) : (
             <button
-              onClick={logout}
-              className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors flex-shrink-0"
-              aria-label="Sign out"
-              title="Sign out"
+              onClick={login}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
             >
-              <LogOut className="w-4 h-4" />
+              <LogIn className="w-4 h-4" />
+              Sign in
             </button>
-          </div>
-        ) : (
-          <button
-            onClick={login}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-          >
-            <LogIn className="w-4 h-4" />
-            Sign in
-          </button>
-        )}
+          )}
+        </div>
       </div>
     </>
   );
