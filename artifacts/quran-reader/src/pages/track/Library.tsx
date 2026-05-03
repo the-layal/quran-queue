@@ -2,11 +2,12 @@ import { useState, useMemo } from "react";
 import AppShell from "@/components/AppShell";
 import GuestBanner from "@/components/GuestBanner";
 import { SURAHS } from "@/lib/quran-data";
-import { Search, CalendarClock } from "lucide-react";
+import { Search, CalendarClock, PenLine } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 import { useLogs } from "@/hooks/useTracker";
 import { getAyahsForPages } from "@/lib/page-utils";
+import { LogModal } from "@/components/LogModal";
 
 type StatusFilter = "all" | "not_started" | "in_progress" | "completed";
 
@@ -15,6 +16,7 @@ export default function LibraryPage() {
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [vibeFilter, setVibeFilter] = useState<number | null>(null);
   const [dateFilter, setDateFilter] = useState<string>("");
+  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const { data: logs } = useLogs();
 
   const { surahStatus, surahVibes, surahOldestDate } = useMemo(() => {
@@ -140,16 +142,26 @@ export default function LibraryPage() {
       <GuestBanner />
       <div className="p-4 max-w-6xl mx-auto">
       <div className="mb-6 flex flex-col gap-4">
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-          <input
-            type="text"
-            data-testid="input-search-surah"
-            placeholder="Search surahs..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-card border border-border/50 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
-          />
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <input
+              type="text"
+              data-testid="input-search-surah"
+              placeholder="Search surahs..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-card border border-border/50 rounded-xl text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
+            />
+          </div>
+          <button
+            data-testid="button-library-log-review"
+            onClick={() => setIsLogModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold shadow-lg shadow-primary/25 hover:shadow-xl hover:-translate-y-0.5 transition-all"
+          >
+            <PenLine size={16} />
+            Log Review
+          </button>
         </div>
         <div className="flex gap-2 flex-wrap">
           {filterOptions.map((opt) => (
@@ -245,6 +257,7 @@ export default function LibraryPage() {
         )}
       </div>
       </div>
+      <LogModal isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} />
     </AppShell>
   );
 }
