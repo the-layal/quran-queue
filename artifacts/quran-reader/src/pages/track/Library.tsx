@@ -1,8 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import AppShell from "@/components/AppShell";
 import GuestBanner from "@/components/GuestBanner";
 import { SURAHS } from "@/lib/quran-data";
-import { Search, CalendarClock, PenLine } from "lucide-react";
+import { Search, CalendarClock, PenLine, LayoutGrid, List } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 import { useLogs } from "@/hooks/useTracker";
@@ -10,6 +10,19 @@ import { getAyahsForPages } from "@/lib/page-utils";
 import { LogModal } from "@/components/LogModal";
 
 type StatusFilter = "all" | "not_started" | "in_progress" | "completed";
+type LibraryView = "standard" | "simple";
+
+const VIEW_STORAGE_KEY = "hafith_library_view";
+
+function getInitialView(): LibraryView {
+  if (typeof window === "undefined") return "standard";
+  try {
+    const v = window.localStorage.getItem(VIEW_STORAGE_KEY);
+    return v === "simple" ? "simple" : "standard";
+  } catch {
+    return "standard";
+  }
+}
 
 export default function LibraryPage() {
   const [search, setSearch] = useState("");
@@ -17,15 +30,21 @@ export default function LibraryPage() {
   const [vibeFilter, setVibeFilter] = useState<number | null>(null);
   const [dateFilter, setDateFilter] = useState<string>("");
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [view, setView] = useState<LibraryView>(getInitialView);
   const { data: logs } = useLogs();
 
-  const { surahStatus, surahVibes, surahOldestDate } = useMemo(() => {
+  useEffect(() => {
+    try { window.localStorage.setItem(VIEW_STORAGE_KEY, view); } catch { /* ignore */ }
+  }, [view]);
+
+  const { surahStatus, surahVibes, surahOldestDate, surahAvgVibe } = useMemo(() => {
     const statusMap: Record<number, StatusFilter> = {};
     const vibeMap: Record<number, Set<number>> = {};
     const oldestDateMap: Record<number, Date> = {};
+    const avgVibeMap: Record<number, number> = {};
     if (!logs) {
       SURAHS.forEach((s) => { statusMap[s.id] = "not_started"; });
-      return { surahStatus: statusMap, surahVibes: vibeMap, surahOldestDate: oldestDateMap };
+      return { surahStatus: statusMap, surahVibes: vibeMap, surahOldestDate: oldestDateMap, surahAvgVibe: avgVibeMap };
     }
 
     const loggedAyahs: Record<number, Set<number>> = {};
@@ -95,20 +114,40 @@ export default function LibraryPage() {
 
       const vibes = new Set<number>();
       let oldest: Date | null = null;
+      let vibeSum = 0;
+      let vibeCount = 0;
       if (logged) {
         Array.from(logged).forEach((a) => {
           const v = ayahVibes[`${s.id}:${a}`];
-          if (v) vibes.add(v);
+          if (v) { vibes.add(v); vibeSum += v; vibeCount += 1; }
           const d = ayahDates[`${s.id}:${a}`];
           if (d && (!oldest || d < oldest)) oldest = d;
         });
       }
       if (vibes.size > 0) vibeMap[s.id] = vibes;
       if (oldest) oldestDateMap[s.id] = oldest;
+      if (vibeCount > 0) avgVibeMap[s.id] = vibeSum / vibeCount;
     });
 
-    return { surahStatus: statusMap, surahVibes: vibeMap, surahOldestDate: oldestDateMap };
+    return { surahStatus: statusMap, surahVibes: vibeMap, surahOldestDate: oldestDateMap, surahAvgVibe: avgVibeMap };
   }, [logs]);
+
+  const getHeatmapColor = (sid: number): string => {
+    const status = surahStatus[sid];
+    if (status === "not_started") {
+      return "bg-secondary/30 text-muted-foreground border-border hover:border-primary/50";
+    }
+    const avg = surahAvgVibe[sid];
+    const level = avg ? Math.max(1, Math.min(5, Math.round(avg))) : 0;
+    switch (level) {
+      case 5: return "bg-primary text-primary-foreground border-primary";
+      case 4: return "bg-primary/80 text-primary-foreground border-primary/80";
+      case 3: return "bg-primary/60 text-primary-foreground border-primary/60";
+      case 2: return "bg-primary/40 text-foreground border-primary/40";
+      case 1: return "bg-primary/20 text-foreground border-primary/20";
+      default: return "bg-primary/10 text-foreground border-primary/20 hover:border-primary/50";
+    }
+  };
 
   const filteredSurahs = SURAHS.filter((s) => {
     const matchesSearch = s.englishName.toLowerCase().includes(search.toLowerCase()) || s.name.includes(search);
@@ -163,22 +202,46 @@ export default function LibraryPage() {
             Log Review
           </button>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          {filterOptions.map((opt) => (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex gap-2 flex-wrap">
+            {filterOptions.map((opt) => (
+              <button
+                key={opt.value}
+                data-testid={`button-filter-${opt.value}`}
+                onClick={() => setFilter(opt.value)}
+                className={cn(
+                  "px-4 py-1.5 rounded-full text-sm font-medium transition-all border",
+                  filter === opt.value
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-card text-muted-foreground border-border/50 hover:text-foreground hover:border-primary/30",
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1 bg-card border border-border/50 rounded-lg p-0.5 shrink-0">
             <button
-              key={opt.value}
-              data-testid={`button-filter-${opt.value}`}
-              onClick={() => setFilter(opt.value)}
+              data-testid="button-library-view-standard"
+              onClick={() => setView("standard")}
               className={cn(
-                "px-4 py-1.5 rounded-full text-sm font-medium transition-all border",
-                filter === opt.value
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-card text-muted-foreground border-border/50 hover:text-foreground hover:border-primary/30",
+                "px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1",
+                view === "standard" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {opt.label}
+              <LayoutGrid size={12} /> Standard
             </button>
-          ))}
+            <button
+              data-testid="button-library-view-simple"
+              onClick={() => setView("simple")}
+              className={cn(
+                "px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1",
+                view === "simple" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <List size={12} /> Simple
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground mr-1">Rating:</span>
@@ -220,42 +283,82 @@ export default function LibraryPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredSurahs.map((surah) => (
-          <Link
-            key={surah.id}
-            href={`/track/library/${surah.id}`}
-            data-testid={`card-surah-${surah.id}`}
-            className="bg-card p-4 rounded-2xl border border-border/50 flex items-center justify-between group hover:border-primary/30 transition-colors"
-          >
-            <div className="flex items-center gap-4">
-              <div className={cn(
-                "w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm transition-colors",
-                surahStatus[surah.id] === "completed"
-                  ? "bg-primary/20 text-primary group-hover:bg-primary group-hover:text-primary-foreground"
-                  : surahStatus[surah.id] === "in_progress"
-                    ? "bg-accent/15 text-accent group-hover:bg-accent group-hover:text-white"
-                    : "bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground",
-              )}>
-                {surah.id}
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-foreground">{surah.englishName}</h3>
-                  {statusBadge(surah.id)}
-                </div>
-                <p className="text-xs text-muted-foreground">{surah.type} • {surah.ayahCount} Ayahs</p>
-              </div>
+      {view === "standard" ? (
+        <div>
+          <div className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground mb-3">
+            <span>Weak</span>
+            <div className="flex gap-1">
+              <div className="w-3 h-3 rounded-sm bg-primary/20" />
+              <div className="w-3 h-3 rounded-sm bg-primary/40" />
+              <div className="w-3 h-3 rounded-sm bg-primary/60" />
+              <div className="w-3 h-3 rounded-sm bg-primary/80" />
+              <div className="w-3 h-3 rounded-sm bg-primary" />
             </div>
-            <span className="font-serif text-lg text-primary text-right" dir="rtl">{surah.name}</span>
-          </Link>
-        ))}
-        {filteredSurahs.length === 0 && (
-          <div className="col-span-full text-center py-12 text-muted-foreground">
-            No surahs match your search or filter.
+            <span>Strong</span>
           </div>
-        )}
-      </div>
+          <div className="bg-card p-4 sm:p-6 rounded-3xl border border-border/50">
+            {filteredSurahs.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                No surahs match your search or filter.
+              </div>
+            ) : (
+              <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-2">
+                {filteredSurahs.map((surah) => (
+                  <Link
+                    key={surah.id}
+                    href={`/track/library/${surah.id}`}
+                    data-testid={`card-surah-${surah.id}`}
+                    title={`${surah.id}. ${surah.englishName} — ${surah.ayahCount} ayahs${surahStatus[surah.id] === "completed" ? " • Done" : surahStatus[surah.id] === "in_progress" ? " • In progress" : ""}`}
+                    className={cn(
+                      "aspect-square rounded-xl flex items-center justify-center text-sm font-semibold border transition-all duration-200 cursor-pointer hover:scale-110",
+                      getHeatmapColor(surah.id),
+                    )}
+                  >
+                    {surah.id}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredSurahs.map((surah) => (
+            <Link
+              key={surah.id}
+              href={`/track/library/${surah.id}`}
+              data-testid={`card-surah-${surah.id}`}
+              className="bg-card p-4 rounded-2xl border border-border/50 flex items-center justify-between group hover:border-primary/30 transition-colors"
+            >
+              <div className="flex items-center gap-4">
+                <div className={cn(
+                  "w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm transition-colors",
+                  surahStatus[surah.id] === "completed"
+                    ? "bg-primary/20 text-primary group-hover:bg-primary group-hover:text-primary-foreground"
+                    : surahStatus[surah.id] === "in_progress"
+                      ? "bg-accent/15 text-accent group-hover:bg-accent group-hover:text-white"
+                      : "bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground",
+                )}>
+                  {surah.id}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-foreground">{surah.englishName}</h3>
+                    {statusBadge(surah.id)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{surah.type} • {surah.ayahCount} Ayahs</p>
+                </div>
+              </div>
+              <span className="font-serif text-lg text-primary text-right" dir="rtl">{surah.name}</span>
+            </Link>
+          ))}
+          {filteredSurahs.length === 0 && (
+            <div className="col-span-full text-center py-12 text-muted-foreground">
+              No surahs match your search or filter.
+            </div>
+          )}
+        </div>
+      )}
       </div>
       <LogModal isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} />
     </AppShell>
