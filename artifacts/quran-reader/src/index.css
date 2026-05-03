@@ -126,12 +126,15 @@
     box-sizing: border-box;
   }
 
+  html {
+    overflow-y: scroll;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: var(--app-font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    scrollbar-gutter: stable;
   }
 }
 
