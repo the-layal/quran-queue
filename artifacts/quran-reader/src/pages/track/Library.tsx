@@ -162,29 +162,29 @@ export default function LibraryPage() {
             Log Review
           </button>
         </div>
-        <div className="flex gap-1 bg-card border border-border/50 rounded-lg p-0.5 self-start sm:self-end">
-          <button
-            data-testid="button-library-view-standard"
-            onClick={() => setView("standard")}
-            className={cn(
-              "px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1",
-              view === "standard" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <LayoutGrid size={12} /> Standard
-          </button>
-          <button
-            data-testid="button-library-view-simple"
-            onClick={() => setView("simple")}
-            className={cn(
-              "px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1",
-              view === "simple" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <List size={12} /> Simple
-          </button>
-        </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1 bg-card border border-border/50 rounded-lg p-0.5">
+            <button
+              data-testid="button-library-view-standard"
+              onClick={() => setView("standard")}
+              className={cn(
+                "px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1",
+                view === "standard" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <LayoutGrid size={12} /> Standard
+            </button>
+            <button
+              data-testid="button-library-view-simple"
+              onClick={() => setView("simple")}
+              className={cn(
+                "px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1",
+                view === "simple" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <List size={12} /> Simple
+            </button>
+          </div>
           {filterOptions.map((opt) => (
             <button
               key={opt.value}
