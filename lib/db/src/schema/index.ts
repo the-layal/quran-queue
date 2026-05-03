@@ -11,3 +11,6 @@ export const sharedQueuesTable = pgTable("shared_queues", {
 export const insertSharedQueueSchema = createInsertSchema(sharedQueuesTable);
 export type InsertSharedQueue = z.infer<typeof insertSharedQueueSchema>;
 export type SharedQueue = typeof sharedQueuesTable.$inferSelect;
+
+export * from "./auth";
+export * from "./hafith";

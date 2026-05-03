@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState, useRef, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useCallback, useState, useRef, type RefObject } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -13,9 +13,11 @@ import {
   ChevronDown,
   Search,
   X,
+  Check,
   Eye,
   RotateCcw,
 } from "lucide-react";
+import AppShell from "../components/AppShell";
 import { useQuranStore } from "../store/quranStore";
 import {
   fetchSurahVerses,
@@ -670,6 +672,22 @@ function PageInput({
 
 export default function QuranPage() {
   const queuePlayback = useQueuePlayback();
+  const footerRef = useRef<HTMLElement>(null);
+
+  // Expose the footer height as a CSS variable so the main area can reserve
+  // space for the fixed footer in mushaf mode without the content being hidden
+  // behind it.
+  useEffect(() => {
+    const el = footerRef.current;
+    if (!el) return;
+    const apply = () => {
+      document.documentElement.style.setProperty("--mushaf-footer-h", `${el.offsetHeight}px`);
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const {
     currentSurah,
@@ -697,6 +715,47 @@ export default function QuranPage() {
   const manuallyRevealedIds = useQuranStore((s) => s.manuallyRevealedIds);
   const clearManualReveals = useQuranStore((s) => s.clearManualReveals);
   const revealWords = useQuranStore((s) => s.revealWords);
+  const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
+  const confirmSelection = useQuranStore((s) => s.confirmSelection);
+  const hasSelection = selectedWordIds.length > 0;
+
+  // Controls row layout
+  // pillAnchor: how many px LEFT of 50% the pill centre sits.
+  // Computed once from word-by-word mode so [pill + wbw toggle] is perfectly centred.
+  // NEVER updated when blindReviewMode === "blind" (reveal buttons present) — pill stays put.
+  const controlsRowRef  = useRef<HTMLDivElement>(null);
+  const pillRef         = useRef<HTMLDivElement>(null);
+  const blindSectionRef = useRef<HTMLDivElement>(null);
+  const [pillAnchor, setPillAnchor]   = useState(56);   // px left of 50%
+  const [pillHalfW,  setPillHalfW]    = useState(65);   // half of pill width
+  const [compactPill, setCompactPill] = useState(false);
+
+  useLayoutEffect(() => {
+    const pill = pillRef.current;
+    const bs   = blindSectionRef.current;
+    const row  = controlsRowRef.current;
+
+    // Always track pill half-width so blind section stays flush after pill
+    if (pill) setPillHalfW(pill.offsetWidth / 2);
+
+    if (!bs) return;
+
+    // Lock the pill anchor ONLY from word-by-word mode — that is the reference group the user
+    // wants centred. All other mode changes keep the anchor frozen so the pill never moves.
+    if (blindReviewMode === "word-by-word") {
+      setPillAnchor((5 + bs.offsetWidth) / 2);
+    }
+    if (blindReviewMode !== "blind") {
+      setCompactPill(false);
+      return;
+    }
+
+    // Blind mode: check if blind section overflows the row right edge → compact pill
+    if (!row) return;
+    const overflow = bs.getBoundingClientRect().right - (row.getBoundingClientRect().right - 4);
+    if (overflow > 0   && !compactPill) setCompactPill(true);
+    if (overflow < -20 &&  compactPill) setCompactPill(false);
+  }, [blindReviewMode, compactPill]);
 
   const [darkMode, setDarkMode] = useState(() =>
     document.documentElement.classList.contains("dark")
@@ -935,68 +994,74 @@ export default function QuranPage() {
 
   const isFirstLoad = !isMushaf && isLoading && !surahData;
 
+  const rightActions = (
+    <>
+      <button
+        onClick={handleModeSwitch}
+        className={`p-2 rounded-lg hover:bg-muted transition-colors ${isMushaf ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+        aria-label={isMushaf ? "Switch to Reading mode" : "Switch to Mushaf mode"}
+        title={isMushaf ? "Reading mode" : "Mushaf mode"}
+      >
+        {isMushaf ? (
+          <AlignLeft className="w-5 h-5" />
+        ) : (
+          <BookOpen className="w-5 h-5" />
+        )}
+      </button>
+
+      <button
+        onClick={toggleDark}
+        className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+        aria-label="Toggle dark mode"
+      >
+        {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+      </button>
+
+      <button
+        onClick={() => setSettingsOpen(true)}
+        className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+        aria-label="Settings"
+      >
+        <Settings className="w-5 h-5" />
+      </button>
+
+      <button
+        onClick={() => setQueuePanelOpen(!queuePanelOpen)}
+        className={`p-2 rounded-lg transition-colors ${
+          queuePanelOpen
+            ? "bg-primary/15 text-primary"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+        }`}
+        aria-label={queuePanelOpen ? "Close review queue" : "Open review queue"}
+        aria-pressed={queuePanelOpen}
+        title="Review queue"
+      >
+        <ListMusic className="w-5 h-5" />
+      </button>
+    </>
+  );
+
+  const centerContent = (
+    <SurahSelectorButton
+      chapter={chapter}
+      surahNumber={currentSurah}
+      onClick={() => setSurahPickerOpen(true)}
+    />
+  );
+
   return (
-    <div
-      className="flex flex-col min-h-screen bg-background text-foreground"
-      style={isMushaf ? { height: "100dvh", overflow: "hidden" } : undefined}
+    <AppShell
+      rightActions={rightActions}
+      centerContent={centerContent}
     >
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-30 bg-background/90 backdrop-blur-sm border-b border-border grid grid-cols-[auto_1fr_auto] items-center px-4 py-2.5">
-        <button
-          onClick={() => setQueuePanelOpen(!queuePanelOpen)}
-          className={`p-2 rounded-lg transition-colors ${
-            queuePanelOpen
-              ? "bg-primary/15 text-primary"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground"
-          }`}
-          aria-label={queuePanelOpen ? "Close review queue" : "Open review queue"}
-          aria-pressed={queuePanelOpen}
-          title="Review queue"
-        >
-          <ListMusic className="w-5 h-5" />
-        </button>
-
-        <SurahSelectorButton
-          chapter={chapter}
-          surahNumber={currentSurah}
-          onClick={() => setSurahPickerOpen(true)}
-        />
-
-        <div className="flex items-center gap-1">
-          <button
-            onClick={handleModeSwitch}
-            className={`p-2 rounded-lg hover:bg-muted transition-colors ${isMushaf ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
-            aria-label={isMushaf ? "Switch to Reading mode" : "Switch to Mushaf mode"}
-            title={isMushaf ? "Reading mode" : "Mushaf mode"}
-          >
-            {isMushaf ? (
-              <AlignLeft className="w-5 h-5" />
-            ) : (
-              <BookOpen className="w-5 h-5" />
-            )}
-          </button>
-
-          <button
-            onClick={toggleDark}
-            className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-            aria-label="Toggle dark mode"
-          >
-            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
-
-          <button
-            onClick={() => setSettingsOpen(true)}
-            className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-            aria-label="Settings"
-          >
-            <Settings className="w-5 h-5" />
-          </button>
-        </div>
-      </header>
-
+      <div
+        className="flex flex-col flex-1"
+        style={isMushaf ? { height: "calc(100dvh - var(--app-header-h, 57px))", overflow: "hidden" } : undefined}
+      >
       {/* ── Main content ────────────────────────────────────────────────── */}
       <main
         className={`flex-1 ${isMushaf ? "flex flex-col min-h-0" : "overflow-auto"}`}
+        style={isMushaf ? { paddingBottom: "var(--mushaf-footer-h, 80px)" } : undefined}
       >
         {isFirstLoad && (
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
@@ -1038,24 +1103,46 @@ export default function QuranPage() {
       </main>
 
       {/* ── Footer navigation ───────────────────────────────────────────── */}
-      <footer className="sticky bottom-0 z-30 bg-background/90 backdrop-blur-sm border-t border-border">
-        {/* Controls row — three-slot grid keeps the center toggle anchored */}
-        <div
-          className="grid items-center py-1.5 border-b border-border/40 px-2"
-          style={{ gridTemplateColumns: "minmax(0,1fr) auto minmax(0,1fr)" }}
-        >
-          {/* Left slot */}
-          <div className="flex items-center min-w-0">
-            <BrushFinenessToggle />
+      <footer ref={footerRef} className={`${isMushaf ? "fixed inset-x-0 bottom-0" : "sticky bottom-0"} z-30 bg-background/90 backdrop-blur-sm border-t border-border`}>
+        {/* Controls row — pill pinned at absolute centre; blind section flows right from pill edge */}
+        <div ref={controlsRowRef} className="relative flex items-center py-1.5 border-b border-border/40 px-2 min-h-[38px]">
+          {/* Left edge: X / ✓ when words are selected */}
+          {hasSelection && (
+            <div className="absolute left-2 flex items-center gap-1 z-20">
+              <button
+                onClick={clearSelection}
+                title="Clear selection"
+                className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={confirmSelection}
+                title="Confirm selection"
+                className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10 transition-colors"
+              >
+                <Check className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Pill — centre locked; only moves when pillAnchor is re-measured in non-blind modes */}
+          <div
+            ref={pillRef}
+            className="absolute z-10"
+            style={{ left: `calc(50% - ${pillAnchor}px)`, transform: "translateX(-50%)" }}
+          >
+            <BrushFinenessToggle hideActions compactLabels={compactPill} />
           </div>
-          {/* Center slot — always at the grid midpoint */}
-          <div className="flex items-center gap-1.5">
-            <div className="w-px h-4 bg-border/60 flex-shrink-0" aria-hidden />
+
+          {/* Blind section — starts flush right of pill, grows rightward; pill never shifts */}
+          <div
+            ref={blindSectionRef}
+            className="absolute flex items-center gap-1"
+            style={{ left: `calc(50% - ${pillAnchor}px + ${pillHalfW + 5}px)` }}
+          >
+            <div className="w-px h-4 bg-border/60 flex-shrink-0 mx-0.5" aria-hidden />
             <BlindReviewToggle />
-            <div className="w-px h-4 bg-border/60 flex-shrink-0" aria-hidden />
-          </div>
-          {/* Right slot — reveal controls; labels hidden below xs to stay compact */}
-          <div className="flex items-center gap-1 min-w-0">
             {blindReviewMode === "blind" && (
               <>
                 <button
@@ -1065,7 +1152,7 @@ export default function QuranPage() {
                   aria-label="Reveal word"
                 >
                   <Eye className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="hidden xs:inline" aria-hidden>Word</span>
+                  <span aria-hidden>Word</span>
                 </button>
                 <button
                   onClick={handleRevealAyah}
@@ -1074,7 +1161,7 @@ export default function QuranPage() {
                   aria-label="Reveal ayah"
                 >
                   <Eye className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="hidden xs:inline" aria-hidden>Ayah</span>
+                  <span aria-hidden>Ayah</span>
                 </button>
                 <button
                   onClick={clearManualReveals}
@@ -1217,6 +1304,7 @@ export default function QuranPage() {
 
       <ReviewQueuePanel chapters={chapters} queuePlayback={queuePlayback} />
       <AudioControlBar chapters={chapters} queuePlayback={queuePlayback} />
-    </div>
+      </div>
+    </AppShell>
   );
 }

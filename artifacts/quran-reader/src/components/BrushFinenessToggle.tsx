@@ -2,13 +2,18 @@ import { Check, X } from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
 import type { BrushFineness } from "../types/quran";
 
-const TIERS: { value: BrushFineness; label: string; title: string }[] = [
-  { value: "word",  label: "Word",  title: "Highlight individual words" },
-  { value: "line",  label: "Line",  title: "Highlight the whole visual line" },
-  { value: "ayah",  label: "Ayah",  title: "Highlight the complete verse" },
+const TIERS: { value: BrushFineness; label: string; short: string; title: string }[] = [
+  { value: "word", label: "Word", short: "W", title: "Highlight individual words" },
+  { value: "line", label: "Line", short: "L", title: "Highlight the whole visual line" },
+  { value: "ayah", label: "Ayah", short: "A", title: "Highlight the complete verse" },
 ];
 
-export default function BrushFinenessToggle() {
+interface Props {
+  hideActions?: boolean;
+  compactLabels?: boolean;
+}
+
+export default function BrushFinenessToggle({ hideActions = false, compactLabels = false }: Props) {
   const brushFineness    = useQuranStore((s) => s.brushFineness);
   const setBrushFineness = useQuranStore((s) => s.setBrushFineness);
   const selectedWordIds  = useQuranStore((s) => s.selectedWordIds);
@@ -21,7 +26,7 @@ export default function BrushFinenessToggle() {
     <div className="flex items-center gap-2">
       {/* Fineness pill toggle */}
       <div className="flex items-center rounded-lg border border-border bg-muted/50 p-0.5 gap-0.5">
-        {TIERS.map(({ value, label, title }) => (
+        {TIERS.map(({ value, label, short, title }) => (
           <button
             key={value}
             onClick={() => setBrushFineness(value)}
@@ -33,15 +38,13 @@ export default function BrushFinenessToggle() {
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {/* Full label at xs+; initial only below xs so the pill stays compact */}
-            <span className="hidden xs:inline">{label}</span>
-            <span className="xs:hidden">{label[0]}</span>
+            {compactLabels ? short : label}
           </button>
         ))}
       </div>
 
-      {/* X / ✓ action pair — only visible when words are selected */}
-      {hasSelection && (
+      {/* X / ✓ action pair — only visible when words are selected and not suppressed */}
+      {!hideActions && hasSelection && (
         <div className="flex items-center gap-1">
           <button
             onClick={clearSelection}
