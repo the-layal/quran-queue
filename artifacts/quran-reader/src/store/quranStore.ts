@@ -93,6 +93,9 @@ interface QuranStore {
   selectedReciterId: string;
   setSelectedReciterId: (id: string) => void;
 
+  targetScrollAyah: { surahNumber: number; ayahNumber: number } | null;
+  setTargetScrollAyah: (target: { surahNumber: number; ayahNumber: number } | null) => void;
+
   blindReviewMode: BlindReviewMode;
   manuallyRevealedIds: string[];
   lockedContextIds: string[];
@@ -290,6 +293,9 @@ export const useQuranStore = create<QuranStore>()(
 
       setSelectedReciterId: (id) =>
         set({ selectedReciterId: getReciter(id).id }),
+
+      targetScrollAyah: null,
+      setTargetScrollAyah: (targetScrollAyah) => set({ targetScrollAyah }),
     }),
     {
       name: "quran-reader-store",

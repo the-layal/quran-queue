@@ -48,6 +48,17 @@ export const goalsTable = pgTable("goals", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const bookmarksTable = pgTable("bookmarks", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: text("user_id").notNull(),
+  surahNumber: integer("surah_number").notNull(),
+  ayahNumber: integer("ayah_number").notNull(),
+  qfBookmarkId: text("qf_bookmark_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userAyahUnique: uniqueIndex("bookmarks_user_ayah_unique").on(t.userId, t.surahNumber, t.ayahNumber),
+}));
+
 export const insertLogSchema = createInsertSchema(logsTable).omit({ createdAt: true });
 export const insertSrsItemSchema = createInsertSchema(srsItemsTable);
 export const insertDailyPlanSchema = createInsertSchema(dailyPlansTable);
@@ -57,6 +68,7 @@ export const insertGoalSchema = createInsertSchema(goalsTable).omit({
   status: true,
   qfGoalId: true,
 });
+export const insertBookmarkSchema = createInsertSchema(bookmarksTable).omit({ createdAt: true });
 
 export type Log = typeof logsTable.$inferSelect;
 export type InsertLog = z.infer<typeof insertLogSchema>;
@@ -66,3 +78,5 @@ export type DailyPlan = typeof dailyPlansTable.$inferSelect;
 export type InsertDailyPlan = z.infer<typeof insertDailyPlanSchema>;
 export type Goal = typeof goalsTable.$inferSelect;
 export type InsertGoal = z.infer<typeof insertGoalSchema>;
+export type Bookmark = typeof bookmarksTable.$inferSelect;
+export type InsertBookmark = z.infer<typeof insertBookmarkSchema>;

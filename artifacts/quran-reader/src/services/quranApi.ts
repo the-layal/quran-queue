@@ -385,6 +385,15 @@ export async function fetchMushafPage(pageNumber: number): Promise<MushafPageDat
 export const TOTAL_PAGES = 604;
 export const TOTAL_SURAHS = 114;
 
+export async function fetchVerseUthmaniText(surahNumber: number, ayahNumber: number): Promise<string> {
+  const res = await fetch(
+    `${QURANCOM_BASE}/verses/by_key/${surahNumber}:${ayahNumber}?fields=text_uthmani`,
+  );
+  if (!res.ok) throw new Error(`Failed to fetch verse ${surahNumber}:${ayahNumber}`);
+  const data = (await res.json()) as { verse: { text_uthmani: string } };
+  return data.verse.text_uthmani;
+}
+
 interface QuranComTransliterationWord {
   char_type_name: "word" | "end";
   location: string;

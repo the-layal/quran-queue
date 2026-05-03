@@ -37,6 +37,7 @@ const KEYS = {
   actions: "hafith_actions",
   firstActionDate: "hafith_first_action_date",
   nudgeDismissed: "hafith_nudge_dismissed",
+  bookmarks: "hafith_bookmarks",
 };
 
 function ensureDataVersion(): void {

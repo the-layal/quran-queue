@@ -51,10 +51,10 @@ pnpm workspace monorepo using TypeScript. Contains a unified Quran + Hafith memo
   - `src/lib/auth.ts` — session CRUD, OIDC config
 
 ### `lib/db` — Shared Database
-- **Tables**: `shared_queues`, `sessions`, `users`, `logs`, `srs_items`, `daily_plans`
+- **Tables**: `shared_queues`, `sessions`, `users`, `logs`, `srs_items`, `daily_plans`, `bookmarks`
 - `src/schema/index.ts` — barrel (exports all schemas)
 - `src/schema/auth.ts` — `sessions` + `users` tables (Replit Auth)
-- `src/schema/hafith.ts` — `logs`, `srs_items`, `daily_plans` tables
+- `src/schema/hafith.ts` — `logs`, `srs_items`, `daily_plans`, `bookmarks` tables
 
 ### `lib/replit-auth-web` — Browser Auth Hook
 - `src/use-auth.ts` — `useAuth()` hook: calls `GET /api/auth/user`, exposes `user`, `isLoading`, `isAuthenticated`, `login()`, `logout()`

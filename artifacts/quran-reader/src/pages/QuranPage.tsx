@@ -16,7 +16,10 @@ import {
   Check,
   Eye,
   RotateCcw,
+  Bookmark,
+  BookmarkCheck,
 } from "lucide-react";
+import { useBookmarks } from "../hooks/useBookmarks";
 import AppShell from "../components/AppShell";
 import { useQuranStore } from "../store/quranStore";
 import {
@@ -316,19 +319,40 @@ function VerseBlock({
   fontSize,
   translation,
   showTransliteration,
+  isBookmarked,
+  onToggleBookmark,
 }: {
   ayah: QuranAyah;
   fontSize: number;
   translation?: string;
   showTransliteration?: boolean;
+  isBookmarked?: boolean;
+  onToggleBookmark?: () => void;
 }) {
   return (
-    <div className="verse-block flex items-start gap-3">
-      {/* Left: surah:ayah pill badge */}
-      <div className="flex-shrink-0 pt-1">
+    <div id={`verse-${ayah.surah.number}:${ayah.numberInSurah}`} className="verse-block group flex items-start gap-3">
+      {/* Left: surah:ayah pill badge + bookmark */}
+      <div className="flex-shrink-0 pt-1 flex flex-col items-center gap-1">
         <div className="ayah-badge select-none">
           {ayah.surah.number}:{ayah.numberInSurah}
         </div>
+        {onToggleBookmark && (
+          <button
+            onClick={onToggleBookmark}
+            aria-label={isBookmarked ? "Remove bookmark" : "Bookmark this ayah"}
+            className={`p-1 rounded-md transition-all duration-150 ${
+              isBookmarked
+                ? "text-primary opacity-100"
+                : "text-muted-foreground opacity-100 md:opacity-0 md:group-hover:opacity-100"
+            } hover:bg-muted focus-visible:opacity-100 focus-visible:outline-none`}
+            style={{ touchAction: "manipulation" }}
+          >
+            {isBookmarked
+              ? <BookmarkCheck className="w-3.5 h-3.5" />
+              : <Bookmark className="w-3.5 h-3.5" />
+            }
+          </button>
+        )}
       </div>
 
       {/* Right: Arabic text block + optional transliteration + optional translation */}
@@ -442,6 +466,7 @@ function SurahReadingView({
   const containerRef = useRef<HTMLDivElement>(null);
   const fontsReady = useQpcFonts(ayahs, surahNumber);
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
+  const { isBookmarked, toggleBookmark } = useBookmarks();
 
   const { translations, translationLoading, translationError } =
     useReadingTranslation(surahNumber, showTranslation);
@@ -450,6 +475,18 @@ function SurahReadingView({
   const blindReviewMode = useQuranStore((s) => s.blindReviewMode);
   const manuallyRevealedIds = useQuranStore((s) => s.manuallyRevealedIds);
   const lockedContextIds = useQuranStore((s) => s.lockedContextIds);
+  const targetScrollAyah = useQuranStore((s) => s.targetScrollAyah);
+  const setTargetScrollAyah = useQuranStore((s) => s.setTargetScrollAyah);
+
+  // Scroll to a specific ayah requested from Saved Verses navigation
+  useEffect(() => {
+    if (!targetScrollAyah || targetScrollAyah.surahNumber !== surahNumber || !fontsReady) return;
+    const el = document.getElementById(`verse-${surahNumber}:${targetScrollAyah.ayahNumber}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTargetScrollAyah(null);
+    }
+  }, [targetScrollAyah, surahNumber, fontsReady, setTargetScrollAyah]);
 
   // Brush pointer handlers — must be called before any early return
   const brush = useSmartBrush("reading", containerRef as RefObject<HTMLElement | null>);
@@ -601,6 +638,8 @@ function SurahReadingView({
                 ? translations.get(ayah.numberInSurah)
                 : undefined
             }
+            isBookmarked={isBookmarked(surahNumber, ayah.numberInSurah)}
+            onToggleBookmark={() => toggleBookmark(surahNumber, ayah.numberInSurah)}
           />
         ))}
       </div>
