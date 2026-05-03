@@ -173,10 +173,10 @@ export default function SurahDetail() {
       </div>
 
       <div>
-        <div className="mb-4 space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="font-serif font-bold text-lg text-foreground">Ayah Heatmap</h3>
-            <div className="flex gap-1 bg-card border border-border/50 rounded-lg p-0.5">
+        <div className="flex justify-between items-center mb-4 gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <h3 className="font-serif font-bold text-lg text-foreground shrink-0">Ayah Heatmap</h3>
+            <div className="flex gap-1 bg-card border border-border/50 rounded-lg p-0.5 shrink-0">
               <button
                 data-testid="button-view-standard"
                 onClick={() => setViewMode("standard")}
@@ -193,7 +193,7 @@ export default function SurahDetail() {
               </button>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
             <span>Weak</span>
             <div className="flex gap-1">
               {[1, 2, 3, 4, 5].map((l) => (<div key={l} className={`w-3 h-3 rounded-sm ${getColorForMastery(l)} border-none`} />))}
