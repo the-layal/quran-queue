@@ -1,4 +1,5 @@
 import { Switch, Route, Router as WouterRouter } from "wouter";
+import { QueryClientProvider } from "@tanstack/react-query";
 import QuranPage from "@/pages/QuranPage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import Dashboard from "@/pages/track/Dashboard";
@@ -10,6 +11,7 @@ import SettingsPage from "@/pages/track/SettingsPage";
 import NotFound from "@/pages/not-found";
 import { Toaster } from "@/components/ui/toaster";
 import { TrackerStorageProvider } from "@/context/TrackerStorageContext";
+import { queryClient } from "@/lib/queryClient";
 
 function Router() {
   return (
@@ -30,10 +32,12 @@ function Router() {
 function App() {
   return (
     <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-      <TrackerStorageProvider>
-        <Router />
-        <Toaster />
-      </TrackerStorageProvider>
+      <QueryClientProvider client={queryClient}>
+        <TrackerStorageProvider>
+          <Router />
+          <Toaster />
+        </TrackerStorageProvider>
+      </QueryClientProvider>
     </WouterRouter>
   );
 }

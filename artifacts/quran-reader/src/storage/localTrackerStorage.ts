@@ -195,7 +195,7 @@ export class LocalTrackerStorage implements ITrackerStorage {
     return readPlans().slice().sort((a, b) => b.date.localeCompare(a.date));
   }
 
-  async createOrUpdateTodayPlan(bandwidth: number): Promise<DailyPlan> {
+  async createOrUpdatePlan(bandwidth: number): Promise<DailyPlan> {
     const t = todayStr();
     const plans = readPlans();
     const existingIdx = plans.findIndex((p) => p.date === t);
@@ -234,7 +234,7 @@ export class LocalTrackerStorage implements ITrackerStorage {
     return updated;
   }
 
-  async addMore(count: number): Promise<DailyPlan> {
+  async addMoreItems(count: number): Promise<DailyPlan> {
     const plan = await this.requireToday();
     const due = await this.getDueSrsItems();
     const all = await this.getSrsItems();
@@ -250,7 +250,7 @@ export class LocalTrackerStorage implements ITrackerStorage {
     return this.replacePlan(plan);
   }
 
-  async completeItem(reference: string, vibeScale: number): Promise<DailyPlan> {
+  async markPlanCompleted(reference: string, vibeScale: number): Promise<DailyPlan> {
     const plan = await this.requireToday();
     if (!plan.completedItems.includes(reference)) plan.completedItems.push(reference);
     const type = reference.split(":")[0] || "page";
@@ -269,7 +269,7 @@ export class LocalTrackerStorage implements ITrackerStorage {
     return this.replacePlan(plan);
   }
 
-  async completeItemAdvanced(input: CompleteAdvancedInput): Promise<DailyPlan> {
+  async markPlanCompletedAdvanced(input: CompleteAdvancedInput): Promise<DailyPlan> {
     const plan = await this.requireToday();
     if (!plan.completedItems.includes(input.reference)) plan.completedItems.push(input.reference);
     for (const av of input.ayahVibes) {
@@ -283,7 +283,7 @@ export class LocalTrackerStorage implements ITrackerStorage {
     return this.replacePlan(plan);
   }
 
-  async removeItem(reference: string): Promise<DailyPlan> {
+  async removePlanItem(reference: string): Promise<DailyPlan> {
     const plan = await this.requireToday();
     plan.plannedItems = plan.plannedItems.filter((r) => r !== reference);
     plan.completedItems = plan.completedItems.filter((r) => r !== reference);
@@ -296,7 +296,7 @@ export class LocalTrackerStorage implements ITrackerStorage {
     return this.replacePlan(plan);
   }
 
-  async logExtra(input: LogInput): Promise<DailyPlan> {
+  async logExtraRevision(input: LogInput): Promise<DailyPlan> {
     const t = todayStr();
     const plans = readPlans();
     let idx = plans.findIndex((p) => p.date === t);
@@ -317,7 +317,7 @@ export class LocalTrackerStorage implements ITrackerStorage {
     return plans[idx];
   }
 
-  async toggleHistoryItem(date: string, reference: string): Promise<DailyPlan> {
+  async togglePlanItem(date: string, reference: string): Promise<DailyPlan> {
     const plans = readPlans();
     const idx = plans.findIndex((p) => p.date === date);
     if (idx === -1) throw new Error("Plan not found");

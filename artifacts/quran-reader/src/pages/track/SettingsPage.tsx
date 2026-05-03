@@ -1,178 +1,243 @@
 import { useRef, useState } from "react";
-import { Download, Upload, AlertCircle, CheckCircle2, Loader2, LogIn } from "lucide-react";
-import AppShell from "../../components/AppShell";
-import GuestBanner from "../../components/GuestBanner";
-import { useAuth } from "../../hooks/useAuth";
-import { useTrackerStorage } from "../../context/useTrackerStorage";
-import type { BackupData } from "../../storage/trackerStorage";
+import AppShell from "@/components/AppShell";
+import GuestBanner from "@/components/GuestBanner";
+import { Download, Upload, ShieldCheck, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
+import { useQueryClient } from "@tanstack/react-query";
+import type { BackupData } from "@/storage/trackerStorage";
 
-function SettingsContent() {
-  const { storage } = useTrackerStorage();
-  const { isAuthenticated, login } = useAuth();
-  const [downloadStatus, setDownloadStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
-  const [restoreStatus, setRestoreStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
+type RestoreState = "idle" | "confirm" | "loading" | "done" | "error";
+
+export default function SettingsPage() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const downloadBackup = async () => {
-    setDownloadStatus("loading");
+  const [downloadLoading, setDownloadLoading] = useState(false);
+  const [restoreState, setRestoreState] = useState<RestoreState>("idle");
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [pendingBackup, setPendingBackup] = useState<BackupData | null>(null);
+  const [importedCounts, setImportedCounts] = useState<{ logs: number; srsItems: number; dailyPlans: number } | null>(null);
+
+  async function handleDownload() {
+    setDownloadLoading(true);
     try {
-      const data = await storage.backup();
+      const res = await fetch("/api/backup", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to export backup");
+      const data = await res.json();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `hafith-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      const dateStr = new Date().toISOString().split("T")[0];
+      a.download = `hafith-backup-${dateStr}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      setDownloadStatus("done");
-      setTimeout(() => setDownloadStatus("idle"), 2000);
-    } catch {
-      setDownloadStatus("error");
-      setTimeout(() => setDownloadStatus("idle"), 3000);
+    } catch (e) {
+      alert("Export failed: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setDownloadLoading(false);
     }
-  };
+  }
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setRestoreStatus("loading");
-    try {
-      const text = await file.text();
-      const data = JSON.parse(text) as BackupData;
-      await storage.restore(data);
-      setRestoreStatus("done");
-      setTimeout(() => setRestoreStatus("idle"), 2000);
-    } catch {
-      setRestoreStatus("error");
-      setTimeout(() => setRestoreStatus("idle"), 3000);
-    } finally {
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-      <h1 className="text-xl font-semibold">Settings</h1>
-
-      {/* Sign-in prompt for guests */}
-      {!isAuthenticated && (
-        <div className="bg-card border border-border rounded-xl px-4 py-4">
-          <h2 className="text-sm font-semibold mb-1">Back up your progress</h2>
-          <p className="text-xs text-muted-foreground mb-3">
-            Sign in to sync your memorization data across devices and never lose your progress.
-          </p>
-          <button
-            onClick={login}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-          >
-            <LogIn className="w-4 h-4" />
-            Sign in
-          </button>
-        </div>
-      )}
-
-      {/* Data section */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-border/50">
-          <h2 className="text-sm font-semibold">Data Management</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Export or import your memorization data as JSON.
-            {!isAuthenticated && " Works with your local data too."}
-          </p>
-        </div>
-
-        <div className="divide-y divide-border/50">
-          {/* Download backup */}
-          <div className="flex items-center gap-4 px-4 py-4">
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium">Download Backup</div>
-              <div className="text-xs text-muted-foreground">
-                Export all logs, SRS items, and plans as JSON
-              </div>
-            </div>
-            <button
-              onClick={downloadBackup}
-              disabled={downloadStatus === "loading"}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50"
-            >
-              {downloadStatus === "loading" ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : downloadStatus === "done" ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-              ) : downloadStatus === "error" ? (
-                <AlertCircle className="w-4 h-4 text-destructive" />
-              ) : (
-                <Download className="w-4 h-4" />
-              )}
-              {downloadStatus === "done" ? "Downloaded!" : downloadStatus === "error" ? "Error" : "Export"}
-            </button>
-          </div>
-
-          {/* Restore from backup */}
-          <div className="flex items-center gap-4 px-4 py-4">
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium">Restore from Backup</div>
-              <div className="text-xs text-muted-foreground">
-                Import a JSON backup file — this will replace all current data
-              </div>
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json"
-              className="hidden"
-              onChange={handleFileSelect}
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={restoreStatus === "loading"}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50"
-            >
-              {restoreStatus === "loading" ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : restoreStatus === "done" ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-              ) : restoreStatus === "error" ? (
-                <AlertCircle className="w-4 h-4 text-destructive" />
-              ) : (
-                <Upload className="w-4 h-4" />
-              )}
-              {restoreStatus === "done" ? "Restored!" : restoreStatus === "error" ? "Error" : "Import"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* About section */}
-      <div className="bg-card border border-border rounded-xl px-4 py-4">
-        <h2 className="text-sm font-semibold mb-1">About Hafith</h2>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Hafith uses spaced repetition (SM-2 algorithm) to help you memorize the Quran
-          efficiently. Each segment you review gets scheduled for the optimal review time based
-          on how well you remembered it.
-        </p>
-        <div className="mt-3 text-xs text-muted-foreground">
-          <div className="grid grid-cols-2 gap-1">
-            <span>Quality 0–2:</span><span>Reschedule for tomorrow</span>
-            <span>Quality 3–5:</span><span>Extend interval based on ease</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default function SettingsPage() {
-  return (
-    <AppShell
-      centerContent={
-        <span className="text-sm font-medium text-muted-foreground">Settings</span>
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target?.result as string);
+        if (parsed.version !== 1 || !Array.isArray(parsed.logs) || !Array.isArray(parsed.srsItems) || !Array.isArray(parsed.dailyPlans)) {
+          setRestoreError("This file doesn't look like a valid Hafith backup.");
+          setRestoreState("error");
+          return;
+        }
+        setPendingBackup(parsed);
+        setRestoreState("confirm");
+        setRestoreError(null);
+      } catch {
+        setRestoreError("Could not read the file. Make sure it's a valid JSON backup.");
+        setRestoreState("error");
       }
-    >
-      <main className="flex-1">
-        <GuestBanner />
-        <SettingsContent />
-      </main>
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  }
+
+  async function handleConfirmRestore() {
+    if (!pendingBackup) return;
+    setRestoreState("loading");
+    try {
+      const res = await fetch("/api/backup/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pendingBackup),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Restore failed");
+      }
+      const result = await res.json();
+      setImportedCounts(result.imported);
+      setRestoreState("done");
+      queryClient.invalidateQueries();
+    } catch (e) {
+      setRestoreError(e instanceof Error ? e.message : "Something went wrong during restore.");
+      setRestoreState("error");
+    }
+    setPendingBackup(null);
+  }
+
+  function resetRestore() {
+    setRestoreState("idle");
+    setRestoreError(null);
+    setPendingBackup(null);
+    setImportedCounts(null);
+  }
+
+  return (
+    <AppShell>
+      <GuestBanner />
+      <div className="p-4 max-w-xl mx-auto space-y-6">
+        <div className="bg-card rounded-2xl border border-border/50 p-6">
+          <h2 className="font-serif font-semibold text-foreground text-lg mb-4">Account</h2>
+          <div className="flex items-center gap-4">
+            {user?.profileImageUrl ? (
+              <img src={user.profileImageUrl} alt="" className="w-12 h-12 rounded-full" />
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center text-lg font-bold font-serif">
+                {(user?.firstName || user?.email || "U")[0].toUpperCase()}
+              </div>
+            )}
+            <div>
+              <p className="font-medium text-foreground">
+                {user?.firstName ? `${user.firstName}${user.lastName ? " " + user.lastName : ""}` : "Hafith User"}
+              </p>
+              <p className="text-sm text-muted-foreground">{user?.email || ""}</p>
+            </div>
+          </div>
+          <div className="mt-4 pt-4 border-t border-border/40">
+            <a href="/api/logout" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="button-logout-settings">
+              Sign out
+            </a>
+          </div>
+        </div>
+
+        <div className="bg-card rounded-2xl border border-border/50 p-6">
+          <div className="flex items-center gap-2 mb-1">
+            <ShieldCheck size={18} className="text-primary" />
+            <h2 className="font-serif font-semibold text-foreground text-lg">Data Backup</h2>
+          </div>
+          <p className="text-sm text-muted-foreground mb-6">
+            Export all your data — revision logs, SRS progress, and daily plan history — as a JSON file.
+          </p>
+
+          <div className="bg-secondary/30 rounded-xl p-4 border border-border/40 mb-4">
+            <h3 className="font-medium text-foreground text-sm mb-1">Download backup</h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              Saves a <code className="font-mono bg-secondary px-1 rounded">hafith-backup-[date].json</code> file to your device.
+            </p>
+            <button
+              data-testid="button-download-backup"
+              onClick={handleDownload}
+              disabled={downloadLoading}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all",
+                "bg-primary text-primary-foreground hover:bg-primary/90",
+                downloadLoading && "opacity-70 pointer-events-none",
+              )}
+            >
+              {downloadLoading ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+              {downloadLoading ? "Exporting…" : "Download backup"}
+            </button>
+          </div>
+
+          <div className="bg-secondary/30 rounded-xl p-4 border border-border/40">
+            <h3 className="font-medium text-foreground text-sm mb-1">Restore from backup</h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              Upload a <code className="font-mono bg-secondary px-1 rounded">.json</code> backup file. <span className="text-amber-600 font-medium">This will replace all your current data.</span>
+            </p>
+
+            {restoreState === "idle" && (
+              <>
+                <input ref={fileInputRef} type="file" accept=".json,application/json" className="hidden" onChange={handleFileChange} data-testid="input-restore-file" />
+                <button
+                  data-testid="button-upload-backup"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all border border-border hover:bg-secondary/60 text-foreground"
+                >
+                  <Upload size={15} /> Choose backup file
+                </button>
+              </>
+            )}
+
+            {restoreState === "confirm" && pendingBackup && (
+              <div className="space-y-3">
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                  <AlertTriangle size={15} className="text-amber-600 mt-0.5 shrink-0" />
+                  <div className="text-xs text-amber-800">
+                    <p className="font-semibold mb-1">Are you sure?</p>
+                    <p>This will delete all your current data and replace it with:</p>
+                    <ul className="mt-1 space-y-0.5 list-disc list-inside">
+                      <li>{pendingBackup.logs.length} revision logs</li>
+                      <li>{pendingBackup.srsItems.length} SRS items</li>
+                      <li>{pendingBackup.dailyPlans.length} daily plans</li>
+                    </ul>
+                    <p className="mt-1 text-muted-foreground">Backed up on {new Date(pendingBackup.exportedAt).toLocaleDateString()}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button data-testid="button-confirm-restore" onClick={handleConfirmRestore} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium bg-amber-500 text-white hover:bg-amber-600 transition-colors">
+                    Yes, restore
+                  </button>
+                  <button data-testid="button-cancel-restore" onClick={resetRestore} className="px-4 py-2 rounded-xl text-sm font-medium border border-border hover:bg-secondary/60 transition-colors text-foreground">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {restoreState === "loading" && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 size={15} className="animate-spin" /> Restoring your data…
+              </div>
+            )}
+
+            {restoreState === "done" && importedCounts && (
+              <div className="space-y-3">
+                <div className="flex items-start gap-2 bg-primary/5 border border-primary/20 rounded-xl p-3">
+                  <CheckCircle2 size={15} className="text-primary mt-0.5 shrink-0" />
+                  <div className="text-xs text-foreground">
+                    <p className="font-semibold mb-1">Restore complete!</p>
+                    <ul className="space-y-0.5 text-muted-foreground">
+                      <li>{importedCounts.logs} revision logs</li>
+                      <li>{importedCounts.srsItems} SRS items</li>
+                      <li>{importedCounts.dailyPlans} daily plans</li>
+                    </ul>
+                  </div>
+                </div>
+                <button onClick={resetRestore} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  Restore another file
+                </button>
+              </div>
+            )}
+
+            {restoreState === "error" && (
+              <div className="space-y-3">
+                <div className="flex items-start gap-2 bg-destructive/5 border border-destructive/20 rounded-xl p-3">
+                  <AlertTriangle size={15} className="text-destructive mt-0.5 shrink-0" />
+                  <p className="text-xs text-destructive">{restoreError}</p>
+                </div>
+                <button onClick={resetRestore} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  Try again
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </AppShell>
   );
 }

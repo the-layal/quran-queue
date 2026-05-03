@@ -1,137 +1,277 @@
-import { History, Loader2, AlertCircle } from "lucide-react";
-import AppShell from "../../components/AppShell";
-import GuestBanner from "../../components/GuestBanner";
-import { useLogs } from "../../hooks/useTracker";
+import { useState, useMemo } from "react";
+import AppShell from "@/components/AppShell";
+import GuestBanner from "@/components/GuestBanner";
+import { useAllPlans, useToggleHistoryItem } from "@/hooks/useTracker";
+import type { DailyPlan } from "@/hooks/useTracker";
+import { ChevronLeft, ChevronRight, CheckCircle2, Circle, BookOpen, Calendar, Pencil, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { getSurahNamesForPageRange, getPageCountForReference } from "@/lib/page-utils";
 
-const VIBE_LABEL: Record<number, string> = {
-  1: "Blackout", 2: "Wrong", 3: "Difficult", 4: "Hesitated", 5: "Perfect",
-};
-const VIBE_COLOR: Record<number, string> = {
-  1: "text-red-500", 2: "text-orange-400", 3: "text-yellow-500", 4: "text-emerald-500", 5: "text-green-500",
-};
-
-function intensityClass(count: number): string {
-  if (count === 0) return "bg-muted";
-  if (count <= 2) return "bg-emerald-200 dark:bg-emerald-900";
-  if (count <= 5) return "bg-emerald-400 dark:bg-emerald-700";
-  if (count <= 9) return "bg-emerald-600 dark:bg-emerald-500";
-  return "bg-emerald-800 dark:bg-emerald-400";
+function formatReference(ref: string): string {
+  const parts = ref.split(":");
+  const type = parts[0];
+  if (type === "page") {
+    const val = parts[1] || "";
+    const rangeParts = val.split("-");
+    const from = parseInt(rangeParts[0], 10);
+    const to = rangeParts.length > 1 ? parseInt(rangeParts[1], 10) : from;
+    const surahNames = getSurahNamesForPageRange(ref);
+    const pageLabel = from === to ? `Page ${from}` : `Pages ${from}–${to}`;
+    return surahNames ? `${pageLabel} — ${surahNames}` : pageLabel;
+  }
+  if (type === "surah") return `Surah ${parts[1] || ""}`;
+  if (type === "juz") return `Juz ${parts[1] || ""}`;
+  return ref;
 }
 
-function ActivityCalendar({ countByDate }: { countByDate: Record<string, number> }) {
-  const WEEKS = 15;
-  const today = new Date();
-  const totalDays = WEEKS * 7;
-  const cells: Array<{ date: string; count: number }> = [];
-  for (let i = totalDays - 1; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const ds = d.toISOString().slice(0, 10);
-    cells.push({ date: ds, count: countByDate[ds] ?? 0 });
-  }
-  const weeks: typeof cells[] = [];
-  for (let w = 0; w < WEEKS; w++) weeks.push(cells.slice(w * 7, (w + 1) * 7));
-
-  return (
-    <div className="bg-card border border-border rounded-xl p-4">
-      <h2 className="text-sm font-semibold mb-3">Activity — last 15 weeks</h2>
-      <div className="overflow-x-auto">
-        <div className="flex gap-0.5">
-          {weeks.map((week, wi) => (
-            <div key={wi} className="flex flex-col gap-0.5">
-              {week.map(({ date, count }) => (
-                <div key={date} title={count > 0 ? `${date}: ${count} review${count !== 1 ? "s" : ""}` : date}
-                  className={`w-4 h-4 rounded-sm flex-shrink-0 ${intensityClass(count)}`} />
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+function formatPageCount(ref: string): string {
+  const count = getPageCountForReference(ref);
+  return count === 1 ? "1 pg" : `${count} pg`;
 }
 
-function HistoryContent() {
-  const { logs, loading, error, reload } = useLogs();
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-  if (loading) {
-    return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+type DayStatus = "complete" | "partial" | "empty" | "none";
+
+function getDayStatus(plan: DailyPlan | undefined): DayStatus {
+  if (!plan) return "none";
+  const planned = plan.plannedItems || [];
+  const completed = plan.completedItems || [];
+  if (planned.length === 0) return "none";
+  if (completed.length === 0) return "empty";
+  if (completed.length >= planned.length) return "complete";
+  return "partial";
+}
+
+function getDotColor(status: DayStatus): string {
+  switch (status) {
+    case "complete": return "bg-primary";
+    case "partial": return "bg-amber-400";
+    case "empty": return "bg-muted-foreground/40";
+    default: return "";
   }
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 px-4">
-        <AlertCircle className="w-8 h-8 text-destructive" />
-        <p className="text-sm text-destructive text-center">{error}</p>
-        <button onClick={reload} className="text-sm text-primary underline">Try again</button>
-      </div>
-    );
-  }
+}
 
-  const countByDate: Record<string, number> = {};
-  const grouped: Record<string, typeof logs> = {};
-  for (const log of logs) {
-    const date = log.createdAt.slice(0, 10);
-    countByDate[date] = (countByDate[date] ?? 0) + 1;
-    if (!grouped[date]) grouped[date] = [];
-    grouped[date].push(log);
-  }
-  const dates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
-
-  return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">History</h1>
-        <span className="text-xs text-muted-foreground">{logs.length} reviews</span>
-      </div>
-
-      {logs.length > 0 && <ActivityCalendar countByDate={countByDate} />}
-
-      {dates.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <History className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No reviews logged yet.</p>
-          <p className="text-xs mt-1">Complete your daily plan to build a history.</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {dates.map((date) => {
-            const dayLogs = grouped[date];
-            const label = new Date(date + "T12:00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
-            return (
-              <div key={date} className="bg-card border border-border rounded-xl overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-                  <span className="text-sm font-semibold">{label}</span>
-                  <span className="text-xs text-muted-foreground">{dayLogs.length} reviews</span>
-                </div>
-                <div className="divide-y divide-border/50">
-                  {dayLogs.map((log) => (
-                    <div key={log.id} className="flex items-center gap-3 px-4 py-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{log.reference}</div>
-                        <div className="text-xs text-muted-foreground">{log.type}</div>
-                      </div>
-                      <span className={`text-xs font-medium flex-shrink-0 ${VIBE_COLOR[log.vibeScale] ?? "text-muted-foreground"}`}>
-                        {VIBE_LABEL[log.vibeScale] ?? `V${log.vibeScale}`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+function formatLongDate(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 }
 
 export default function HistoryPage() {
+  const today = new Date();
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+
+  const { data: plans = [], isLoading } = useAllPlans();
+  const toggleItem = useToggleHistoryItem();
+
+  const plansByDate = useMemo(() => {
+    const map: Record<string, DailyPlan> = {};
+    for (const p of plans) map[p.date] = p;
+    return map;
+  }, [plans]);
+
+  const selectedPlan = selectedDate ? plansByDate[selectedDate] : null;
+
+  function prevMonth() {
+    if (viewMonth === 0) { setViewYear((y) => y - 1); setViewMonth(11); }
+    else setViewMonth((m) => m - 1);
+  }
+  function nextMonth() {
+    if (viewMonth === 11) { setViewYear((y) => y + 1); setViewMonth(0); }
+    else setViewMonth((m) => m + 1);
+  }
+
+  const calendarDays = useMemo(() => {
+    const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const cells: (number | null)[] = [];
+    for (let i = 0; i < firstDay; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    while (cells.length % 7 !== 0) cells.push(null);
+    return cells;
+  }, [viewYear, viewMonth]);
+
+  function makeDateStr(day: number) {
+    return `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  function isToday(day: number) {
+    return viewYear === today.getFullYear() && viewMonth === today.getMonth() && day === today.getDate();
+  }
+
+  const monthHasSomePlans = useMemo(() => {
+    return calendarDays.some((d) => d !== null && plansByDate[makeDateStr(d)] !== undefined);
+  }, [calendarDays, plansByDate, viewYear, viewMonth]);
+
+  const planned = selectedPlan?.plannedItems || [];
+  const completedSet = new Set<string>(selectedPlan?.completedItems || []);
+
+  function handleDaySelect(ds: string, hasPlan: boolean, isSelected: boolean) {
+    if (!hasPlan) return;
+    setEditing(false);
+    setSelectedDate(isSelected ? null : ds);
+  }
+
+  function handleToggle(ref: string) {
+    if (!selectedDate || toggleItem.isPending) return;
+    toggleItem.mutate({ date: selectedDate, reference: ref });
+  }
+
   return (
-    <AppShell centerContent={<span className="text-sm font-medium text-muted-foreground">History</span>}>
-      <main className="flex-1">
-        <GuestBanner />
-        <HistoryContent />
-      </main>
+    <AppShell>
+      <GuestBanner />
+      <div className="p-4 max-w-5xl mx-auto">
+      <div className="flex flex-col lg:flex-row gap-6">
+        <div className="flex-1 min-w-0">
+          <div className="bg-card rounded-2xl border border-border/50 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <button onClick={prevMonth} className="p-2 rounded-xl hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors" data-testid="button-prev-month">
+                <ChevronLeft size={20} />
+              </button>
+              <h2 className="font-serif text-xl font-semibold text-foreground">{MONTH_NAMES[viewMonth]} {viewYear}</h2>
+              <button onClick={nextMonth} className="p-2 rounded-xl hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors" data-testid="button-next-month">
+                <ChevronRight size={20} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-7 mb-2">
+              {DAY_LABELS.map((d) => (<div key={d} className="text-center text-xs font-medium text-muted-foreground py-1">{d}</div>))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-1">
+              {calendarDays.map((day, idx) => {
+                if (!day) return <div key={`empty-${idx}`} />;
+                const ds = makeDateStr(day);
+                const plan = plansByDate[ds];
+                const status = getDayStatus(plan);
+                const isSelected = selectedDate === ds;
+                const todayDay = isToday(day);
+
+                return (
+                  <button
+                    key={ds}
+                    data-testid={`day-cell-${ds}`}
+                    onClick={() => handleDaySelect(ds, !!plan, isSelected)}
+                    className={cn(
+                      "relative flex flex-col items-center justify-center h-11 rounded-xl transition-all duration-150 select-none",
+                      plan ? "cursor-pointer hover:bg-secondary/50" : "cursor-default",
+                      isSelected ? "bg-primary/10 ring-2 ring-primary ring-offset-1" : "",
+                    )}
+                  >
+                    <span className={cn(
+                      "text-sm font-medium leading-none",
+                      todayDay ? "text-primary font-bold" : plan ? "text-foreground" : "text-muted-foreground/40",
+                    )}>{day}</span>
+                    {status !== "none" && (<span className={cn("w-1.5 h-1.5 rounded-full mt-1", getDotColor(status))} />)}
+                    {todayDay && status === "none" && (<span className="w-1.5 h-1.5 rounded-full mt-1 bg-primary/30" />)}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-5 mt-5 pt-4 border-t border-border/40 flex-wrap">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><span className="w-2 h-2 rounded-full bg-primary inline-block" /> All done</div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> Partial</div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><span className="w-2 h-2 rounded-full bg-muted-foreground/40 inline-block" /> Nothing done</div>
+            </div>
+          </div>
+
+          {!isLoading && !monthHasSomePlans && (
+            <p className="text-center text-sm text-muted-foreground mt-4">No plans recorded this month.</p>
+          )}
+        </div>
+
+        <div className="lg:w-80 shrink-0">
+          {selectedPlan && selectedDate ? (
+            <div className="bg-card rounded-2xl border border-border/50 p-6">
+              <div className="flex items-start justify-between mb-1 gap-2">
+                <div className="flex items-start gap-2 min-w-0">
+                  <Calendar size={16} className="text-primary mt-0.5 shrink-0" />
+                  <h3 className="font-serif font-semibold text-foreground text-base leading-snug">{formatLongDate(selectedDate)}</h3>
+                </div>
+                <button
+                  data-testid="button-edit-history"
+                  onClick={() => setEditing((e) => !e)}
+                  className={cn(
+                    "shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                    editing ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+                  )}
+                >
+                  {editing ? <X size={13} /> : <Pencil size={13} />}
+                  {editing ? "Done" : "Edit"}
+                </button>
+              </div>
+
+              <p className="text-xs text-muted-foreground mb-5">
+                Bandwidth: {selectedPlan.bandwidth} {selectedPlan.bandwidth === 1 ? "page" : "pages"}
+                {" · "}
+                {completedSet.size} / {planned.length} completed
+              </p>
+
+              {editing && (
+                <p className="text-xs text-primary/70 mb-3 bg-primary/5 rounded-lg px-3 py-2">
+                  Tap any item to mark it done or undone.
+                </p>
+              )}
+
+              {planned.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No items were planned.</p>
+              ) : (
+                <ul className="space-y-2" data-testid="history-plan-items">
+                  {planned.map((ref, i) => {
+                    const done = completedSet.has(ref);
+                    return (
+                      <li
+                        key={i}
+                        data-testid={`history-item-${i}`}
+                        onClick={() => editing && handleToggle(ref)}
+                        className={cn(
+                          "flex items-start gap-2.5 p-3 rounded-xl border transition-all",
+                          done ? "bg-primary/5 border-primary/20" : "bg-secondary/30 border-border/40",
+                          editing && "cursor-pointer hover:ring-2 hover:ring-primary/30",
+                          editing && toggleItem.isPending && "opacity-60 pointer-events-none",
+                        )}
+                      >
+                        {done
+                          ? <CheckCircle2 size={16} className="text-primary mt-0.5 shrink-0" />
+                          : <Circle size={16} className="mt-0.5 shrink-0 text-muted-foreground/40" />}
+                        <div className="min-w-0 flex-1">
+                          <p className={cn("font-medium leading-snug text-sm", done ? "text-foreground" : "text-muted-foreground")}>
+                            {formatReference(ref)}
+                          </p>
+                          <p className="text-xs text-muted-foreground/60 mt-0.5">{formatPageCount(ref)}</p>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              {!editing && completedSet.size > 0 && completedSet.size >= planned.length && (
+                <div className="mt-4 pt-4 border-t border-border/40 text-center">
+                  <p className="text-xs text-primary font-semibold">Day fully completed</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="bg-card rounded-2xl border border-border/50 p-8 flex flex-col items-center justify-center text-center min-h-48">
+              <BookOpen size={28} className="text-muted-foreground/30 mb-3" />
+              <p className="text-sm text-muted-foreground">
+                {isLoading ? "Loading plans…" : "Select a highlighted day to see its plan"}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+      </div>
     </AppShell>
   );
 }

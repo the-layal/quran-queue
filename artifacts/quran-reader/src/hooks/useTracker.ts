@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTrackerStorage } from "../context/useTrackerStorage";
 import type {
   Log,
@@ -11,9 +11,6 @@ import type {
 
 export type { Log, SrsItem, DailyPlan, TrackerStats, LogInput, CompleteAdvancedInput };
 
-// Mastery helpers based on vibeScale of the latest log for a reference.
-// Until the LogModal/paintbrush rewrite (task #151+) lands, components can
-// derive mastery directly from a vibe value (1–5).
 export function masteryLevelFromVibe(vibe: number | undefined): "new" | "struggling" | "reviewing" | "learning" | "mastered" {
   if (vibe === undefined) return "new";
   if (vibe <= 1) return "struggling";
@@ -32,87 +29,125 @@ export function masteryLabelFromVibe(vibe: number | undefined): string {
   } as const)[masteryLevelFromVibe(vibe)];
 }
 
+const KEYS = {
+  logs: ["tracker", "logs"] as const,
+  srs: ["tracker", "srs"] as const,
+  todayPlan: ["tracker", "todayPlan"] as const,
+  allPlans: ["tracker", "allPlans"] as const,
+  stats: ["tracker", "stats"] as const,
+};
+
+function useInvalidateAll() {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: ["tracker"] });
+  };
+}
+
 export function useLogs() {
   const { storage } = useTrackerStorage();
-  const [logs, setLogs] = useState<Log[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    storage.getLogs()
-      .then(setLogs)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [storage]);
-
-  useEffect(() => { load(); }, [load]);
-
-  return { logs, loading, error, reload: load };
+  return useQuery<Log[]>({ queryKey: KEYS.logs, queryFn: () => storage.getLogs() });
 }
 
 export function useSrsItems() {
   const { storage } = useTrackerStorage();
-  const [items, setItems] = useState<SrsItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    storage.getSrsItems()
-      .then(setItems)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [storage]);
-
-  useEffect(() => { load(); }, [load]);
-
-  return { items, loading, error, reload: load };
+  return useQuery<SrsItem[]>({ queryKey: KEYS.srs, queryFn: () => storage.getSrsItems() });
 }
 
 export function useStats() {
   const { storage } = useTrackerStorage();
-  const [stats, setStats] = useState<TrackerStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    storage.getStats()
-      .then(setStats)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [storage]);
-
-  useEffect(() => { load(); }, [load]);
-
-  return { stats, loading, error, reload: load };
+  return useQuery<TrackerStats>({ queryKey: KEYS.stats, queryFn: () => storage.getStats() });
 }
 
 export function useTodayPlan() {
   const { storage } = useTrackerStorage();
-  const [plan, setPlan] = useState<DailyPlan | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    storage.getTodayPlan()
-      .then(setPlan)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [storage]);
-
-  useEffect(() => { load(); }, [load]);
-
-  return { plan, loading, error, reload: load };
+  return useQuery<DailyPlan | null>({ queryKey: KEYS.todayPlan, queryFn: () => storage.getTodayPlan() });
 }
 
-export function usePostLog() {
+export function useAllPlans() {
   const { storage } = useTrackerStorage();
-  return useCallback((input: LogInput) => storage.createLog(input), [storage]);
+  return useQuery<DailyPlan[]>({ queryKey: KEYS.allPlans, queryFn: () => storage.getAllPlans() });
+}
+
+export function useCreateOrUpdatePlan() {
+  const { storage } = useTrackerStorage();
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: (vars: { bandwidth: number }) => storage.createOrUpdatePlan(vars.bandwidth),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function useMarkPlanCompleted() {
+  const { storage } = useTrackerStorage();
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: (vars: { reference: string; vibeScale: number }) =>
+      storage.markPlanCompleted(vars.reference, vars.vibeScale),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function useMarkPlanCompletedAdvanced() {
+  const { storage } = useTrackerStorage();
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: (vars: CompleteAdvancedInput) => storage.markPlanCompletedAdvanced(vars),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function useAddMoreItems() {
+  const { storage } = useTrackerStorage();
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: (vars: { count: number }) => storage.addMoreItems(vars.count),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function useRemovePlanItem() {
+  const { storage } = useTrackerStorage();
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: (vars: { reference: string }) => storage.removePlanItem(vars.reference),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function useClearPlan() {
+  const { storage } = useTrackerStorage();
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: () => storage.clearPlan(),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function useToggleHistoryItem() {
+  const { storage } = useTrackerStorage();
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: (vars: { date: string; reference: string }) =>
+      storage.togglePlanItem(vars.date, vars.reference),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function useCreateLog() {
+  const { storage } = useTrackerStorage();
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: (input: LogInput) => storage.createLog(input),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function useLogExtraRevision() {
+  const { storage } = useTrackerStorage();
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: (input: LogInput) => storage.logExtraRevision(input),
+    onSuccess: () => invalidate(),
+  });
 }
