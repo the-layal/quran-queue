@@ -162,7 +162,7 @@ export default function LibraryPage() {
             Log Review
           </button>
         </div>
-        <div className="flex gap-1 bg-card border border-border/50 rounded-lg p-0.5 self-start">
+        <div className="flex gap-1 bg-card border border-border/50 rounded-lg p-0.5 self-end">
           <button
             data-testid="button-library-view-standard"
             onClick={() => setView("standard")}
