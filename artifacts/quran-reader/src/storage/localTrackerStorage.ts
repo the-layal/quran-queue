@@ -164,6 +164,7 @@ function writeSrs(v: SrsItem[]): void { writeJSON(KEYS.srs, v); }
 function readPlans(): DailyPlan[] { return readJSON<DailyPlan[]>(KEYS.plans, []); }
 function writePlans(v: DailyPlan[]): void { writeJSON(KEYS.plans, v); }
 
+
 function applyVibe(reference: string, type: string, vibeScale: number): void {
   const srsItems = readSrs();
   const refs = expandSurahRange(reference);
@@ -208,6 +209,63 @@ export class LocalTrackerStorage implements ITrackerStorage {
     applyVibe(input.reference, input.type, input.vibeScale);
     recordAction();
     return log;
+  }
+
+  async deleteLog(id: number): Promise<{ deleted: boolean; srsRemoved: boolean }> {
+    let logs = readLogs();
+    const idx = logs.findIndex((l) => l.id === id);
+    if (idx === -1) return { deleted: false, srsRemoved: false };
+    const log = logs[idx];
+    logs.splice(idx, 1);
+    writeLogs(logs);
+
+    const srsRefsToRemove = new Set<string>();
+
+    // Cascade: delete companion ayah logs and mark their SRS for removal when
+    // no remaining segment log still fans out to those ayahs.
+    if (log.type !== "ayah") {
+      for (const g of getAyahsForReference(log.reference)) {
+        for (const a of g.ayahs) {
+          const stillCoveredBySegment = logs.some(
+            (l) =>
+              l.type !== "ayah" &&
+              getAyahsForReference(l.reference).some(
+                (gg) => gg.surah === g.surah && gg.ayahs.includes(a),
+              ),
+          );
+          if (stillCoveredBySegment) continue;
+          const ayahRef = `ayah:${g.surah}:${a}`;
+          const companions = logs.filter((l) => l.reference === ayahRef);
+          if (companions.length > 0) {
+            logs = logs.filter((l) => l.reference !== ayahRef);
+            writeLogs(logs);
+          }
+          srsRefsToRemove.add(ayahRef);
+        }
+      }
+    }
+
+    // Mark expanded segment SRS refs for removal when no remaining log covers them.
+    for (const segRef of expandSurahRange(log.reference)) {
+      const stillCovered = logs.some(
+        (l) => l.reference === segRef || expandSurahRange(l.reference).includes(segRef),
+      );
+      if (!stillCovered) srsRefsToRemove.add(segRef);
+    }
+
+    let srsRemoved = false;
+    const srsItems = readSrs();
+    let srsChanged = false;
+    for (const ref of srsRefsToRemove) {
+      const srsIdx = srsItems.findIndex((s) => s.reference === ref);
+      if (srsIdx !== -1) {
+        srsItems.splice(srsIdx, 1);
+        srsChanged = true;
+        srsRemoved = true;
+      }
+    }
+    if (srsChanged) writeSrs(srsItems);
+    return { deleted: true, srsRemoved };
   }
 
   async getSrsItems(): Promise<SrsItem[]> {

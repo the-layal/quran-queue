@@ -61,6 +61,7 @@ export interface ITrackerStorage {
   // Logs
   getLogs(): Promise<Log[]>;
   createLog(input: LogInput): Promise<Log>;
+  deleteLog(id: number): Promise<{ deleted: boolean; srsRemoved: boolean }>;
 
   // SRS items
   getSrsItems(): Promise<SrsItem[]>;

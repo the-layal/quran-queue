@@ -151,3 +151,12 @@ export function useLogExtraRevision() {
     onSuccess: () => invalidate(),
   });
 }
+
+export function useDeleteLog() {
+  const { storage } = useTrackerStorage();
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: (id: number) => storage.deleteLog(id),
+    onSuccess: () => invalidate(),
+  });
+}

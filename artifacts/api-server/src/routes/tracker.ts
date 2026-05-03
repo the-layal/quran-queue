@@ -112,6 +112,67 @@ router.post("/logs", async (req: Request, res: Response) => {
   }
 });
 
+router.delete("/logs/:id", async (req: Request, res: Response) => {
+  if (!isAuth(req, res)) return;
+  try {
+    const userId = req.user!.id;
+    const id = parseInt(req.params.id as string, 10);
+    if (isNaN(id)) { res.status(400).json({ message: "Invalid log id" }); return; }
+
+    const allLogs = await storage.getLogs(userId);
+    const log = allLogs.find((l) => l.id === id);
+    if (!log) { res.status(404).json({ message: "Log not found" }); return; }
+
+    await storage.deleteLog(id);
+    let remainingLogs = allLogs.filter((l) => l.id !== id);
+
+    const srsRefsToRemove = new Set<string>();
+
+    // Cascade: delete companion ayah logs and mark their SRS for removal when
+    // no remaining segment log still fans out to those ayahs.
+    if (log.type !== "ayah") {
+      for (const g of getAyahsForReference(log.reference)) {
+        for (const a of g.ayahs) {
+          const stillCoveredBySegment = remainingLogs.some(
+            (l) =>
+              l.type !== "ayah" &&
+              getAyahsForReference(l.reference).some(
+                (gg) => gg.surah === g.surah && gg.ayahs.includes(a),
+              ),
+          );
+          if (stillCoveredBySegment) continue;
+          const ayahRef = `ayah:${g.surah}:${a}`;
+          const companions = remainingLogs.filter((l) => l.reference === ayahRef);
+          for (const cl of companions) await storage.deleteLog(cl.id);
+          remainingLogs = remainingLogs.filter((l) => l.reference !== ayahRef);
+          srsRefsToRemove.add(ayahRef);
+        }
+      }
+    }
+
+    // Mark expanded segment SRS refs for removal when no remaining log covers them.
+    for (const segRef of expandSurahRange(log.reference)) {
+      const stillCovered = remainingLogs.some(
+        (l) => l.reference === segRef || expandSurahRange(l.reference).includes(segRef),
+      );
+      if (!stillCovered) srsRefsToRemove.add(segRef);
+    }
+
+    let srsRemoved = false;
+    for (const ref of srsRefsToRemove) {
+      const srsItem = await storage.getSrsItemByReference(userId, ref);
+      if (srsItem) {
+        await storage.deleteSrsItem(srsItem.id);
+        srsRemoved = true;
+      }
+    }
+
+    res.json({ deleted: true, srsRemoved });
+  } catch {
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
 // ── SRS items ─────────────────────────────────────────────────────────────────
 
 router.get("/srs", async (req: Request, res: Response) => {

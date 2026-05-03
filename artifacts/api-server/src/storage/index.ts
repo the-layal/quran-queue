@@ -8,6 +8,7 @@ export interface IStorage {
   // Logs
   getLogs(userId: string): Promise<Log[]>;
   createLog(values: InsertLog): Promise<Log>;
+  deleteLog(id: number): Promise<void>;
   bulkCreateLogs(items: InsertLog[]): Promise<void>;
 
   // SRS items
@@ -42,6 +43,10 @@ export class DatabaseStorage implements IStorage {
   async createLog(values: InsertLog): Promise<Log> {
     const [row] = await db.insert(logsTable).values(values).returning();
     return row;
+  }
+
+  async deleteLog(id: number): Promise<void> {
+    await db.delete(logsTable).where(eq(logsTable.id, id));
   }
 
   async bulkCreateLogs(items: InsertLog[]): Promise<void> {

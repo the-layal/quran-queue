@@ -35,6 +35,10 @@ export class ApiTrackerStorage implements ITrackerStorage {
     return jsonPost<Log>("/api/logs", input);
   }
 
+  deleteLog(id: number): Promise<{ deleted: boolean; srsRemoved: boolean }> {
+    return apiFetch<{ deleted: boolean; srsRemoved: boolean }>(`/api/logs/${id}`, { method: "DELETE" });
+  }
+
   getSrsItems(): Promise<SrsItem[]> {
     return apiFetch<SrsItem[]>("/api/srs");
   }
