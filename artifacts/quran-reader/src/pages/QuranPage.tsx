@@ -1246,7 +1246,7 @@ export default function QuranPage() {
                   aria-label="Reveal word"
                 >
                   <Eye className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span aria-hidden>Word</span>
+                  {!compactPill && <span aria-hidden>Word</span>}
                 </button>
                 <button
                   onClick={handleRevealAyah}
@@ -1255,7 +1255,7 @@ export default function QuranPage() {
                   aria-label="Reveal ayah"
                 >
                   <Eye className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span aria-hidden>Ayah</span>
+                  {!compactPill && <span aria-hidden>Ayah</span>}
                 </button>
                 <button
                   onClick={clearManualReveals}
