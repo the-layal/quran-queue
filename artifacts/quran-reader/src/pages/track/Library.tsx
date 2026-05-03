@@ -256,27 +256,32 @@ export default function LibraryPage() {
             </div>
             <span>Strong</span>
           </div>
-          <div className="bg-card p-4 sm:p-6 rounded-3xl border border-border/50">
-            {filteredSurahs.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                No surahs match your search or filter.
-              </div>
-            ) : (
-              <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-2">
-                {filteredSurahs.map((surah) => (
-                  <Link
-                    key={surah.id}
-                    href={`/track/library/${surah.id}`}
-                    data-testid={`card-surah-${surah.id}`}
-                    title={`${surah.id}. ${surah.englishName} — ${surah.ayahCount} ayahs${surahStatus[surah.id] === "completed" ? " • Done" : surahStatus[surah.id] === "in_progress" ? " • In progress" : ""}`}
-                    className={cn(
-                      "aspect-square rounded-xl flex items-center justify-center text-sm font-semibold border transition-all duration-200 cursor-pointer hover:scale-110",
-                      getHeatmapColor(surah.id),
-                    )}
-                  >
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredSurahs.map((surah) => (
+              <Link
+                key={surah.id}
+                href={`/track/library/${surah.id}`}
+                data-testid={`card-surah-${surah.id}`}
+                className="bg-card p-4 rounded-2xl border border-border/50 flex items-center justify-between group hover:border-primary/30 transition-colors"
+              >
+                <div className="flex items-center gap-4">
+                  <div className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm transition-all border",
+                    getHeatmapColor(surah.id),
+                  )}>
                     {surah.id}
-                  </Link>
-                ))}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-foreground">{surah.englishName}</h3>
+                    <p className="text-xs text-muted-foreground">{surah.type} • {surah.ayahCount} Ayahs</p>
+                  </div>
+                </div>
+                <span className="font-serif text-lg text-primary text-right" dir="rtl">{surah.name}</span>
+              </Link>
+            ))}
+            {filteredSurahs.length === 0 && (
+              <div className="col-span-full text-center py-12 text-muted-foreground">
+                No surahs match your search or filter.
               </div>
             )}
           </div>
