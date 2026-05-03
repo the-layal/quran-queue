@@ -2,6 +2,28 @@ import { qfTokenService } from "./qfTokenService";
 
 const QF_GOALS_URL = "https://api.quran.foundation/api/v4/user/goals";
 
+/** Parse QF API JSON — handles both raw arrays and wrapped { data: [...] } shapes. */
+function parseGoalList(body: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(body)) return body as Array<Record<string, unknown>>;
+  if (body && typeof body === "object") {
+    const obj = body as Record<string, unknown>;
+    if (Array.isArray(obj.data)) return obj.data as Array<Record<string, unknown>>;
+    if (Array.isArray(obj.goals)) return obj.goals as Array<Record<string, unknown>>;
+  }
+  return [];
+}
+
+/** Parse a single QF goal record — handles both flat and wrapped shapes. */
+function parseSingleGoal(body: unknown): { id?: string | number } {
+  if (body && typeof body === "object") {
+    const obj = body as Record<string, unknown>;
+    // wrapped: { data: { id: ... } }
+    if (obj.data && typeof obj.data === "object") return obj.data as { id?: string | number };
+    return obj as { id?: string | number };
+  }
+  return {};
+}
+
 export async function syncGoalToQF(
   userId: string,
   goal: {
@@ -30,7 +52,7 @@ export async function syncGoalToQF(
     });
 
     if (!res.ok) return null;
-    const data = (await res.json()) as { id?: string | number };
+    const data = parseSingleGoal(await res.json());
     return data.id ? String(data.id) : null;
   } catch {
     return null;
@@ -82,7 +104,7 @@ export async function fetchQFGoals(userId: string): Promise<QFGoalRecord[]> {
     });
 
     if (!res.ok) return [];
-    const raw = (await res.json()) as Array<Record<string, unknown>>;
+    const raw = parseGoalList(await res.json());
     return raw.map((g) => ({ ...g, id: String(g.id) })) as QFGoalRecord[];
   } catch {
     return [];

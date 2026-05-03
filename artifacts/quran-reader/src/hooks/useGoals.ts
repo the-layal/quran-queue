@@ -172,7 +172,7 @@ export function useGoals() {
     const guestGoals = readGuestGoals();
     if (guestGoals.length === 0) return;
 
-    // Migrate each guest goal to the server (best-effort, don't block UI)
+    // Migrate each guest goal to the server — preserve completedAyahsList + status
     Promise.all(
       guestGoals.map((g) =>
         fetch("/api/goals", {
@@ -185,6 +185,8 @@ export function useGoals() {
             ayahEnd: g.ayahEnd,
             targetDate: g.targetDate,
             dailyTarget: g.dailyTarget,
+            completedAyahsList: g.completedAyahsList || [],
+            status: g.status || "active",
           }),
         }).catch(() => null),
       ),

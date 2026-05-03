@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
 import { storage } from "../storage/index";
 import { syncGoalToQF, pushProgressToQF, fetchQFGoals } from "../lib/qfGoalsService";
+import { SURAHS } from "../lib/page-utils";
 
 const router: IRouter = Router();
 
@@ -13,12 +14,20 @@ function isAuth(req: Request, res: Response): req is Request & { user: NonNullab
   return true;
 }
 
+function getSurahAyahCount(surahNumber: number): number {
+  const s = SURAHS.find((x) => x.id === surahNumber);
+  return s?.ayahCount ?? 0;
+}
+
 const createGoalSchema = z.object({
   surahNumber: z.number().int().min(1).max(114),
   ayahStart: z.number().int().min(1),
   ayahEnd: z.number().int().min(1),
   targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   dailyTarget: z.number().int().min(1),
+  // Optional migration fields — passed when importing guest goals after sign-in
+  completedAyahsList: z.array(z.number().int()).optional(),
+  status: z.enum(["active", "complete"]).optional(),
 });
 
 router.get("/goals", async (req: Request, res: Response) => {
@@ -38,7 +47,29 @@ router.post("/goals", async (req: Request, res: Response) => {
       return;
     }
 
-    const goal = await storage.createGoal({ userId, ...input });
+    // Server-side surah verse count validation
+    const surahAyahCount = getSurahAyahCount(input.surahNumber);
+    if (surahAyahCount > 0) {
+      if (input.ayahStart > surahAyahCount) {
+        res.status(400).json({ message: `ayahStart exceeds surah ${input.surahNumber}'s verse count (${surahAyahCount})` });
+        return;
+      }
+      if (input.ayahEnd > surahAyahCount) {
+        res.status(400).json({ message: `ayahEnd exceeds surah ${input.surahNumber}'s verse count (${surahAyahCount})` });
+        return;
+      }
+    }
+
+    const goal = await storage.createGoal({
+      userId,
+      surahNumber: input.surahNumber,
+      ayahStart: input.ayahStart,
+      ayahEnd: input.ayahEnd,
+      targetDate: input.targetDate,
+      dailyTarget: input.dailyTarget,
+      completedAyahsList: input.completedAyahsList,
+      status: input.status,
+    });
 
     // Best-effort QF sync — fire async, don't block the response
     syncGoalToQF(userId, input).then(async (qfGoalId) => {

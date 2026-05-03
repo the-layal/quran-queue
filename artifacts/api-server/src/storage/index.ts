@@ -34,7 +34,10 @@ export interface IStorage {
 
   // Goals
   getGoals(userId: string): Promise<Goal[]>;
-  createGoal(goal: Omit<Goal, "id" | "createdAt" | "completedAyahsList" | "status" | "qfGoalId">): Promise<Goal>;
+  createGoal(
+    goal: Omit<Goal, "id" | "createdAt" | "completedAyahsList" | "status" | "qfGoalId"> &
+      Partial<Pick<Goal, "completedAyahsList" | "status">>,
+  ): Promise<Goal>;
   updateGoal(id: number, data: Partial<Goal>): Promise<Goal>;
   deleteGoal(id: number): Promise<void>;
 
@@ -151,11 +154,14 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(goalsTable.createdAt));
   }
 
-  async createGoal(goal: Omit<Goal, "id" | "createdAt" | "completedAyahsList" | "status" | "qfGoalId">): Promise<Goal> {
+  async createGoal(
+    goal: Omit<Goal, "id" | "createdAt" | "completedAyahsList" | "status" | "qfGoalId"> &
+      Partial<Pick<Goal, "completedAyahsList" | "status">>,
+  ): Promise<Goal> {
     const [row] = await db.insert(goalsTable).values({
       ...goal,
-      completedAyahsList: [],
-      status: "active",
+      completedAyahsList: goal.completedAyahsList ?? [],
+      status: goal.status ?? "active",
       qfGoalId: null,
     }).returning();
     return row;

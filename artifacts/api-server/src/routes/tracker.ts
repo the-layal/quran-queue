@@ -103,13 +103,10 @@ router.post("/logs", async (req: Request, res: Response) => {
       await storage.updateSrsItem(srsItem.id, update);
     }
 
-    // Expand any reference type (ayah, ayah range, page, surah) and update all matching goals
+    // Expand any reference type (ayah, ayah range, page, surah) and batch-update all matching goals
     const ayahGroups = getAyahsForReference(input.reference);
-    for (const group of ayahGroups) {
-      for (const ayah of group.ayahs) {
-        await updateGoalProgressForAyah(userId, group.surah, ayah);
-      }
-    }
+    const ayahPairs = ayahGroups.flatMap((g) => g.ayahs.map((a) => ({ surah: g.surah, ayah: a })));
+    void updateGoalProgressForAyahs(userId, ayahPairs);
 
     res.status(201).json(log);
   } catch (err) {
@@ -421,30 +418,54 @@ async function applyVibeToReference(userId: string, type: string, reference: str
   }
 }
 
-async function updateGoalProgressForAyah(userId: string, surahNumber: number, ayahNumber: number): Promise<void> {
+/**
+ * Update all matching goals for a batch of (surah, ayah) pairs from a single
+ * review event, then push progress to QF once per affected goal (not per ayah).
+ */
+async function updateGoalProgressForAyahs(
+  userId: string,
+  ayahPairs: Array<{ surah: number; ayah: number }>,
+): Promise<void> {
+  if (ayahPairs.length === 0) return;
   try {
     const goals = await storage.getGoals(userId);
-    const matching = goals.filter(
-      (g) =>
-        g.status === "active" &&
-        g.surahNumber === surahNumber &&
-        g.ayahStart <= ayahNumber &&
-        g.ayahEnd >= ayahNumber,
-    );
-    for (const goal of matching) {
-      const completed = new Set<number>(goal.completedAyahsList || []);
-      if (completed.has(ayahNumber)) continue;
-      completed.add(ayahNumber);
-      const newList = Array.from(completed);
-      const total = goal.ayahEnd - goal.ayahStart + 1;
-      const isComplete = newList.length >= total;
-      const updated = await storage.updateGoal(goal.id, {
-        completedAyahsList: newList,
+    const activeGoals = goals.filter((g) => g.status === "active");
+    if (activeGoals.length === 0) return;
+
+    // Build a completed-set per goal, apply all ayahs, then write once per goal
+    const goalUpdates = new Map<number, { completedList: number[]; total: number; qfGoalId: string | null | undefined }>();
+
+    for (const { surah, ayah } of ayahPairs) {
+      for (const goal of activeGoals) {
+        if (goal.surahNumber !== surah || goal.ayahStart > ayah || goal.ayahEnd < ayah) continue;
+        if (!goalUpdates.has(goal.id)) {
+          goalUpdates.set(goal.id, {
+            completedList: [...(goal.completedAyahsList || [])],
+            total: goal.ayahEnd - goal.ayahStart + 1,
+            qfGoalId: goal.qfGoalId,
+          });
+        }
+        const entry = goalUpdates.get(goal.id)!;
+        if (!entry.completedList.includes(ayah)) entry.completedList.push(ayah);
+      }
+    }
+
+    // Persist each updated goal and push once to QF
+    for (const [goalId, { completedList, total, qfGoalId }] of goalUpdates) {
+      const isComplete = completedList.length >= total;
+      const updated = await storage.updateGoal(goalId, {
+        completedAyahsList: completedList,
         status: isComplete ? "complete" : "active",
       });
-      // Push progress to QF in background — best-effort
-      if (updated.qfGoalId) {
-        void pushProgressToQF(userId, updated.qfGoalId, newList.length, total, isComplete);
+      // Push progress to QF in background — best-effort, once per goal
+      if (qfGoalId ?? updated.qfGoalId) {
+        void pushProgressToQF(
+          userId,
+          (qfGoalId ?? updated.qfGoalId)!,
+          updated.completedAyahsList?.length ?? completedList.length,
+          total,
+          isComplete,
+        );
       }
     }
   } catch {
@@ -468,13 +489,15 @@ router.post("/plans/today/complete", async (req: Request, res: Response) => {
     await applyVibeToReference(userId, type, input.reference, input.vibeScale);
 
     const ayahGroups = getAyahsForReference(input.reference);
+    const ayahPairsComplete: Array<{ surah: number; ayah: number }> = [];
     for (const group of ayahGroups) {
       for (const ayah of group.ayahs) {
         const ayahRef = `ayah:${group.surah}:${ayah}`;
         await applyVibeToReference(userId, "ayah", ayahRef, input.vibeScale);
-        await updateGoalProgressForAyah(userId, group.surah, ayah);
+        ayahPairsComplete.push({ surah: group.surah, ayah });
       }
     }
+    void updateGoalProgressForAyahs(userId, ayahPairsComplete);
 
     res.json(plan);
   } catch (err) {
@@ -511,8 +534,8 @@ router.post("/plans/today/complete-advanced", async (req: Request, res: Response
     for (const av of input.ayahVibes) {
       const ayahRef = `ayah:${av.surah}:${av.ayah}`;
       await applyVibeToReference(userId, "ayah", ayahRef, av.vibe);
-      await updateGoalProgressForAyah(userId, av.surah, av.ayah);
     }
+    void updateGoalProgressForAyahs(userId, input.ayahVibes.map((av) => ({ surah: av.surah, ayah: av.ayah })));
 
     const overallVibe = Math.round(input.ayahVibes.reduce((s, a) => s + a.vibe, 0) / input.ayahVibes.length);
     const refType = input.reference.split(":")[0] || "page";
