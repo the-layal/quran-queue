@@ -836,33 +836,31 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
 
       // Transliteration popover — anchored to this word's bounding box.
       // Independent from active-word toggle; both can fire on the same tap.
+      // Use functional setState so re-tap toggles correctly without depending
+      // on the latest `popover` value (which would stale-close this callback).
       if (showTransliteration) {
         const s = wordGroup.getAttribute("data-surah");
         const a = wordGroup.getAttribute("data-aya");
         if (s && a) {
           const ayahKey = `${parseInt(s, 10)}:${parseInt(a, 10)}`;
-          // Re-tap on a word in the currently-shown ayah closes the popover
-          // (toggle behavior consistent with the active-word interaction).
-          if (popover && popover.ayahKey === ayahKey) {
-            setPopover(null);
-          } else {
-            const rect = (wordGroup as Element).getBoundingClientRect();
-            // Clamp horizontally so the popover stays inside the viewport.
-            const margin = 12;
-            const halfMaxW = 160; // matches max-w-xs (~20rem) / 2
-            const x = Math.max(
-              margin + halfMaxW,
-              Math.min(window.innerWidth - margin - halfMaxW, rect.left + rect.width / 2)
-            );
-            // If there isn't room above (popover ~ 120px tall), flip below.
-            const flipBelow = rect.top < 140;
-            setPopover({
-              ayahKey,
-              x,
-              y: flipBelow ? rect.bottom : rect.top,
-              placement: flipBelow ? "below" : "above",
-            });
-          }
+          const rect = (wordGroup as Element).getBoundingClientRect();
+          const margin = 12;
+          const halfMaxW = 160; // matches max-w-xs (~20rem) / 2
+          const x = Math.max(
+            margin + halfMaxW,
+            Math.min(window.innerWidth - margin - halfMaxW, rect.left + rect.width / 2)
+          );
+          const flipBelow = rect.top < 140;
+          setPopover((prev) =>
+            prev && prev.ayahKey === ayahKey
+              ? null
+              : {
+                  ayahKey,
+                  x,
+                  y: flipBelow ? rect.bottom : rect.top,
+                  placement: flipBelow ? "below" : "above",
+                }
+          );
         }
       }
 
@@ -914,7 +912,16 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
       const t = e.target as Node | null;
       if (!t) return;
       if (popoverRef.current?.contains(t)) return;
-      if (containerRef.current?.contains(t)) return; // tap inside mushaf — handled by handleTap
+      // Inside the mushaf container: only let handleTap manage the popover when
+      // the click resolves to an actual word. Clicks on blank page area should
+      // still close the popover (matches outside-click expectations).
+      if (containerRef.current?.contains(t)) {
+        const wordHit =
+          t instanceof Element
+            ? t.closest('[data-word-index-in-ayah][data-type="text"]')
+            : null;
+        if (wordHit) return;
+      }
       setPopover(null);
     };
     const onKey = (e: KeyboardEvent) => {
