@@ -452,15 +452,27 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     prevSvgSelectedRef.current = new Set();
   }, [svgText]);
 
-  // ── Measure wrapper height (content-box, padding-excluded) ──────────────
+  // ── Measure wrapper height (stable, scrollbar-independent) ─────────────
   useLayoutEffect(() => {
     const el = wrapperRef.current;
     if (!el) return;
     const ro = new ResizeObserver((entries) => {
-      const h = entries[0]?.contentRect.height ?? 0;
-      setAvailH(h);
+      // Use border-box block size so horizontal scrollbar appearance (which
+      // only changes the content area, not the border box) never triggers this
+      // callback.  Subtract the wrapper's vertical padding to obtain the same
+      // content-area height the SVG should fill.
+      // Fall back to getBoundingClientRect (border-box, also scrollbar-stable)
+      // when the array-form borderBoxSize API is unavailable.
+      const borderBoxH = entries[0]?.borderBoxSize?.[0]?.blockSize
+        ?? el.getBoundingClientRect().height;
+      if (!borderBoxH) return;
+      const style = getComputedStyle(el);
+      const h = borderBoxH
+        - parseFloat(style.paddingTop)
+        - parseFloat(style.paddingBottom);
+      if (h > 0) setAvailH(h);
     });
-    ro.observe(el);
+    ro.observe(el, { box: "border-box" });
     return () => ro.disconnect();
   }, []);
 
@@ -721,7 +733,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
     });
 
     return () => cancelAnimationFrame(rafId);
-  }, [svgText, scale, pageNumber, setSvgWordAlignmentMaps, setAyahSelectableIndices]);
+  }, [svgText, pageNumber, setSvgWordAlignmentMaps, setAyahSelectableIndices]);
 
   // ── Word-state helpers ──────────────────────────────────────────────────
   const clearActiveWord = useCallback(() => {

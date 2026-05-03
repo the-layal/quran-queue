@@ -1014,11 +1014,11 @@ export default function QuranPage() {
 
   const zoomIn = () => {
     const cur = settings.mushafScale ?? 1;
-    updateSettings({ mushafScale: Math.min(3, Math.round((cur + 0.25) * 100) / 100) });
+    updateSettings({ mushafScale: Math.min(3, Math.round((cur + 0.1) * 100) / 100) });
   };
   const zoomOut = () => {
     const cur = settings.mushafScale ?? 1;
-    updateSettings({ mushafScale: Math.max(0.75, Math.round((cur - 0.25) * 100) / 100) });
+    updateSettings({ mushafScale: Math.max(0.75, Math.round((cur - 0.1) * 100) / 100) });
   };
 
   // Keyboard navigation
