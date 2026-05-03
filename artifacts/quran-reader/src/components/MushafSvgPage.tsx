@@ -129,6 +129,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const showMushafTranslationRef = useRef(showMushafTranslation);
   showMushafTranslationRef.current = showMushafTranslation;
   const translationPopoverAyahKeyRef = useRef<string | null>(null);
+  const translationPopoverRef = useRef<HTMLDivElement>(null);
   const brush = useSmartBrush("mushaf", containerRef as RefObject<HTMLElement | null>);
 
   // ── Translation popover ──────────────────────────────────────────────────
@@ -901,6 +902,8 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
         const wordEl = getWordGroup(related, e.currentTarget);
         if (wordEl) return;
       }
+      // If the mouse moved onto the translation popover (e.g. to click ×), keep it open.
+      if (related instanceof Node && translationPopoverRef.current?.contains(related)) return;
       clearHoverWord();
       removeHoverRect();
       translationPopoverAyahKeyRef.current = null;
@@ -1050,7 +1053,15 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
 
       {/* Translation popover — fixed overlay, dismissable */}
       {translationPopover && popoverStyle && (
-        <div className="mushaf-translation-popover" style={popoverStyle}>
+        <div
+          ref={translationPopoverRef}
+          className="mushaf-translation-popover"
+          style={popoverStyle}
+          onMouseLeave={() => {
+            translationPopoverAyahKeyRef.current = null;
+            setTranslationPopover(null);
+          }}
+        >
           <div className="mushaf-translation-popover-inner">
             <div className="mushaf-translation-popover-header">
               <span className="mushaf-translation-popover-ref">

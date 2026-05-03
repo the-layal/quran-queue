@@ -279,7 +279,7 @@
 /* ── Translation popover — Mushaf mode ───────────────────────────────────── */
 
 .mushaf-translation-popover {
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .mushaf-translation-popover-inner {
@@ -307,6 +307,7 @@
 }
 
 .mushaf-translation-popover-close {
+  pointer-events: auto;
   display: flex;
   align-items: center;
   justify-content: center;
