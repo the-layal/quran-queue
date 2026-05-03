@@ -344,7 +344,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
         <button
           key={value}
           onClick={() => setPlaybackHighlightMode(value)}
-          className={`px-2 py-1 text-xs font-medium transition-colors ${
+          className={`px-2 h-7 text-xs font-medium transition-colors ${
             playbackHighlightMode === value
               ? "bg-primary/15 text-primary"
               : "text-muted-foreground hover:bg-muted"
@@ -474,9 +474,6 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
        *          in the bar's single flex row, between progress and queue toggle.
        */}
       <div className="flex items-center gap-2 flex-wrap sm:contents">
-        {addToQueueBtn}
-        {highlightBtn}
-        {highlightModeGroup}
         <div className="flex-shrink-0" style={{ pointerEvents: "auto" }}>
           <ReciterSelector style={{ pointerEvents: "auto" }} />
         </div>
@@ -484,6 +481,9 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
           <SpeedSelector style={{ pointerEvents: "auto" }} />
         </div>
         {repeatBtn}
+        {highlightBtn}
+        {highlightModeGroup}
+        {addToQueueBtn}
       </div>
 
       {/* Queue toggle — sm+: appears after secondary controls in the single row */}
