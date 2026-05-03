@@ -12,7 +12,6 @@ import {
   LogIn,
   LogOut,
   User,
-  Quote,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 
@@ -80,10 +79,6 @@ function VersePanel() {
       className="mx-3 mb-3 p-3 rounded-xl bg-primary/5 border border-primary/15"
       data-testid="sidebar-verse-panel"
     >
-      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary/80 mb-2">
-        <Quote className="w-3 h-3" />
-        Verse of the Day
-      </div>
       <p
         className="text-right text-base leading-relaxed text-foreground mb-1.5"
         dir="rtl"
