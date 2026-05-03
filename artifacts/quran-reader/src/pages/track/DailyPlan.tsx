@@ -50,7 +50,7 @@ function formatReference(ref: string): string {
     const rangeParts = val.split("-");
     const from = parseInt(rangeParts[0], 10);
     const to = rangeParts.length > 1 ? parseInt(rangeParts[1], 10) : from;
-    const surahNames = getSurahNamesForPageRange(ref);
+    const surahNames = getSurahNamesForPageRange(from, to).join(", ");
     const pageLabel = from === to ? `Page ${from}` : `Pages ${from}–${to}`;
     return surahNames ? `${pageLabel} — ${surahNames}` : pageLabel;
   }

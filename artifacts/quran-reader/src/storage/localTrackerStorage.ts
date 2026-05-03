@@ -11,7 +11,9 @@ import type {
 import { getAyahsForReference } from "./referenceFanOut";
 import { getPageEquivalent } from "../lib/page-utils";
 
+const DATA_VERSION = "2";
 const KEYS = {
+  dataVersion: "hafith_data_version",
   logs: "hafith_logs",
   srs: "hafith_srs",
   plans: "hafith_plans",
@@ -20,6 +22,21 @@ const KEYS = {
   firstActionDate: "hafith_first_action_date",
   nudgeDismissed: "hafith_nudge_dismissed",
 };
+
+function ensureDataVersion(): void {
+  const stored = localStorage.getItem(KEYS.dataVersion);
+  if (stored !== DATA_VERSION) {
+    const hadData = !!localStorage.getItem(KEYS.logs) || !!localStorage.getItem(KEYS.srs);
+    if (hadData) {
+      for (const key of [KEYS.logs, KEYS.srs, KEYS.plans, KEYS.nextId, KEYS.actions, KEYS.firstActionDate]) {
+        localStorage.removeItem(key);
+      }
+    }
+    localStorage.setItem(KEYS.dataVersion, DATA_VERSION);
+  }
+}
+
+ensureDataVersion();
 
 export const HAFITH_ACTION_EVENT = "hafith:action";
 

@@ -1,5 +1,6 @@
 import { findPage as qmFindPage, getSurahMeta as qmGetSurahMeta } from "quran-meta/hafs";
 import { SURAHS } from "./quran-data";
+export { SURAHS } from "./quran-data";
 
 export const TOTAL_PAGES = 604;
 
@@ -212,20 +213,11 @@ export function groupConsecutivePages(pages: number[]): string[] {
   return ranges;
 }
 
-export function getSurahNamesForPageRange(ref: string): string {
-  const pages = getPagesForReference(ref);
-  if (pages.length === 0) return "";
-  const nameSet = new Set<string>();
-  for (const p of pages) {
-    for (let s = 1; s <= 114; s++) {
-      const span = SURAH_PAGE_SPANS[s];
-      if (!span) continue;
-      if (p >= span.startPage && p <= span.endPage) {
-        nameSet.add(SURAH_NAMES[s]?.en || `Surah ${s}`);
-      }
-    }
-  }
-  return Array.from(nameSet).join(", ");
+export function getSurahNamesForPageRange(from: number, to: number): string[] {
+  return SURAHS.filter((s) => {
+    const span = SURAH_PAGE_SPANS[s.id];
+    return span && span.startPage <= to && span.endPage >= from;
+  }).map((s) => s.englishName);
 }
 
 export function getPageCountForReference(ref: string): number {
