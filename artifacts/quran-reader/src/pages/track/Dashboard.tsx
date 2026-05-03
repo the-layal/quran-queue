@@ -206,7 +206,7 @@ export default function Dashboard() {
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
 
-  const { goals, createGoal, deleteGoal } = useGoals();
+  const { goals, reload: reloadGoals, createGoal, deleteGoal } = useGoals();
 
   const reload = useCallback(async () => {
     const [s, p] = await Promise.all([storage.getStats(), storage.getTodayPlan()]);
@@ -405,11 +405,24 @@ export default function Dashboard() {
         <PenLine size={22} />
       </button>
 
-      <LogModal isOpen={isLogModalOpen} onClose={() => { setIsLogModalOpen(false); reload(); }} />
+      <LogModal
+        isOpen={isLogModalOpen}
+        onClose={() => {
+          setIsLogModalOpen(false);
+          reload();
+          // Reload goals so per-ayah progress updates appear immediately
+          reloadGoals();
+        }}
+      />
       <GoalModal
         open={isGoalModalOpen}
         onClose={() => setIsGoalModalOpen(false)}
-        onCreate={createGoal}
+        onCreate={async (input) => {
+          await createGoal(input);
+          // After a short delay, re-fetch goals to pick up the qfGoalId
+          // that is written asynchronously after the server response.
+          setTimeout(() => { reloadGoals(); }, 3000);
+        }}
       />
     </AppShell>
   );
