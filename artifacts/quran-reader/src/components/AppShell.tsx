@@ -229,31 +229,33 @@ export default function AppShell({ children, rightActions, centerContent }: AppS
         </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-3">
-        {NAV_ITEMS.map((item) => {
-          const isActive =
-            item.path === "/"
-              ? location === "/"
-              : location === item.path || location.startsWith(item.path + "/");
+      <div className="flex-1 overflow-y-auto">
+        <nav className="py-3">
+          {NAV_ITEMS.map((item) => {
+            const isActive =
+              item.path === "/"
+                ? location === "/"
+                : location === item.path || location.startsWith(item.path + "/");
 
-          return (
-            <Link
-              key={item.path}
-              href={item.path}
-              className={`flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${
-                isActive
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-            >
-              {item.icon}
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
+            return (
+              <Link
+                key={item.path}
+                href={item.path}
+                className={`flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${
+                  isActive
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                {item.icon}
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
 
-      <VersePanel />
+        <VersePanel />
+      </div>
 
       <div className="border-t border-border px-4 py-4">
         {isLoading ? (
