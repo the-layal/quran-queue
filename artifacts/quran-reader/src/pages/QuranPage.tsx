@@ -1176,7 +1176,7 @@ export default function QuranPage() {
       </main>
 
       {/* ── Footer navigation ───────────────────────────────────────────── */}
-      <footer ref={footerRef} className={`${isMushaf ? "fixed inset-x-0 bottom-0" : "sticky bottom-0"} z-30 bg-background/90 backdrop-blur-sm border-t border-border`}>
+      <footer ref={footerRef} className={`${isMushaf ? "fixed bottom-0 right-0" : "sticky bottom-0"} z-30 bg-background/90 backdrop-blur-sm border-t border-border`} style={isMushaf ? { left: "var(--sidebar-w, 0px)" } : undefined}>
         {/* Controls row — pill pinned at absolute centre; blind section flows right from pill edge */}
         <div ref={controlsRowRef} className="relative flex items-center py-1.5 border-b border-border/40 px-2 min-h-[38px]">
           {/* Left edge: X / ✓ when words are selected */}

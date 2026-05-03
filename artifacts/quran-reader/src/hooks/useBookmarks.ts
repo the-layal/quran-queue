@@ -8,6 +8,7 @@ export interface Bookmark {
   surahNumber: number;
   ayahNumber: number;
   qfBookmarkId?: string | null;
+  note?: string | null;
   createdAt: string;
 }
 
@@ -163,6 +164,52 @@ export function useBookmarks() {
     },
   });
 
+  // ── Update note mutation ─────────────────────────────────────────────────────
+  const updateNoteMutation = useMutation({
+    mutationFn: async ({ id, note }: { id: number; note: string | null }) => {
+      if (!isAuthenticated) {
+        const updated = readLocalBookmarks().map((b) =>
+          b.id === id ? { ...b, note } : b,
+        );
+        writeLocalBookmarks(updated);
+        return updated.find((b) => b.id === id) ?? null;
+      }
+      return apiFetch<Bookmark>(`/api/bookmarks/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note }),
+      });
+    },
+    onMutate: async ({ id, note }) => {
+      await queryClient.cancelQueries({ queryKey: BOOKMARKS_QUERY_KEY });
+      const prev = queryClient.getQueryData<Bookmark[]>(BOOKMARKS_QUERY_KEY) ?? [];
+      queryClient.setQueryData<Bookmark[]>(
+        BOOKMARKS_QUERY_KEY,
+        prev.map((b) => (b.id === id ? { ...b, note } : b)),
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) {
+        queryClient.setQueryData<Bookmark[]>(BOOKMARKS_QUERY_KEY, ctx.prev);
+      }
+    },
+    onSuccess: (data) => {
+      if (data) {
+        queryClient.setQueryData<Bookmark[]>(BOOKMARKS_QUERY_KEY, (old = []) =>
+          old.map((b) => (b.id === data.id ? data : b)),
+        );
+      }
+    },
+  });
+
+  const updateNote = useCallback(
+    (id: number, note: string | null): void => {
+      updateNoteMutation.mutate({ id, note });
+    },
+    [updateNoteMutation],
+  );
+
   // ── Public API ──────────────────────────────────────────────────────────────
 
   const isBookmarked = useCallback(
@@ -191,6 +238,7 @@ export function useBookmarks() {
     isQFConnected,
     isBookmarked,
     toggleBookmark,
+    updateNote,
   };
 }
 
@@ -204,6 +252,7 @@ export async function migrateGuestBookmarks(): Promise<void> {
       await jsonPost("/api/bookmarks", {
         surahNumber: bm.surahNumber,
         ayahNumber: bm.ayahNumber,
+        note: bm.note ?? null,
       });
     }
     writeLocalBookmarks([]);

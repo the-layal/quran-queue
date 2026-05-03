@@ -191,6 +191,14 @@ export default function AppShell({ children, rightActions, centerContent }: AppS
 
   const desktopVisible = isDesktop && !collapsed;
 
+  // Sidebar width CSS var so the fixed footer can offset itself.
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--sidebar-w",
+      desktopVisible ? "288px" : "0px",
+    );
+  }, [desktopVisible]);
+
   const handleToggle = useCallback(() => {
     if (!isDesktop) {
       setMobileOpen((o) => !o);

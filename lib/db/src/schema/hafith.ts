@@ -54,6 +54,7 @@ export const bookmarksTable = pgTable("bookmarks", {
   surahNumber: integer("surah_number").notNull(),
   ayahNumber: integer("ayah_number").notNull(),
   qfBookmarkId: text("qf_bookmark_id"),
+  note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   userAyahUnique: uniqueIndex("bookmarks_user_ayah_unique").on(t.userId, t.surahNumber, t.ayahNumber),

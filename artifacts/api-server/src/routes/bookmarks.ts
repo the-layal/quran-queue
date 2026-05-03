@@ -26,6 +26,11 @@ router.get("/bookmarks", async (req: Request, res: Response) => {
 const createBookmarkSchema = z.object({
   surahNumber: z.number().int().min(1).max(114),
   ayahNumber: z.number().int().min(1),
+  note: z.string().nullable().optional(),
+});
+
+const updateBookmarkSchema = z.object({
+  note: z.string().nullable(),
 });
 
 router.post("/bookmarks", async (req: Request, res: Response) => {
@@ -67,6 +72,7 @@ router.post("/bookmarks", async (req: Request, res: Response) => {
       surahNumber: input.surahNumber,
       ayahNumber: input.ayahNumber,
       qfBookmarkId,
+      note: input.note ?? null,
     });
     res.status(201).json(bookmark);
   } catch (err) {
@@ -74,6 +80,27 @@ router.post("/bookmarks", async (req: Request, res: Response) => {
       res.status(400).json({ message: err.errors[0].message });
       return;
     }
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+router.patch("/bookmarks/:id", async (req: Request, res: Response) => {
+  if (!isAuth(req, res)) return;
+  try {
+    const userId = req.user!.id;
+    const id = parseInt(req.params.id as string, 10);
+    if (isNaN(id)) { res.status(400).json({ message: "Invalid bookmark id" }); return; }
+
+    const input = updateBookmarkSchema.parse(req.body);
+
+    const bookmarks = await storage.getBookmarks(userId);
+    const bookmark = bookmarks.find((b) => b.id === id);
+    if (!bookmark) { res.status(404).json({ message: "Bookmark not found" }); return; }
+
+    const updated = await storage.updateBookmark(id, { note: input.note });
+    res.json(updated);
+  } catch (err) {
+    if (err instanceof z.ZodError) { res.status(400).json({ message: err.errors[0].message }); return; }
     res.status(500).json({ message: "Internal Server Error" });
   }
 });

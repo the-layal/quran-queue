@@ -1,4 +1,5 @@
-import { Bookmark, CloudCheck, ChevronRight } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Bookmark, CloudCheck, ChevronRight, PencilLine, Check, X } from "lucide-react";
 import { useQueries } from "@tanstack/react-query";
 import { useBookmarks } from "../hooks/useBookmarks";
 import { useQuranStore } from "../store/quranStore";
@@ -11,12 +12,79 @@ function getSurahName(surahNumber: number): string {
   return surah ? surah.name : `Surah ${surahNumber}`;
 }
 
+function NoteEditor({
+  bookmarkId,
+  initialNote,
+  onSave,
+  onCancel,
+}: {
+  bookmarkId: number;
+  initialNote: string | null | undefined;
+  onSave: (id: number, note: string | null) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(initialNote ?? "");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    containerRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, []);
+
+  function handleSave() {
+    const trimmed = value.trim();
+    onSave(bookmarkId, trimmed === "" ? null : trimmed);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSave();
+    }
+    if (e.key === "Escape") {
+      onCancel();
+    }
+  }
+
+  return (
+    <div ref={containerRef} className="px-3 pb-2 pt-1">
+      <div className="flex gap-1.5 mb-1 justify-end">
+        <button
+          onClick={onCancel}
+          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted transition-colors"
+        >
+          <X className="w-3 h-3" />
+          Cancel
+        </button>
+        <button
+          onClick={handleSave}
+          className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 px-1.5 py-0.5 rounded hover:bg-primary/10 transition-colors"
+        >
+          <Check className="w-3 h-3" />
+          Save
+        </button>
+      </div>
+      <textarea
+        ref={inputRef}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder="Add a personal note…"
+        rows={2}
+        className="w-full text-xs rounded-md border border-border bg-background px-2 py-1.5 text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+      />
+    </div>
+  );
+}
+
 export default function SavedVersesPanel({ onNavigate }: { onNavigate?: () => void }) {
-  const { bookmarks, isLoading, isQFConnected } = useBookmarks();
+  const { bookmarks, isLoading, isQFConnected, updateNote } = useBookmarks();
   const setCurrentSurah = useQuranStore((s) => s.setCurrentSurah);
   const setViewMode = useQuranStore((s) => s.setViewMode);
   const setTargetScrollAyah = useQuranStore((s) => s.setTargetScrollAyah);
   const [, setLocation] = useLocation();
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const verseTextQueries = useQueries({
     queries: bookmarks.map((bm) => ({
@@ -61,7 +129,7 @@ export default function SavedVersesPanel({ onNavigate }: { onNavigate?: () => vo
           ))}
         </div>
       ) : (
-        <div className="divide-y divide-border/50 max-h-56 overflow-y-auto">
+        <div className="divide-y divide-border/50 max-h-72 overflow-y-auto">
           {bookmarks.map((bm, idx) => {
             const text = verseTextQueries[idx]?.data;
             const snippet = text
@@ -69,35 +137,65 @@ export default function SavedVersesPanel({ onNavigate }: { onNavigate?: () => vo
                 ? text.slice(0, 55) + "…"
                 : text
               : null;
+            const isEditing = editingId === bm.id;
 
             return (
-              <button
-                key={bm.id}
-                onClick={() => handleClick(bm.surahNumber, bm.ayahNumber)}
-                className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-muted/50 transition-colors group"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-                    <span className="truncate">{getSurahName(bm.surahNumber)}</span>
-                    <span className="text-muted-foreground font-normal flex-shrink-0">
-                      {bm.surahNumber}:{bm.ayahNumber}
-                    </span>
-                    {bm.qfBookmarkId && (
-                      <CloudCheck className="w-2.5 h-2.5 text-emerald-500 flex-shrink-0" />
-                    )}
-                  </div>
-                  {snippet && (
-                    <p
-                      className="text-[11px] text-muted-foreground mt-0.5 text-right truncate"
-                      dir="rtl"
-                      lang="ar"
+              <div key={bm.id} className="group">
+                <div className="flex items-center hover:bg-muted/50 transition-colors">
+                  <button
+                    onClick={() => handleClick(bm.surahNumber, bm.ayahNumber)}
+                    className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2.5 text-left"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                        <span className="truncate">{getSurahName(bm.surahNumber)}</span>
+                        <span className="text-muted-foreground font-normal flex-shrink-0">
+                          {bm.surahNumber}:{bm.ayahNumber}
+                        </span>
+                        {bm.qfBookmarkId && (
+                          <CloudCheck className="w-2.5 h-2.5 text-emerald-500 flex-shrink-0" />
+                        )}
+                      </div>
+                      {snippet && (
+                        <p
+                          className="text-[11px] text-muted-foreground mt-0.5 text-right truncate"
+                          dir="rtl"
+                          lang="ar"
+                        >
+                          {snippet}
+                        </p>
+                      )}
+                      {bm.note && !isEditing && (
+                        <p className="text-[11px] text-muted-foreground mt-0.5 italic truncate">
+                          {bm.note}
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                  <div className="flex items-center gap-1 flex-shrink-0 pr-2">
+                    <button
+                      onClick={() => setEditingId(isEditing ? null : bm.id)}
+                      title={bm.note ? "Edit note" : "Add note"}
+                      className="opacity-40 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
                     >
-                      {snippet}
-                    </p>
-                  )}
+                      <PencilLine className="w-3 h-3" />
+                    </button>
+                    <ChevronRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
                 </div>
-                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </button>
+
+                {isEditing && (
+                  <NoteEditor
+                    bookmarkId={bm.id}
+                    initialNote={bm.note}
+                    onSave={(id, note) => {
+                      updateNote(id, note);
+                      setEditingId(null);
+                    }}
+                    onCancel={() => setEditingId(null)}
+                  />
+                )}
+              </div>
             );
           })}
         </div>
