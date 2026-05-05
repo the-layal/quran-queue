@@ -100,3 +100,23 @@ export const qfTokenService: ILinkedProvider = {
   revokeToken,
   isConnected,
 };
+
+/**
+ * @internal Sibling-lib use only — do not re-export from any public barrel.
+ *
+ * Reads the stored refresh token for a user and triggers a reactive token
+ * refresh, updating the database with the new credentials.
+ * Returns the new access token, or null if no refresh token is stored or the
+ * refresh request fails.
+ *
+ * Token values are never logged.
+ */
+export async function forceRefresh(userId: string): Promise<string | null> {
+  const [user] = await db
+    .select({ qfRefreshToken: usersTable.qfRefreshToken })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId));
+
+  if (!user?.qfRefreshToken) return null;
+  return refreshQFToken(userId, user.qfRefreshToken);
+}
