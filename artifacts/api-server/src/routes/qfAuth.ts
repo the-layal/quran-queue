@@ -3,12 +3,15 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { qfTokenService } from "../lib/qfTokenService";
+import { getQfOAuthConfig } from "../lib/qfOAuthConfig";
 
 const router: IRouter = Router();
 
-const QF_AUTH_URL = "https://oauth.quran.foundation/oauth2/auth";
-const QF_TOKEN_URL = "https://oauth.quran.foundation/oauth2/token";
-const QF_USERINFO_URL = "https://api.quran.foundation/api/v4/auth/userinfo";
+const { clientId, clientSecret, authBaseUrl, apiBaseUrl } = getQfOAuthConfig();
+
+const QF_AUTH_URL = `${authBaseUrl}/oauth2/auth`;
+const QF_TOKEN_URL = `${authBaseUrl}/oauth2/token`;
+const QF_USERINFO_URL = `${apiBaseUrl}/api/v4/auth/userinfo`;
 
 const QF_STATE_COOKIE = "qf_oauth_state";
 const QF_STATE_COOKIE_TTL = 10 * 60 * 1000;
@@ -50,14 +53,6 @@ function clearQFStateCookie(res: Response) {
  */
 router.get("/auth/qf/connect", (req: Request, res: Response) => {
   if (!requireAuth(req, res)) return;
-
-  const clientId = process.env.QF_CLIENT_ID;
-  if (!clientId) {
-    res
-      .status(500)
-      .json({ error: "QF OAuth is not configured on this server." });
-    return;
-  }
 
   const redirectUri = process.env.QF_REDIRECT_URI || getQFRedirectUri(req);
 
@@ -106,10 +101,7 @@ router.get("/auth/qf/callback", async (req: Request, res: Response) => {
     return;
   }
 
-  const clientId = process.env.QF_CLIENT_ID;
-  const clientSecret = process.env.QF_CLIENT_SECRET;
-
-  if (!clientId || !clientSecret) {
+  if (!clientSecret) {
     res.redirect("/track/settings?qf=error");
     return;
   }

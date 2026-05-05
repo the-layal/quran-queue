@@ -1,14 +1,12 @@
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import type { ILinkedProvider } from "./linkedProvider";
-
-const QF_TOKEN_URL = "https://oauth.quran.foundation/oauth2/token";
+import { getQfOAuthConfig } from "./qfOAuthConfig";
 
 async function refreshQFToken(userId: string, refreshToken: string): Promise<string | null> {
-  const clientId = process.env.QF_CLIENT_ID;
-  const clientSecret = process.env.QF_CLIENT_SECRET;
+  const { clientId, clientSecret, authBaseUrl } = getQfOAuthConfig();
 
-  if (!clientId || !clientSecret) return null;
+  if (!clientSecret) return null;
 
   const params = new URLSearchParams({
     grant_type: "refresh_token",
@@ -17,7 +15,7 @@ async function refreshQFToken(userId: string, refreshToken: string): Promise<str
     client_secret: clientSecret,
   });
 
-  const res = await fetch(QF_TOKEN_URL, {
+  const res = await fetch(`${authBaseUrl}/oauth2/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: params.toString(),

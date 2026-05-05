@@ -1,6 +1,8 @@
 import { qfTokenService } from "./qfTokenService";
+import { getQfOAuthConfig } from "./qfOAuthConfig";
 
-const QF_GOALS_URL = "https://api.quran.foundation/api/v4/user/goals";
+const { apiBaseUrl } = getQfOAuthConfig();
+const QF_GOALS_URL = `${apiBaseUrl}/api/v4/user/goals`;
 
 /** Parse QF API JSON — handles both raw arrays and wrapped { data: [...] } shapes. */
 function parseGoalList(body: unknown): Array<Record<string, unknown>> {

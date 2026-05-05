@@ -2,10 +2,12 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
 import { storage } from "../storage/index";
 import { qfTokenService } from "../lib/qfTokenService";
+import { getQfOAuthConfig } from "../lib/qfOAuthConfig";
 
 const router: IRouter = Router();
 
-const QF_API_BASE = "https://api.quran.foundation/api/v4";
+const { apiBaseUrl } = getQfOAuthConfig();
+const QF_API_BASE = `${apiBaseUrl}/api/v4`;
 
 function isAuth(req: Request, res: Response): req is Request & { user: NonNullable<typeof req.user> } {
   if (!req.isAuthenticated()) {
