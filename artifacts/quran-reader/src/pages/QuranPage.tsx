@@ -779,6 +779,14 @@ export default function QuranPage() {
   const [pillHalfW,  setPillHalfW]    = useState(65);   // half of pill width
   const [compactPill, setCompactPill] = useState(false);
 
+  // Seed accurate defaults on mount so the pill never renders at hardcoded (56/65) values.
+  useLayoutEffect(() => {
+    const pill = pillRef.current;
+    const bs   = blindSectionRef.current;
+    if (pill) setPillHalfW(pill.offsetWidth / 2);
+    if (bs)   setPillAnchor((5 + bs.offsetWidth) / 2);
+  }, []);
+
   useLayoutEffect(() => {
     const pill = pillRef.current;
     const bs   = blindSectionRef.current;
