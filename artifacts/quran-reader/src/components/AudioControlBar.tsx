@@ -222,10 +222,13 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
   // On mobile: span full width with a small gutter on each side.
   // On sm+: intrinsic width anchored to bottom-right (unchanged desktop look).
   // Idle states stay single-row; active state stacks on mobile.
+  // bottom tracks the live footer height (set by ResizeObserver in QuranPage)
+  // so the bar always floats above the footer even when controls wrap on mobile.
+  const barBottom = "calc(var(--mushaf-footer-h, 8.5rem) + 8px)";
   const barBaseRow =
-    "fixed z-40 bottom-[8.5rem] left-2 right-2 sm:left-auto sm:right-6 sm:w-auto flex flex-row items-center gap-3 rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-xl px-4 py-2.5 transition-all duration-200";
+    "fixed z-40 left-2 right-2 sm:left-auto sm:right-6 sm:w-auto flex flex-row items-center gap-3 rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-xl px-4 py-2.5 transition-all duration-200";
   const barBase =
-    "fixed z-40 bottom-[8.5rem] left-2 right-2 sm:left-auto sm:right-6 sm:w-auto flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-xl px-4 py-2.5 transition-all duration-200";
+    "fixed z-40 left-2 right-2 sm:left-auto sm:right-6 sm:w-auto flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-xl px-4 py-2.5 transition-all duration-200";
 
   const queueToggleBtn = (
     <button
@@ -254,7 +257,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
     return (
       <div
         className={`${barBaseRow} opacity-60`}
-        style={{ pointerEvents: "none" }}
+        style={{ pointerEvents: "none", bottom: barBottom }}
         role="status"
         aria-label="Audio control bar"
       >
@@ -276,7 +279,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
     return (
       <div
         className={`${barBaseRow} opacity-60`}
-        style={{ pointerEvents: "none" }}
+        style={{ pointerEvents: "none", bottom: barBottom }}
         role="status"
         aria-label="Audio control bar"
       >
@@ -380,7 +383,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
   return (
     <div
       className={barBase}
-      style={{ pointerEvents: "none" }}
+      style={{ pointerEvents: "none", bottom: barBottom }}
       role="region"
       aria-label="Audio playback controls"
       data-tour="audio-bar"
