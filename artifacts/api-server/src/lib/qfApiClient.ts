@@ -57,7 +57,15 @@ export async function qfFetch(
 
   // 401 received — attempt exactly one reactive refresh then retry once.
   // No further retries occur regardless of the outcome.
-  const newToken = await forceRefresh(userId);
+  // forceRefresh may throw (token endpoint non-2xx); catch and surface a
+  // generic error so internal details are never forwarded to route handlers.
+  let newToken: string | null = null;
+  try {
+    newToken = await forceRefresh(userId);
+  } catch {
+    throw new Error("QF API request failed: authentication error (401)");
+  }
+
   if (!newToken) {
     throw new Error("QF API request failed: authentication error (401)");
   }
