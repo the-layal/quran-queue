@@ -5,12 +5,12 @@ import { eq } from "drizzle-orm";
 import { qfTokenService } from "../lib/qfTokenService";
 import { getQfOAuthConfig } from "../lib/qfOAuthConfig";
 import { buildPkceAuthSession, type PkceSessionData } from "../lib/qfPkce";
+import { exchangeAuthorizationCode } from "../lib/qfTokenExchange";
 
 const router: IRouter = Router();
 
-const { clientId, clientSecret, authBaseUrl, apiBaseUrl } = getQfOAuthConfig();
+const { apiBaseUrl } = getQfOAuthConfig();
 
-const QF_TOKEN_URL = `${authBaseUrl}/oauth2/token`;
 const QF_USERINFO_URL = `${apiBaseUrl}/api/v4/auth/userinfo`;
 
 const QF_PKCE_COOKIE = "qf_pkce_state";
@@ -147,51 +147,19 @@ router.get("/auth/qf/callback", async (req: Request, res: Response) => {
     return;
   }
 
-  if (!clientSecret) {
-    res.redirect("/track/settings?qf=error");
-    return;
-  }
-
   const redirectUri = process.env.QF_REDIRECT_URI || storedRedirectUri;
 
-  const params = new URLSearchParams({
-    grant_type: "authorization_code",
-    code,
-    redirect_uri: redirectUri,
-    client_id: clientId,
-    client_secret: clientSecret,
-    code_verifier: codeVerifier,
-  });
-
-  let accessToken: string;
-  let refreshToken: string | undefined;
-  let expiresIn: number | undefined;
-
+  let tokenData: Awaited<ReturnType<typeof exchangeAuthorizationCode>>;
   try {
-    const tokenRes = await fetch(QF_TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
-    });
-
-    if (!tokenRes.ok) {
-      res.redirect("/track/settings?qf=error");
-      return;
-    }
-
-    const tokenData = (await tokenRes.json()) as {
-      access_token: string;
-      refresh_token?: string;
-      expires_in?: number;
-    };
-
-    accessToken = tokenData.access_token;
-    refreshToken = tokenData.refresh_token;
-    expiresIn = tokenData.expires_in;
+    tokenData = await exchangeAuthorizationCode({ code, redirectUri, codeVerifier });
   } catch {
     res.redirect("/track/settings?qf=error");
     return;
   }
+
+  const accessToken = tokenData.access_token;
+  const refreshToken = tokenData.refresh_token;
+  const expiresIn = tokenData.expires_in;
 
   let qfDisplayName: string | null = null;
   let qfEmail: string | null = null;
