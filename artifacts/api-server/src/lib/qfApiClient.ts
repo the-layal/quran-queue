@@ -36,18 +36,14 @@ export async function qfFetch(
 
   logger.debug({ "x-client-id": clientId }, "qfFetch: outgoing request");
 
-  function buildHeaders(token: string): Record<string, string> {
-    const callerHeaders = init?.headers
-      ? (init.headers instanceof Headers
-          ? Object.fromEntries(init.headers.entries())
-          : (init.headers as Record<string, string>))
-      : {};
-    return {
-      ...callerHeaders,
-      // x-auth-token value must never be logged
-      "x-auth-token": token,
-      "x-client-id": clientId,
-    };
+  function buildHeaders(token: string): Headers {
+    // Normalise all HeadersInit variants (object, tuple array, Headers instance)
+    // via the Headers constructor so every form is handled safely.
+    const merged = new Headers(init?.headers);
+    // x-auth-token value must never be logged
+    merged.set("x-auth-token", token);
+    merged.set("x-client-id", clientId);
+    return merged;
   }
 
   const res = await fetch(`${apiBaseUrl}${path}`, {
