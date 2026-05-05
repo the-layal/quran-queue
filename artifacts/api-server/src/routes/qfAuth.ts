@@ -4,17 +4,17 @@ import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { qfTokenService } from "../lib/qfTokenService";
 import { getQfOAuthConfig } from "../lib/qfOAuthConfig";
+import { buildPkceAuthSession, type PkceSessionData } from "../lib/qfPkce";
 
 const router: IRouter = Router();
 
 const { clientId, clientSecret, authBaseUrl, apiBaseUrl } = getQfOAuthConfig();
 
-const QF_AUTH_URL = `${authBaseUrl}/oauth2/auth`;
 const QF_TOKEN_URL = `${authBaseUrl}/oauth2/token`;
 const QF_USERINFO_URL = `${apiBaseUrl}/api/v4/auth/userinfo`;
 
-const QF_STATE_COOKIE = "qf_oauth_state";
-const QF_STATE_COOKIE_TTL = 10 * 60 * 1000;
+const QF_PKCE_COOKIE = "qf_pkce_state";
+const QF_PKCE_COOKIE_TTL = 10 * 60 * 1000;
 
 function requireAuth(req: Request, res: Response): boolean {
   if (!req.isAuthenticated()) {
@@ -31,24 +31,44 @@ function getQFRedirectUri(req: Request): string {
   return `${proto}://${host}/api/auth/qf/callback`;
 }
 
-function setQFStateCookie(res: Response, state: string) {
-  res.cookie(QF_STATE_COOKIE, state, {
+function setQFPkceCookie(res: Response, data: PkceSessionData) {
+  res.cookie(QF_PKCE_COOKIE, JSON.stringify(data), {
     httpOnly: true,
     secure: true,
     sameSite: "lax",
     path: "/",
-    maxAge: QF_STATE_COOKIE_TTL,
+    maxAge: QF_PKCE_COOKIE_TTL,
   });
 }
 
-function clearQFStateCookie(res: Response) {
-  res.clearCookie(QF_STATE_COOKIE, { path: "/" });
+function clearQFPkceCookie(res: Response) {
+  res.clearCookie(QF_PKCE_COOKIE, { path: "/" });
+}
+
+function readQFPkceCookie(req: Request): PkceSessionData | null {
+  const raw = req.cookies?.[QF_PKCE_COOKIE];
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<PkceSessionData>;
+    if (
+      typeof parsed.state === "string" &&
+      typeof parsed.nonce === "string" &&
+      typeof parsed.codeVerifier === "string" &&
+      typeof parsed.redirectUri === "string"
+    ) {
+      return parsed as PkceSessionData;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**
  * GET /api/auth/qf/connect
- * Generates a cryptographically random state, stores it in a short-lived
- * httpOnly cookie, then redirects to the QF OAuth consent screen.
+ * Generates PKCE parameters and a cryptographically random state + nonce,
+ * stores them in a short-lived httpOnly cookie, then redirects to the QF OAuth
+ * consent screen with code_challenge (S256).
  * Requires the user to be signed in with Replit Auth.
  */
 router.get("/auth/qf/connect", (req: Request, res: Response) => {
@@ -56,42 +76,68 @@ router.get("/auth/qf/connect", (req: Request, res: Response) => {
 
   const redirectUri = process.env.QF_REDIRECT_URI || getQFRedirectUri(req);
 
-  const state = crypto.randomBytes(32).toString("hex");
-  setQFStateCookie(res, state);
+  const session = buildPkceAuthSession({ redirectUri });
 
-  const params = new URLSearchParams({
-    response_type: "code",
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    scope: "openid email profile offline_access",
-    state,
+  // Persist the full PKCE session server-side before the redirect.
+  // codeVerifier is never sent to the client — stored only in an httpOnly cookie.
+  setQFPkceCookie(res, {
+    state: session.state,
+    nonce: session.nonce,
+    codeVerifier: session.codeVerifier,
+    redirectUri: session.redirectUri,
   });
 
-  res.redirect(`${QF_AUTH_URL}?${params.toString()}`);
+  res.redirect(session.url);
 });
 
 /**
  * GET /api/auth/qf/callback
- * Verifies the returned state against the cookie set during connect,
- * exchanges the authorization code for tokens, stores them, and redirects
- * back to Settings with a success/error indicator.
+ * Verifies state and nonce against the PKCE cookie, exchanges the authorization
+ * code for tokens (including code_verifier), stores them, and redirects back to
+ * Settings with a success/error indicator.
  * Requires the user to be signed in with Replit Auth.
  */
 router.get("/auth/qf/callback", async (req: Request, res: Response) => {
   if (!requireAuth(req, res)) return;
 
-  const { code, state, error } = req.query as Record<string, string>;
+  const { code, state, nonce, error } = req.query as Record<string, string>;
 
-  const expectedState = req.cookies?.[QF_STATE_COOKIE];
-  clearQFStateCookie(res);
+  // Read and immediately clear the PKCE cookie to prevent replay attacks.
+  const pkceSession = readQFPkceCookie(req);
+  clearQFPkceCookie(res);
+
+  if (!pkceSession) {
+    res.redirect("/track/settings?qf=error");
+    return;
+  }
+
+  const {
+    state: expectedState,
+    nonce: expectedNonce,
+    codeVerifier,
+    redirectUri: storedRedirectUri,
+  } = pkceSession;
 
   const stateMatches =
-    !!expectedState &&
     !!state &&
     state.length === expectedState.length &&
     crypto.timingSafeEqual(Buffer.from(state), Buffer.from(expectedState));
 
   if (!stateMatches) {
+    res.redirect("/track/settings?qf=error");
+    return;
+  }
+
+  // Validate nonce against the persisted value using timing-safe comparison.
+  // Reads from the `nonce` query param that some OIDC providers echo in the
+  // authorization code redirect. If QF does not include it, move this check
+  // to ID-token claim validation in the follow-up task (#206).
+  const nonceMatches =
+    !!nonce &&
+    nonce.length === expectedNonce.length &&
+    crypto.timingSafeEqual(Buffer.from(nonce), Buffer.from(expectedNonce));
+
+  if (!nonceMatches) {
     res.redirect("/track/settings?qf=error");
     return;
   }
@@ -106,7 +152,7 @@ router.get("/auth/qf/callback", async (req: Request, res: Response) => {
     return;
   }
 
-  const redirectUri = process.env.QF_REDIRECT_URI || getQFRedirectUri(req);
+  const redirectUri = process.env.QF_REDIRECT_URI || storedRedirectUri;
 
   const params = new URLSearchParams({
     grant_type: "authorization_code",
@@ -114,6 +160,7 @@ router.get("/auth/qf/callback", async (req: Request, res: Response) => {
     redirect_uri: redirectUri,
     client_id: clientId,
     client_secret: clientSecret,
+    code_verifier: codeVerifier,
   });
 
   let accessToken: string;
