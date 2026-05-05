@@ -43,24 +43,28 @@ export default function BrushFinenessToggle({
 
   return (
     <div className="flex items-center gap-2" data-tour="highlight-controls">
-      {/* Fineness pill toggle */}
-      <div className="flex items-center rounded-lg border border-border bg-muted/50 p-0.5 gap-0.5">
-        {TIERS.map(({ value, label, short, title }) => (
+      {/* Mushaf mode: Translation hover popover toggle ("Aa") */}
+      {showTranslationButton && (
+        <div className="flex items-center rounded-lg border border-border bg-muted/50 p-0.5 gap-0.5">
           <button
-            key={value}
-            onClick={() => setBrushFineness(value)}
-            title={title}
-            aria-label={title}
+            onClick={() => updateSettings({ showMushafTranslation: !showMushafTranslation })}
+            title={
+              showMushafTranslation
+                ? "Hide translation popover"
+                : "Show translation when hovering a word"
+            }
+            aria-label="Toggle translation popover"
+            aria-pressed={showMushafTranslation}
             className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-              brushFineness === value
+              showMushafTranslation
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {compactLabels ? short : label}
+            Aa
           </button>
-        ))}
-      </div>
+        </div>
+      )}
 
       {/* Reading mode: Translation + Transliteration pill buttons */}
       {(showReadingTranslationButton || (showTransliterationButton && !showTranslationButton)) && (
@@ -98,28 +102,24 @@ export default function BrushFinenessToggle({
         </div>
       )}
 
-      {/* Mushaf mode: Translation hover popover toggle ("Aa") */}
-      {showTranslationButton && (
-        <div className="flex items-center rounded-lg border border-border bg-muted/50 p-0.5 gap-0.5">
+      {/* Fineness pill toggle */}
+      <div className="flex items-center rounded-lg border border-border bg-muted/50 p-0.5 gap-0.5">
+        {TIERS.map(({ value, label, short, title }) => (
           <button
-            onClick={() => updateSettings({ showMushafTranslation: !showMushafTranslation })}
-            title={
-              showMushafTranslation
-                ? "Hide translation popover"
-                : "Show translation when hovering a word"
-            }
-            aria-label="Toggle translation popover"
-            aria-pressed={showMushafTranslation}
+            key={value}
+            onClick={() => setBrushFineness(value)}
+            title={title}
+            aria-label={title}
             className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-              showMushafTranslation
+              brushFineness === value
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Aa
+            {compactLabels ? short : label}
           </button>
-        </div>
-      )}
+        ))}
+      </div>
 
       {/* X / ✓ action pair — only visible when words are selected and not suppressed */}
       {!hideActions && hasSelection && (

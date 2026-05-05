@@ -12,7 +12,6 @@ import {
   ChevronDown,
   Search,
   X,
-  Check,
   Eye,
   RotateCcw,
   Bookmark,
@@ -1179,26 +1178,6 @@ export default function QuranPage() {
       <footer ref={footerRef} className={`${isMushaf ? "fixed bottom-0 right-0" : "sticky bottom-0"} z-30 bg-background/90 backdrop-blur-sm border-t border-border`} style={isMushaf ? { left: "var(--sidebar-w, 0px)" } : undefined}>
         {/* Controls row — pill pinned at absolute centre; blind section flows right from pill edge */}
         <div ref={controlsRowRef} className="relative flex items-center py-1.5 border-b border-border/40 px-2 min-h-[38px]">
-          {/* Left edge: X / ✓ when words are selected */}
-          {hasSelection && (
-            <div className="absolute left-2 flex items-center gap-1 z-20">
-              <button
-                onClick={clearSelection}
-                title="Clear selection"
-                className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={confirmSelection}
-                title="Confirm selection"
-                className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10 transition-colors"
-              >
-                <Check className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-
           {/* Pill — centre locked; only moves when pillAnchor is re-measured in non-blind modes */}
           <div
             ref={pillRef}
@@ -1206,7 +1185,6 @@ export default function QuranPage() {
             style={{ left: `calc(50% - ${pillAnchor}px)`, transform: "translateX(-50%)" }}
           >
             <BrushFinenessToggle
-              hideActions
               compactLabels={compactPill}
               showTranslationButton={isMushaf}
               showTransliterationButton={!isMushaf}
