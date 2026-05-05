@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useCallback, useState, useRef, type RefObject } from "react";
+import { useEffect, useCallback, useState, useRef, type RefObject } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -801,51 +801,6 @@ export default function QuranPage() {
   const confirmSelection = useQuranStore((s) => s.confirmSelection);
   const hasSelection = selectedWordIds.length > 0;
 
-  // Controls row layout
-  // pillAnchor: how many px LEFT of 50% the pill centre sits.
-  // Computed once from word-by-word mode so [pill + wbw toggle] is perfectly centred.
-  // NEVER updated when blindReviewMode === "blind" (reveal buttons present) — pill stays put.
-  const controlsRowRef  = useRef<HTMLDivElement>(null);
-  const pillRef         = useRef<HTMLDivElement>(null);
-  const blindSectionRef = useRef<HTMLDivElement>(null);
-  const [pillAnchor, setPillAnchor]   = useState(56);   // px left of 50%
-  const [pillHalfW,  setPillHalfW]    = useState(65);   // half of pill width
-  const [compactPill, setCompactPill] = useState(false);
-
-  // Seed accurate defaults on mount so the pill never renders at hardcoded (56/65) values.
-  useLayoutEffect(() => {
-    const pill = pillRef.current;
-    const bs   = blindSectionRef.current;
-    if (pill) setPillHalfW(pill.offsetWidth / 2);
-    if (bs)   setPillAnchor((5 + bs.offsetWidth) / 2);
-  }, []);
-
-  useLayoutEffect(() => {
-    const pill = pillRef.current;
-    const bs   = blindSectionRef.current;
-    const row  = controlsRowRef.current;
-
-    // Always track pill half-width so blind section stays flush after pill
-    if (pill) setPillHalfW(pill.offsetWidth / 2);
-
-    if (!bs) return;
-
-    // Lock the pill anchor ONLY from word-by-word mode — that is the reference group the user
-    // wants centred. All other mode changes keep the anchor frozen so the pill never moves.
-    if (blindReviewMode === "word-by-word") {
-      setPillAnchor((5 + bs.offsetWidth) / 2);
-    }
-    if (blindReviewMode !== "blind") {
-      setCompactPill(false);
-      return;
-    }
-
-    // Blind mode: check if blind section overflows the row right edge → compact pill
-    if (!row) return;
-    const overflow = bs.getBoundingClientRect().right - (row.getBoundingClientRect().right - 4);
-    if (overflow > 0   && !compactPill) setCompactPill(true);
-    if (overflow < -20 &&  compactPill) setCompactPill(false);
-  }, [blindReviewMode, compactPill]);
 
   const [darkMode, setDarkMode] = useState(() =>
     document.documentElement.classList.contains("dark")
@@ -1217,28 +1172,17 @@ export default function QuranPage() {
 
       {/* ── Footer navigation ───────────────────────────────────────────── */}
       <footer ref={footerRef} className={`${isMushaf ? "fixed bottom-0 right-0" : "sticky bottom-0"} z-30 bg-background/90 backdrop-blur-sm border-t border-border`} style={isMushaf ? { left: "var(--sidebar-w, 0px)" } : undefined}>
-        {/* Controls row — pill pinned at absolute centre; blind section flows right from pill edge */}
-        <div ref={controlsRowRef} className="relative flex items-center py-1.5 border-b border-border/40 px-2 min-h-[38px]">
-          {/* Pill — centre locked; only moves when pillAnchor is re-measured in non-blind modes */}
-          <div
-            ref={pillRef}
-            className="absolute z-10"
-            style={{ left: `calc(50% - ${pillAnchor}px)`, transform: "translateX(-50%)" }}
-          >
-            <BrushFinenessToggle
-              compactLabels={compactPill}
-              showTranslationButton={isMushaf}
-              showTransliterationButton={!isMushaf}
-              showReadingTranslationButton={!isMushaf}
-            />
-          </div>
+        {/* Controls row — flex centred; wraps to two lines on narrow screens */}
+        <div className="flex items-center justify-center flex-wrap gap-2 py-1.5 border-b border-border/40 px-2 min-h-[38px]">
+          {/* Brush fineness pill (+ optional action buttons when words are selected) */}
+          <BrushFinenessToggle
+            showTranslationButton={isMushaf}
+            showTransliterationButton={!isMushaf}
+            showReadingTranslationButton={!isMushaf}
+          />
 
-          {/* Blind section — starts flush right of pill, grows rightward; pill never shifts */}
-          <div
-            ref={blindSectionRef}
-            className="absolute flex items-center gap-1"
-            style={{ left: `calc(50% - ${pillAnchor}px + ${pillHalfW + 5}px)` }}
-          >
+          {/* Blind section — separated by a gap so checkmark buttons never collide */}
+          <div className="flex items-center gap-1">
             <div className="w-px h-4 bg-border/60 flex-shrink-0 mx-0.5" aria-hidden />
             <BlindReviewToggle />
             {blindReviewMode === "blind" && (
@@ -1250,7 +1194,7 @@ export default function QuranPage() {
                   aria-label="Reveal word"
                 >
                   <Eye className="w-3.5 h-3.5 flex-shrink-0" />
-                  {!compactPill && <span aria-hidden>Word</span>}
+                  <span aria-hidden>Word</span>
                 </button>
                 <button
                   onClick={handleRevealAyah}
@@ -1259,7 +1203,7 @@ export default function QuranPage() {
                   aria-label="Reveal ayah"
                 >
                   <Eye className="w-3.5 h-3.5 flex-shrink-0" />
-                  {!compactPill && <span aria-hidden>Ayah</span>}
+                  <span aria-hidden>Ayah</span>
                 </button>
                 <button
                   onClick={clearManualReveals}
