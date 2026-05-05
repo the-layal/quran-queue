@@ -236,6 +236,8 @@ function getOrderedWordIds(isMushaf: boolean): string[] {
 // in flight) don't race ahead and render with fallback glyphs (tofu).
 const qpcPagePromises = new Map<number, Promise<void>>();
 
+const FONT_TIMEOUT_MS = 10_000;
+
 function loadQpcPage(pageNum: number): Promise<void> {
   const cached = qpcPagePromises.get(pageNum);
   if (cached) return cached;
@@ -252,28 +254,46 @@ function loadQpcPage(pageNum: number): Promise<void> {
     style: "normal",
     weight: "normal",
   });
-  const p = face.load().then(
+
+  // Store the real load promise in cache so a background load that completes
+  // after a timeout is not discarded — future callers will resolve instantly.
+  const loadAndAdd: Promise<void> = face.load().then(
     (loaded) => {
       document.fonts.add(loaded);
     },
     (err) => {
-      // Drop from cache so a future mount can retry, but rethrow so
-      // consumers don't treat a failed load as "fonts ready" (which would
-      // re-introduce tofu rendering).
+      // Hard failure (network error): drop from cache so a future mount can
+      // retry. Do NOT drop on timeout — the load may still finish in the
+      // background and benefit a subsequent navigation.
       qpcPagePromises.delete(pageNum);
       throw err;
     },
   );
-  qpcPagePromises.set(pageNum, p);
-  return p;
+  qpcPagePromises.set(pageNum, loadAndAdd);
+
+  // Race the real load against a 10 s timeout for the current caller.
+  const timeout = new Promise<void>((_, reject) =>
+    setTimeout(
+      () => reject(new Error(`Font load timed out: page ${pageNum}`)),
+      FONT_TIMEOUT_MS,
+    ),
+  );
+  return Promise.race([loadAndAdd, timeout]);
 }
 
-function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number): boolean {
+interface QpcFontsResult {
+  fontsReady: boolean;
+  usingFallback: boolean;
+}
+
+function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number): QpcFontsResult {
   const [fontsReady, setFontsReady] = useState(false);
+  const [usingFallback, setUsingFallback] = useState(false);
 
   useEffect(() => {
     if (ayahs.length === 0) {
       setFontsReady(false);
+      setUsingFallback(false);
       return;
     }
 
@@ -288,6 +308,7 @@ function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number): boolean {
     }
 
     setFontsReady(false);
+    setUsingFallback(false);
     let cancelled = false;
 
     const pending: Promise<void>[] = [];
@@ -299,9 +320,12 @@ function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number): boolean {
         if (!cancelled) setFontsReady(true);
       })
       .catch(() => {
-        // Keep fontsReady=false on failure; loading screen stays up rather
-        // than painting tofu glyphs. A future mount will retry via the
-        // promise cache (already cleared above).
+        // Font API timed out or failed — activate bundled Uthmanic font
+        // fallback so users can still read instead of seeing a spinner forever.
+        if (!cancelled) {
+          setUsingFallback(true);
+          setFontsReady(true);
+        }
       });
 
     return () => {
@@ -309,8 +333,10 @@ function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number): boolean {
     };
   }, [ayahs, surahNumber]);
 
-  return fontsReady;
+  return { fontsReady, usingFallback };
 }
+
+const FALLBACK_FONT = "UthmanicHafs1Ver18, 'Scheherazade New', serif";
 
 function VerseBlock({
   ayah,
@@ -319,6 +345,7 @@ function VerseBlock({
   showTransliteration,
   isBookmarked,
   onToggleBookmark,
+  usingFallback,
 }: {
   ayah: QuranAyah;
   fontSize: number;
@@ -326,6 +353,7 @@ function VerseBlock({
   showTransliteration?: boolean;
   isBookmarked?: boolean;
   onToggleBookmark?: () => void;
+  usingFallback?: boolean;
 }) {
   return (
     <div id={`verse-${ayah.surah.number}:${ayah.numberInSurah}`} className="verse-block group flex items-start gap-3">
@@ -363,28 +391,32 @@ function VerseBlock({
         >
           {ayah.words.map((word) => {
             const translit = showTransliteration ? word.transliteration : undefined;
+            const wordFont = usingFallback
+              ? FALLBACK_FONT
+              : `QCFv2p${word.pageNumber}, serif`;
+            const wordText = usingFallback ? word.text : word.codeV2;
             return (
               <span
                 key={word.spanId}
                 id={word.spanId}
                 className={translit ? "quran-word quran-word--translit" : "quran-word"}
-                style={{ fontFamily: `QCFv2p${word.pageNumber}, serif` }}
+                style={{ fontFamily: wordFont }}
                 data-surah={word.surahNumber}
                 data-ayah={word.ayahNumber}
                 data-word={word.wordIndex}
               >
                 {translit ? (
                   <>
-                    <span className="quran-glyph">{word.codeV2}{" "}</span>
+                    <span className="quran-glyph">{wordText}{" "}</span>
                     <span className="word-translit" dir="ltr" aria-hidden="true">{translit}</span>
                   </>
                 ) : (
-                  <>{word.codeV2}{" "}</>
+                  <>{wordText}{" "}</>
                 )}
               </span>
             );
           })}
-          {ayah.endMarkerCodeV2 ? (
+          {ayah.endMarkerCodeV2 && !usingFallback ? (
             <span
               className="ayah-end-marker select-none"
               style={{ fontFamily: `QCFv2p${ayah.endMarkerPageNumber}, serif` }}
@@ -462,7 +494,7 @@ function SurahReadingView({
 }) {
   const firstAyah = ayahs[0];
   const containerRef = useRef<HTMLDivElement>(null);
-  const fontsReady = useQpcFonts(ayahs, surahNumber);
+  const { fontsReady, usingFallback } = useQpcFonts(ayahs, surahNumber);
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
   const { isBookmarked, toggleBookmark } = useBookmarks();
 
@@ -638,6 +670,7 @@ function SurahReadingView({
             }
             isBookmarked={isBookmarked(surahNumber, ayah.numberInSurah)}
             onToggleBookmark={() => toggleBookmark(surahNumber, ayah.numberInSurah)}
+            usingFallback={usingFallback}
           />
         ))}
       </div>
