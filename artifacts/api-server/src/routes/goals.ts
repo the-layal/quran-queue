@@ -148,6 +148,10 @@ router.delete("/goals/:id", async (req: Request, res: Response) => {
  */
 router.get("/goals/qf/sync", async (req: Request, res: Response) => {
   if (!isAuth(req, res)) return;
+  if (!process.env.QF_CLIENT_ID) {
+    res.status(503).json({ message: "Quran Foundation integration is not configured on this server" });
+    return;
+  }
   try {
     const userId = req.user!.id;
     const qfGoals = await fetchQFGoals(userId);

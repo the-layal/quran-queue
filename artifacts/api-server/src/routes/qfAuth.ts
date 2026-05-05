@@ -9,9 +9,9 @@ import { exchangeAuthorizationCode } from "../lib/qfTokenExchange";
 
 const router: IRouter = Router();
 
-const { apiBaseUrl } = getQfOAuthConfig();
-
-const QF_USERINFO_URL = `${apiBaseUrl}/api/v4/auth/userinfo`;
+function getQFUserinfoUrl(): string {
+  return `${getQfOAuthConfig().apiBaseUrl}/api/v4/auth/userinfo`;
+}
 
 const QF_PKCE_COOKIE = "qf_pkce_state";
 const QF_PKCE_COOKIE_TTL = 10 * 60 * 1000;
@@ -76,7 +76,13 @@ router.get("/auth/qf/connect", (req: Request, res: Response) => {
 
   const redirectUri = process.env.QF_REDIRECT_URI || getQFRedirectUri(req);
 
-  const session = buildPkceAuthSession({ redirectUri });
+  let session: ReturnType<typeof buildPkceAuthSession>;
+  try {
+    session = buildPkceAuthSession({ redirectUri });
+  } catch {
+    res.status(503).json({ error: "Quran Foundation integration is not configured on this server" });
+    return;
+  }
 
   // Persist the full PKCE session server-side before the redirect.
   // codeVerifier is never sent to the client — stored only in an httpOnly cookie.
@@ -165,7 +171,7 @@ router.get("/auth/qf/callback", async (req: Request, res: Response) => {
   let qfEmail: string | null = null;
 
   try {
-    const userRes = await fetch(QF_USERINFO_URL, {
+    const userRes = await fetch(getQFUserinfoUrl(), {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (userRes.ok) {

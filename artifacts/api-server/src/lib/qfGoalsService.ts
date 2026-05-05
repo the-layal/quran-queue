@@ -1,8 +1,9 @@
 import { qfTokenService } from "./qfTokenService";
 import { getQfOAuthConfig } from "./qfOAuthConfig";
 
-const { apiBaseUrl } = getQfOAuthConfig();
-const QF_GOALS_URL = `${apiBaseUrl}/api/v4/user/goals`;
+function getQFGoalsUrl(): string {
+  return `${getQfOAuthConfig().apiBaseUrl}/api/v4/user/goals`;
+}
 
 /** Parse QF API JSON — handles both raw arrays and wrapped { data: [...] } shapes. */
 function parseGoalList(body: unknown): Array<Record<string, unknown>> {
@@ -40,7 +41,7 @@ export async function syncGoalToQF(
     const token = await qfTokenService.getToken(userId);
     if (!token) return null;
 
-    const res = await fetch(QF_GOALS_URL, {
+    const res = await fetch(getQFGoalsUrl(), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
@@ -72,7 +73,7 @@ export async function pushProgressToQF(
     const token = await qfTokenService.getToken(userId);
     if (!token) return;
 
-    await fetch(`${QF_GOALS_URL}/${qfGoalId}`, {
+    await fetch(`${getQFGoalsUrl()}/${qfGoalId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
@@ -101,7 +102,7 @@ export async function fetchQFGoals(userId: string): Promise<QFGoalRecord[]> {
     const token = await qfTokenService.getToken(userId);
     if (!token) return [];
 
-    const res = await fetch(QF_GOALS_URL, {
+    const res = await fetch(getQFGoalsUrl(), {
       headers: { Authorization: `Bearer ${token}` },
     });
 

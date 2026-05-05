@@ -6,8 +6,9 @@ import { getQfOAuthConfig } from "../lib/qfOAuthConfig";
 
 const router: IRouter = Router();
 
-const { apiBaseUrl } = getQfOAuthConfig();
-const QF_API_BASE = `${apiBaseUrl}/api/v4`;
+function getQFApiBase(): string {
+  return `${getQfOAuthConfig().apiBaseUrl}/api/v4`;
+}
 
 function isAuth(req: Request, res: Response): req is Request & { user: NonNullable<typeof req.user> } {
   if (!req.isAuthenticated()) {
@@ -52,7 +53,7 @@ router.post("/bookmarks", async (req: Request, res: Response) => {
     const token = await qfTokenService.getToken(userId);
     if (token) {
       try {
-        const qfRes = await fetch(`${QF_API_BASE}/bookmarks`, {
+        const qfRes = await fetch(`${getQFApiBase()}/bookmarks`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -122,7 +123,7 @@ router.delete("/bookmarks/:id", async (req: Request, res: Response) => {
       const token = await qfTokenService.getToken(userId);
       if (token) {
         try {
-          await fetch(`${QF_API_BASE}/bookmarks/${bookmark.qfBookmarkId}`, {
+          await fetch(`${getQFApiBase()}/bookmarks/${bookmark.qfBookmarkId}`, {
             method: "DELETE",
             headers: { "Authorization": `Bearer ${token}` },
           });
@@ -143,12 +144,16 @@ router.delete("/bookmarks/:id", async (req: Request, res: Response) => {
 
 router.post("/bookmarks/qf", async (req: Request, res: Response) => {
   if (!isAuth(req, res)) return;
+  if (!process.env.QF_CLIENT_ID) {
+    res.status(503).json({ message: "Quran Foundation integration is not configured on this server" });
+    return;
+  }
   try {
     const input = createBookmarkSchema.parse(req.body);
     const token = await qfTokenService.getToken(req.user!.id);
     if (!token) { res.status(403).json({ message: "Not connected to Quran Foundation" }); return; }
 
-    const qfRes = await fetch(`${QF_API_BASE}/bookmarks`, {
+    const qfRes = await fetch(`${getQFApiBase()}/bookmarks`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
       body: JSON.stringify({ verse_key: `${input.surahNumber}:${input.ayahNumber}` }),
@@ -164,13 +169,17 @@ router.post("/bookmarks/qf", async (req: Request, res: Response) => {
 
 router.delete("/bookmarks/qf/:qfId", async (req: Request, res: Response) => {
   if (!isAuth(req, res)) return;
+  if (!process.env.QF_CLIENT_ID) {
+    res.status(503).json({ message: "Quran Foundation integration is not configured on this server" });
+    return;
+  }
   try {
     const qfId = req.params.qfId as string;
     if (!qfId) { res.status(400).json({ message: "Missing qfId" }); return; }
     const token = await qfTokenService.getToken(req.user!.id);
     if (!token) { res.status(403).json({ message: "Not connected to Quran Foundation" }); return; }
 
-    const qfRes = await fetch(`${QF_API_BASE}/bookmarks/${encodeURIComponent(qfId)}`, {
+    const qfRes = await fetch(`${getQFApiBase()}/bookmarks/${encodeURIComponent(qfId)}`, {
       method: "DELETE",
       headers: { "Authorization": `Bearer ${token}` },
     });
@@ -185,6 +194,10 @@ router.delete("/bookmarks/qf/:qfId", async (req: Request, res: Response) => {
 
 router.get("/bookmarks/qf/sync", async (req: Request, res: Response) => {
   if (!isAuth(req, res)) return;
+  if (!process.env.QF_CLIENT_ID) {
+    res.status(503).json({ message: "Quran Foundation integration is not configured on this server" });
+    return;
+  }
   try {
     const userId = req.user!.id;
     const token = await qfTokenService.getToken(userId);
@@ -193,7 +206,7 @@ router.get("/bookmarks/qf/sync", async (req: Request, res: Response) => {
       return;
     }
 
-    const qfRes = await fetch(`${QF_API_BASE}/bookmarks`, {
+    const qfRes = await fetch(`${getQFApiBase()}/bookmarks`, {
       headers: { "Authorization": `Bearer ${token}` },
     });
 
