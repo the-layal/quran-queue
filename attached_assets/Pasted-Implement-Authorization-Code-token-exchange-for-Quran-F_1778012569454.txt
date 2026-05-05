@@ -1,0 +1,41 @@
+Implement Authorization Code token exchange for Quran Foundation OAuth2.
+
+Source of truth
+- Token endpoint path: /oauth2/token
+- Method: POST
+- Content-Type: application/x-www-form-urlencoded
+- grant_type: authorization_code
+- Must send: code, redirect_uri, code_verifier (if PKCE was used)
+- Public clients: include `client_id` in the body
+- Confidential server clients: authenticate the client on the server
+
+Implementation requirements
+- Use authBaseUrl from getQfOAuthConfig():
+  POST {authBaseUrl}/oauth2/token
+- Default to the frontend/native app + backend exchange pattern unless Quran Foundation explicitly confirms that the client is public.
+- Match the exchange method to the provisioned client type:
+  - public => client_id in body, no client_secret
+  - confidential => keep client_secret on the server and exchange on the server
+- Validate callback inputs:
+  - state must match stored value (CSRF protection)
+  - redirect_uri must be exactly the one used in Step 2
+  - server-initiated web flows: the PKCE `code_verifier` value must come from server storage when calling the token endpoint
+  - frontend/native app + backend exchange flows: accept a `codeVerifier` field in the app's JSON callback payload, validate its presence, and forward it as `code_verifier` in the OAuth2 token request body
+- Never log:
+  - client_secret
+  - authorization code
+  - code_verifier
+  - access_token / refresh_token / id_token
+- On failure, throw a clear error:
+  "Failed to exchange authorization code for tokens"
+
+Output shape
+- Export a function exchangeAuthorizationCode({ code, redirectUri, codeVerifier, isConfidential? }) that returns:
+  { access_token, refresh_token?, id_token?, expires_in, scope, token_type }
+
+Acceptance checklist
+- Token exchange succeeds for public PKCE clients.
+- Token exchange succeeds for confidential clients when client_secret is present.
+- Frontend/native app + backend exchange flow accepts code + codeVerifier from the app and forwards code_verifier safely in the OAuth2 token request.
+- Omitting client authentication for a confidential client produces invalid_client.
+- Errors do not leak secrets, codes, or tokens.
