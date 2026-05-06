@@ -1,15 +1,17 @@
 import { useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
 import GuestBanner from "@/components/GuestBanner";
-import { Download, Upload, ShieldCheck, AlertTriangle, CheckCircle2, Loader2, Link2, Unlink, ExternalLink, Compass } from "lucide-react";
+import { Download, Upload, ShieldCheck, AlertTriangle, CheckCircle2, Loader2, Link2, Unlink, ExternalLink, Compass, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useQueryClient } from "@tanstack/react-query";
 import type { BackupData } from "@/storage/trackerStorage";
 import { useQFConnection } from "@/hooks/useQFConnection";
+import { BOOKMARKS_QUERY_KEY } from "@/hooks/useBookmarks";
 import { TOUR_START_EVENT } from "@/components/FeatureTour";
 
 type RestoreState = "idle" | "confirm" | "loading" | "done" | "error";
+type SyncState = "idle" | "loading" | "done" | "error";
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -25,6 +27,42 @@ export default function SettingsPage() {
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [pendingBackup, setPendingBackup] = useState<BackupData | null>(null);
   const [importedCounts, setImportedCounts] = useState<{ logs: number; srsItems: number; dailyPlans: number } | null>(null);
+
+  const [bookmarkSyncState, setBookmarkSyncState] = useState<SyncState>("idle");
+  const [bookmarkSyncMsg, setBookmarkSyncMsg] = useState<string | null>(null);
+  const [goalSyncState, setGoalSyncState] = useState<SyncState>("idle");
+  const [goalSyncMsg, setGoalSyncMsg] = useState<string | null>(null);
+
+  async function handleSyncBookmarks() {
+    setBookmarkSyncState("loading");
+    setBookmarkSyncMsg(null);
+    try {
+      const res = await fetch("/api/bookmarks/qf/sync", { credentials: "include" });
+      if (!res.ok) throw new Error("Sync failed");
+      const data = await res.json() as { synced: boolean; bookmarks: unknown[] };
+      await queryClient.invalidateQueries({ queryKey: BOOKMARKS_QUERY_KEY });
+      setBookmarkSyncState("done");
+      setBookmarkSyncMsg(data.synced ? `${data.bookmarks.length} bookmark${data.bookmarks.length !== 1 ? "s" : ""} up to date` : "Could not reach Quran.com — please reconnect");
+    } catch {
+      setBookmarkSyncState("error");
+      setBookmarkSyncMsg("Sync failed. Your session may have expired — try disconnecting and reconnecting.");
+    }
+  }
+
+  async function handleSyncGoals() {
+    setGoalSyncState("loading");
+    setGoalSyncMsg(null);
+    try {
+      const res = await fetch("/api/goals/qf/sync", { credentials: "include" });
+      if (!res.ok) throw new Error("Sync failed");
+      const data = await res.json() as { synced: number };
+      setGoalSyncState("done");
+      setGoalSyncMsg(data.synced > 0 ? `Imported ${data.synced} new goal${data.synced !== 1 ? "s" : ""} from Quran.com` : "Goals are up to date");
+    } catch {
+      setGoalSyncState("error");
+      setGoalSyncMsg("Sync failed. Your session may have expired — try disconnecting and reconnecting.");
+    }
+  }
 
   async function handleDownload() {
     setDownloadLoading(true);
@@ -181,7 +219,7 @@ export default function SettingsPage() {
                 <Loader2 size={15} className="animate-spin" /> Checking connection…
               </div>
             ) : isQFConnected ? (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="bg-secondary/30 rounded-xl p-4 border border-border/40 flex items-center gap-3">
                   <CheckCircle2 size={16} className="text-primary shrink-0" />
                   <div className="min-w-0">
@@ -191,6 +229,66 @@ export default function SettingsPage() {
                     )}
                   </div>
                 </div>
+
+                {/* Manual sync controls */}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-foreground">Sync from Quran.com</p>
+
+                  {/* Bookmarks sync */}
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handleSyncBookmarks}
+                      disabled={bookmarkSyncState === "loading"}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border border-border hover:bg-secondary/60 text-foreground",
+                        bookmarkSyncState === "loading" && "opacity-70 pointer-events-none",
+                      )}
+                    >
+                      {bookmarkSyncState === "loading"
+                        ? <Loader2 size={12} className="animate-spin" />
+                        : <RefreshCw size={12} />}
+                      Bookmarks
+                    </button>
+                    {bookmarkSyncMsg && (
+                      <span className={cn(
+                        "text-xs",
+                        bookmarkSyncState === "error" ? "text-destructive" : "text-muted-foreground",
+                      )}>
+                        {bookmarkSyncState === "error" && <AlertTriangle size={11} className="inline mr-1" />}
+                        {bookmarkSyncState === "done" && <CheckCircle2 size={11} className="inline mr-1 text-primary" />}
+                        {bookmarkSyncMsg}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Goals sync */}
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handleSyncGoals}
+                      disabled={goalSyncState === "loading"}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border border-border hover:bg-secondary/60 text-foreground",
+                        goalSyncState === "loading" && "opacity-70 pointer-events-none",
+                      )}
+                    >
+                      {goalSyncState === "loading"
+                        ? <Loader2 size={12} className="animate-spin" />
+                        : <RefreshCw size={12} />}
+                      Goals
+                    </button>
+                    {goalSyncMsg && (
+                      <span className={cn(
+                        "text-xs",
+                        goalSyncState === "error" ? "text-destructive" : "text-muted-foreground",
+                      )}>
+                        {goalSyncState === "error" && <AlertTriangle size={11} className="inline mr-1" />}
+                        {goalSyncState === "done" && <CheckCircle2 size={11} className="inline mr-1 text-primary" />}
+                        {goalSyncMsg}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
                 <button
                   onClick={() => disconnect()}
                   disabled={isDisconnecting}

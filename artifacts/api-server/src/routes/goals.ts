@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
 import { storage } from "../storage/index";
-import { syncGoalToQF, pushProgressToQF, fetchQFGoals } from "../lib/qfGoalsService";
+import { syncGoalToQF, pushProgressToQF, fetchQFGoals, deleteGoalFromQF } from "../lib/qfGoalsService";
 import { SURAHS } from "../lib/page-utils";
 
 const router: IRouter = Router();
@@ -134,6 +134,11 @@ router.delete("/goals/:id", async (req: Request, res: Response) => {
     const goals = await storage.getGoals(userId);
     const goal = goals.find((g) => g.id === id);
     if (!goal) { res.status(404).json({ message: "Goal not found" }); return; }
+
+    // Best-effort QF delete — fire-and-forget, do not block the response
+    if (goal.qfGoalId) {
+      void deleteGoalFromQF(userId, goal.qfGoalId);
+    }
 
     await storage.deleteGoal(id);
     res.json({ deleted: true });

@@ -88,6 +88,23 @@ export async function pushProgressToQF(
   }
 }
 
+export async function deleteGoalFromQF(
+  userId: string,
+  qfGoalId: string,
+): Promise<void> {
+  try {
+    const token = await qfTokenService.getToken(userId);
+    if (!token) return;
+
+    await fetch(`${getQFGoalsUrl()}/${qfGoalId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    // silent — local delete is the source of truth
+  }
+}
+
 export interface QFGoalRecord {
   id: string;
   surah_id?: number;
