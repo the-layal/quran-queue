@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
 import { storage } from "../storage/index";
-import { qfTokenService } from "../lib/qfTokenService";
+import { qfTokenService, markQFSyncError, clearQFSyncError } from "../lib/qfTokenService";
 import { getQfOAuthConfig } from "../lib/qfOAuthConfig";
 
 const router: IRouter = Router();
@@ -64,9 +64,11 @@ router.post("/bookmarks", async (req: Request, res: Response) => {
         if (qfRes.ok) {
           const qfData = (await qfRes.json()) as { id?: string | number };
           if (qfData.id != null) qfBookmarkId = String(qfData.id);
+        } else {
+          void markQFSyncError(userId);
         }
       } catch {
-        // QF sync failure is non-fatal
+        void markQFSyncError(userId);
       }
     }
 
@@ -123,12 +125,13 @@ router.delete("/bookmarks/:id", async (req: Request, res: Response) => {
       const token = await qfTokenService.getToken(userId);
       if (token) {
         try {
-          await fetch(`${getQFApiBase()}/bookmarks/${bookmark.qfBookmarkId}`, {
+          const qfDel = await fetch(`${getQFApiBase()}/bookmarks/${bookmark.qfBookmarkId}`, {
             method: "DELETE",
             headers: { "Authorization": `Bearer ${token}` },
           });
+          if (!qfDel.ok && qfDel.status !== 404) void markQFSyncError(userId);
         } catch {
-          // QF delete failure is non-fatal
+          void markQFSyncError(userId);
         }
       }
     }
@@ -230,6 +233,8 @@ router.get("/bookmarks/qf/sync", async (req: Request, res: Response) => {
     await storage.bulkUpsertBookmarks(userId, toUpsert);
 
     const merged = await storage.getBookmarks(userId);
+    // Clear any stored sync error — connection is clearly working
+    void clearQFSyncError(userId);
     res.json({ synced: true, bookmarks: merged });
   } catch {
     res.status(500).json({ message: "Internal Server Error" });

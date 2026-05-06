@@ -197,6 +197,7 @@ router.get("/auth/qf/callback", async (req: Request, res: Response) => {
       qfTokenExpiry: expiry,
       qfDisplayName,
       qfEmail,
+      qfSyncError: null, // clear any stale sync error on reconnect
     })
     .where(eq(usersTable.id, req.user!.id));
 
@@ -211,6 +212,7 @@ router.get("/auth/qf/callback", async (req: Request, res: Response) => {
 router.post("/auth/qf/disconnect", async (req: Request, res: Response) => {
   if (!requireAuth(req, res)) return;
 
+  // revokeToken already nulls all qf* columns including qfSyncError
   await qfTokenService.revokeToken(req.user!.id);
 
   res.json({ success: true });
@@ -228,6 +230,8 @@ router.get("/auth/qf/status", async (req: Request, res: Response) => {
       qfAccessToken: usersTable.qfAccessToken,
       qfDisplayName: usersTable.qfDisplayName,
       qfEmail: usersTable.qfEmail,
+      qfTokenExpiry: usersTable.qfTokenExpiry,
+      qfSyncError: usersTable.qfSyncError,
     })
     .from(usersTable)
     .where(eq(usersTable.id, req.user!.id));
@@ -238,6 +242,8 @@ router.get("/auth/qf/status", async (req: Request, res: Response) => {
     isConnected,
     displayName: isConnected ? (user.qfDisplayName ?? null) : null,
     email: isConnected ? (user.qfEmail ?? null) : null,
+    tokenExpiry: isConnected ? (user.qfTokenExpiry?.toISOString() ?? null) : null,
+    syncError: isConnected ? (user.qfSyncError ?? null) : null,
   });
 });
 

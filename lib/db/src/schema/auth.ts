@@ -26,6 +26,7 @@ export const usersTable = pgTable("users", {
   qfTokenExpiry: timestamp("qf_token_expiry", { withTimezone: true }),
   qfDisplayName: varchar("qf_display_name"),
   qfEmail: varchar("qf_email"),
+  qfSyncError: varchar("qf_sync_error"),
 });
 
 export type UpsertUser = typeof usersTable.$inferInsert;

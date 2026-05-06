@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
 import { storage } from "../storage/index";
 import { syncGoalToQF, pushProgressToQF, fetchQFGoals, deleteGoalFromQF } from "../lib/qfGoalsService";
+import { markQFSyncError, clearQFSyncError } from "../lib/qfTokenService";
 import { SURAHS } from "../lib/page-utils";
 
 const router: IRouter = Router();
@@ -74,7 +75,8 @@ router.post("/goals", async (req: Request, res: Response) => {
     // Best-effort QF sync — fire async, don't block the response
     syncGoalToQF(userId, input).then(async (qfGoalId) => {
       if (qfGoalId) await storage.updateGoal(goal.id, { qfGoalId });
-    }).catch(() => {});
+      else void markQFSyncError(userId); // null means QF rejected the push
+    }).catch(() => { void markQFSyncError(userId); });
 
     res.status(201).json(goal);
   } catch (err) {
@@ -183,6 +185,8 @@ router.get("/goals/qf/sync", async (req: Request, res: Response) => {
       synced++;
     }
 
+    // Clear any stored sync error — connection is working
+    void clearQFSyncError(userId);
     res.json({ synced });
   } catch {
     res.json({ synced: 0 });

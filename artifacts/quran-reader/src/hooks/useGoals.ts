@@ -164,6 +164,13 @@ export function useGoals() {
     reload();
   }, [reload]);
 
+  // Listen for a cross-component goals refresh signal (e.g. from Settings after QF sync)
+  useEffect(() => {
+    const handler = () => { void reload(); };
+    window.addEventListener("hafith:goals:refresh", handler);
+    return () => window.removeEventListener("hafith:goals:refresh", handler);
+  }, [reload]);
+
   // ── Guest → server migration when user signs in ───────────────────────────
   useEffect(() => {
     if (authLoading || !isAuthenticated || migrationDoneRef.current) return;

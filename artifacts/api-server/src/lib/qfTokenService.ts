@@ -118,8 +118,40 @@ async function revokeToken(userId: string): Promise<void> {
       qfTokenExpiry: null,
       qfDisplayName: null,
       qfEmail: null,
+      qfSyncError: null,
     })
     .where(eq(usersTable.id, userId));
+}
+
+/**
+ * Records a QF sync failure for the user so the UI can prompt them to reconnect.
+ * Non-throwing — if the DB update itself fails, the error is swallowed.
+ * @internal — call from route handlers only, never re-export from public barrels.
+ */
+export async function markQFSyncError(userId: string): Promise<void> {
+  try {
+    await db
+      .update(usersTable)
+      .set({ qfSyncError: "push_failed" })
+      .where(eq(usersTable.id, userId));
+  } catch {
+    // Non-fatal — the local operation already succeeded
+  }
+}
+
+/**
+ * Clears a previously stored QF sync error (e.g. after a successful manual sync).
+ * @internal — call from route handlers only.
+ */
+export async function clearQFSyncError(userId: string): Promise<void> {
+  try {
+    await db
+      .update(usersTable)
+      .set({ qfSyncError: null })
+      .where(eq(usersTable.id, userId));
+  } catch {
+    // Non-fatal
+  }
 }
 
 async function isConnected(userId: string): Promise<boolean> {

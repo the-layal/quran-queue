@@ -5,6 +5,8 @@ interface QFStatus {
   isConnected: boolean;
   displayName: string | null;
   email: string | null;
+  tokenExpiry: string | null;
+  syncError: string | null;
 }
 
 async function fetchQFStatus(): Promise<QFStatus> {
@@ -47,8 +49,11 @@ export function useQFConnection() {
     isQFConnected: query.data?.isConnected ?? false,
     qfDisplayName: query.data?.displayName ?? null,
     qfEmail: query.data?.email ?? null,
+    qfTokenExpiry: query.data?.tokenExpiry ?? null,
+    qfSyncError: query.data?.syncError ?? null,
     isLoading: query.isLoading,
     disconnect: disconnect.mutate,
     isDisconnecting: disconnect.isPending,
+    refetchStatus: () => query.refetch(),
   };
 }

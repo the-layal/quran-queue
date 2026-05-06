@@ -16,7 +16,7 @@ type SyncState = "idle" | "loading" | "done" | "error";
 export default function SettingsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const { isQFConnected, qfDisplayName, qfEmail, isLoading: qfLoading, disconnect, isDisconnecting } = useQFConnection();
+  const { isQFConnected, qfDisplayName, qfEmail, qfSyncError, isLoading: qfLoading, disconnect, isDisconnecting, refetchStatus } = useQFConnection();
 
   const searchParams = new URLSearchParams(window.location.search);
   const qfParam = searchParams.get("qf");
@@ -41,6 +41,7 @@ export default function SettingsPage() {
       if (!res.ok) throw new Error("Sync failed");
       const data = await res.json() as { synced: boolean; bookmarks: unknown[] };
       await queryClient.invalidateQueries({ queryKey: BOOKMARKS_QUERY_KEY });
+      refetchStatus(); // sync success clears qfSyncError on server; refresh the status
       setBookmarkSyncState("done");
       setBookmarkSyncMsg(data.synced ? `${data.bookmarks.length} bookmark${data.bookmarks.length !== 1 ? "s" : ""} up to date` : "Could not reach Quran.com — please reconnect");
     } catch {
@@ -56,6 +57,9 @@ export default function SettingsPage() {
       const res = await fetch("/api/goals/qf/sync", { credentials: "include" });
       if (!res.ok) throw new Error("Sync failed");
       const data = await res.json() as { synced: number };
+      // Notify any mounted goals consumers (e.g. Dashboard) to reload
+      window.dispatchEvent(new Event("hafith:goals:refresh"));
+      refetchStatus(); // sync success clears qfSyncError on server; refresh the status
       setGoalSyncState("done");
       setGoalSyncMsg(data.synced > 0 ? `Imported ${data.synced} new goal${data.synced !== 1 ? "s" : ""} from Quran.com` : "Goals are up to date");
     } catch {
@@ -220,6 +224,15 @@ export default function SettingsPage() {
               </div>
             ) : isQFConnected ? (
               <div className="space-y-4">
+                {qfSyncError && (
+                  <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
+                    <AlertTriangle size={14} className="text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                    <div className="text-xs text-amber-800 dark:text-amber-300">
+                      <p className="font-medium">Sync issue detected</p>
+                      <p className="mt-0.5 text-amber-700 dark:text-amber-400">A recent bookmark or goal failed to sync to Quran.com. Try syncing manually below, or disconnect and reconnect your account.</p>
+                    </div>
+                  </div>
+                )}
                 <div className="bg-secondary/30 rounded-xl p-4 border border-border/40 flex items-center gap-3">
                   <CheckCircle2 size={16} className="text-primary shrink-0" />
                   <div className="min-w-0">
