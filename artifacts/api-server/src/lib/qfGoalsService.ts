@@ -62,18 +62,19 @@ export async function syncGoalToQF(
   }
 }
 
+/** Returns true if the push succeeded, false on any error (non-throwing). */
 export async function pushProgressToQF(
   userId: string,
   qfGoalId: string,
   completedCount: number,
   totalCount: number,
   isComplete: boolean,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const token = await qfTokenService.getToken(userId);
-    if (!token) return;
+    if (!token) return false;
 
-    await fetch(`${getQFGoalsUrl()}/${qfGoalId}`, {
+    const res = await fetch(`${getQFGoalsUrl()}/${qfGoalId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({
@@ -83,25 +84,28 @@ export async function pushProgressToQF(
         status: isComplete ? "complete" : "active",
       }),
     });
+    return res.ok;
   } catch {
-    // silent — local goal is the source of truth
+    return false;
   }
 }
 
+/** Returns true if the delete succeeded (or the goal was already gone), false on error. */
 export async function deleteGoalFromQF(
   userId: string,
   qfGoalId: string,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const token = await qfTokenService.getToken(userId);
-    if (!token) return;
+    if (!token) return false;
 
-    await fetch(`${getQFGoalsUrl()}/${qfGoalId}`, {
+    const res = await fetch(`${getQFGoalsUrl()}/${qfGoalId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
+    return res.ok || res.status === 404;
   } catch {
-    // silent — local delete is the source of truth
+    return false;
   }
 }
 

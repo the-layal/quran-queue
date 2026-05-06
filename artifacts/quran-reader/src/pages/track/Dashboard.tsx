@@ -4,13 +4,14 @@ import GuestBanner from "@/components/GuestBanner";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useTrackerStorage } from "@/context/useTrackerStorage";
 import type { DailyPlan, TrackerStats } from "@/storage/trackerStorage";
-import { Trophy, ArrowRight, PenLine, CheckCircle2, Play, Flame, Plus, Target, X, ChevronDown, ChevronUp, Link2 } from "lucide-react";
+import { Trophy, ArrowRight, PenLine, CheckCircle2, Play, Flame, Plus, Target, X, ChevronDown, ChevronUp, Link2, RefreshCw, Loader2 } from "lucide-react";
 import { TOTAL_PAGES, SURAHS } from "@/lib/quran-data";
 import { getAyahsForReference } from "@/lib/page-utils";
 import { Link } from "wouter";
 import { LogModal } from "@/components/LogModal";
 import GoalModal from "@/components/GoalModal";
 import { useGoals, type Goal } from "@/hooks/useGoals";
+import { useQFConnection } from "@/hooks/useQFConnection";
 import { cn } from "@/lib/utils";
 
 function getSurahName(id: number): string {
@@ -274,6 +275,21 @@ export default function Dashboard() {
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
 
   const { goals, reload: reloadGoals, createGoal, deleteGoal } = useGoals();
+  const { isQFConnected } = useQFConnection();
+  const [goalSyncing, setGoalSyncing] = useState(false);
+
+  async function handleGoalSync() {
+    if (goalSyncing) return;
+    setGoalSyncing(true);
+    try {
+      await fetch("/api/goals/qf/sync", { credentials: "include" });
+      await reloadGoals();
+    } catch {
+      // non-fatal
+    } finally {
+      setGoalSyncing(false);
+    }
+  }
 
   const reload = useCallback(async () => {
     const [s, p] = await Promise.all([
@@ -518,14 +534,29 @@ export default function Dashboard() {
                 </span>
               )}
             </div>
-            <button
-              data-testid="button-new-goal"
-              onClick={() => setIsGoalModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-medium"
-            >
-              <Plus className="w-4 h-4" />
-              New Goal
-            </button>
+            <div className="flex items-center gap-2">
+              {isQFConnected && (
+                <button
+                  onClick={handleGoalSync}
+                  disabled={goalSyncing}
+                  title="Sync goals from Quran.com"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors text-sm font-medium disabled:opacity-50"
+                >
+                  {goalSyncing
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <RefreshCw className="w-4 h-4" />}
+                  Sync
+                </button>
+              )}
+              <button
+                data-testid="button-new-goal"
+                onClick={() => setIsGoalModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-medium"
+              >
+                <Plus className="w-4 h-4" />
+                New Goal
+              </button>
+            </div>
           </div>
 
           {goals.length === 0 ? (

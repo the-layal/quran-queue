@@ -108,12 +108,14 @@ router.patch("/goals/:id", async (req: Request, res: Response) => {
     const input = updateGoalSchema.parse(req.body);
     const updated = await storage.updateGoal(id, input);
 
-    // Push status/date changes to QF in background
+    // Push status/date changes to QF in background; mark sync error on failure
     if (updated.qfGoalId) {
       const total = updated.ayahEnd - updated.ayahStart + 1;
       const completed = (updated.completedAyahsList || []).length;
       const isComplete = updated.status === "complete";
-      void pushProgressToQF(userId, updated.qfGoalId, completed, total, isComplete);
+      pushProgressToQF(userId, updated.qfGoalId, completed, total, isComplete)
+        .then((ok) => { if (!ok) void markQFSyncError(userId); })
+        .catch(() => { void markQFSyncError(userId); });
     }
 
     res.json(updated);
@@ -137,9 +139,11 @@ router.delete("/goals/:id", async (req: Request, res: Response) => {
     const goal = goals.find((g) => g.id === id);
     if (!goal) { res.status(404).json({ message: "Goal not found" }); return; }
 
-    // Best-effort QF delete — fire-and-forget, do not block the response
+    // Best-effort QF delete; mark sync error if it fails
     if (goal.qfGoalId) {
-      void deleteGoalFromQF(userId, goal.qfGoalId);
+      deleteGoalFromQF(userId, goal.qfGoalId)
+        .then((ok) => { if (!ok) void markQFSyncError(userId); })
+        .catch(() => { void markQFSyncError(userId); });
     }
 
     await storage.deleteGoal(id);

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { Bookmark, CloudCheck, ChevronRight, PencilLine, Check, X } from "lucide-react";
-import { useQueries } from "@tanstack/react-query";
-import { useBookmarks } from "../hooks/useBookmarks";
+import { Bookmark, CloudCheck, ChevronRight, PencilLine, Check, X, RefreshCw, Loader2 } from "lucide-react";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { useBookmarks, BOOKMARKS_QUERY_KEY } from "../hooks/useBookmarks";
 import { useQuranStore } from "../store/quranStore";
 import { SURAHS } from "../data/quran";
 import { useLocation } from "wouter";
@@ -80,11 +80,26 @@ function NoteEditor({
 
 export default function SavedVersesPanel({ onNavigate }: { onNavigate?: () => void }) {
   const { bookmarks, isLoading, isQFConnected, updateNote } = useBookmarks();
+  const queryClient = useQueryClient();
   const setCurrentSurah = useQuranStore((s) => s.setCurrentSurah);
   const setViewMode = useQuranStore((s) => s.setViewMode);
   const setTargetScrollAyah = useQuranStore((s) => s.setTargetScrollAyah);
   const [, setLocation] = useLocation();
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  async function handleSync() {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      await fetch("/api/bookmarks/qf/sync", { credentials: "include" });
+      await queryClient.invalidateQueries({ queryKey: BOOKMARKS_QUERY_KEY });
+    } catch {
+      // non-fatal — bookmarks are still shown
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   const verseTextQueries = useQueries({
     queries: bookmarks.map((bm) => ({
@@ -114,12 +129,26 @@ export default function SavedVersesPanel({ onNavigate }: { onNavigate?: () => vo
           <span className="text-xs font-semibold text-foreground">Saved Verses</span>
           <span className="text-[10px] text-muted-foreground">({bookmarks.length})</span>
         </div>
-        {isQFConnected && anySynced && (
-          <div className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
-            <CloudCheck className="w-3 h-3" />
-            <span>Synced</span>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {isQFConnected && anySynced && (
+            <div className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
+              <CloudCheck className="w-3 h-3" />
+              <span>Synced</span>
+            </div>
+          )}
+          {isQFConnected && (
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              title="Sync bookmarks from Quran.com"
+              className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              {syncing
+                ? <Loader2 className="w-3 h-3 animate-spin" />
+                : <RefreshCw className="w-3 h-3" />}
+            </button>
+          )}
+        </div>
       </div>
 
       {isLoading ? (
