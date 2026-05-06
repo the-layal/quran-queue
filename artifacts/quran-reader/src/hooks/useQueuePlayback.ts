@@ -18,10 +18,14 @@ export interface QueuePlaybackState {
   queueTotalDurationSec: number;
   queueCurrentRegions: PlaybackRegion[];
   queueActiveLabel: string | null;
+  hasPrev: boolean;
+  hasNext: boolean;
   playQueue: (startIndex?: number) => void;
   pauseQueue: () => void;
   stopQueue: () => void;
   seekQueueTo: (fraction: number) => void;
+  skipToPrev: () => void;
+  skipToNext: () => void;
 }
 
 interface PauseState {
@@ -32,6 +36,7 @@ interface PauseState {
 
 export function useQueuePlayback(): QueuePlaybackState {
   const reviewQueue = useQuranStore((s) => s.reviewQueue);
+  const activeQueueItemId = useQuranStore((s) => s.activeQueueItemId);
   const queueLoopCount = useQuranStore((s) => s.queueLoopCount);
   const svgToJsonWordMap = useQuranStore((s) => s.svgToJsonWordMap);
   const playbackRate = useQuranStore((s) => s.playbackRate);
@@ -776,6 +781,26 @@ export function useQueuePlayback(): QueuePlaybackState {
     seekQueueToRef.current?.(fraction);
   }, []);
 
+  // Derive current index from the live queue via activeQueueItemId so skip
+  // operations remain correct even if queue items are removed while paused.
+  const effectiveIndex = useMemo(
+    () => (activeQueueItemId !== null ? reviewQueue.findIndex((item) => item.id === activeQueueItemId) : -1),
+    [activeQueueItemId, reviewQueue]
+  );
+
+  const skipToPrev = useCallback(() => {
+    if (effectiveIndex <= 0) return;
+    playQueue(effectiveIndex - 1);
+  }, [effectiveIndex, playQueue]);
+
+  const skipToNext = useCallback(() => {
+    if (effectiveIndex < 0 || effectiveIndex >= reviewQueue.length - 1) return;
+    playQueue(effectiveIndex + 1);
+  }, [effectiveIndex, reviewQueue.length, playQueue]);
+
+  const hasPrev = effectiveIndex > 0;
+  const hasNext = effectiveIndex >= 0 && effectiveIndex < reviewQueue.length - 1;
+
   const queueActiveLabel = useMemo(
     () => (activeItemIndex !== null ? (reviewQueue[activeItemIndex]?.label ?? null) : null),
     [activeItemIndex, reviewQueue]
@@ -788,9 +813,13 @@ export function useQueuePlayback(): QueuePlaybackState {
     queueTotalDurationSec,
     queueCurrentRegions,
     queueActiveLabel,
+    hasPrev,
+    hasNext,
     playQueue,
     pauseQueue,
     stopQueue,
     seekQueueTo,
+    skipToPrev,
+    skipToNext,
   };
 }

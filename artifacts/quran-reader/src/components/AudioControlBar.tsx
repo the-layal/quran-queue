@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef, useMemo, useState } from "react";
-import { Play, Pause, Repeat, Music2, Highlighter, ListMusic, CheckCheck, Loader2 } from "lucide-react";
+import { Play, Pause, Repeat, Music2, Highlighter, ListMusic, CheckCheck, Loader2, SkipBack, SkipForward } from "lucide-react";
 import SpeedSelector from "./SpeedSelector";
 import ReciterSelector from "./ReciterSelector";
 import type { ChapterMap } from "../types/quran";
@@ -42,9 +42,13 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
     queueTotalDurationSec,
     queueCurrentRegions,
     queueActiveLabel,
+    hasPrev,
+    hasNext,
     playQueue,
     pauseQueue,
     seekQueueTo,
+    skipToPrev,
+    skipToNext,
   } = queuePlayback;
 
   // ── Store state ───────────────────────────────────────────────────────────
@@ -395,6 +399,24 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
        *          direct flex items of the outer bar (single-row desktop look).
        */}
       <div className="flex items-center gap-2 sm:contents">
+        {/* Skip previous — only when queue is active */}
+        {queueActive && (
+          <button
+            onClick={skipToPrev}
+            disabled={!hasPrev}
+            style={{ pointerEvents: "auto" }}
+            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 border ${
+              hasPrev
+                ? "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                : "border-border text-muted-foreground/30 cursor-not-allowed"
+            }`}
+            aria-label="Previous queue item"
+            title="Previous queue item"
+          >
+            <SkipBack className="w-3.5 h-3.5" />
+          </button>
+        )}
+
         {/* Play / Pause (or loading spinner while reciter audio is fetching) */}
         <button
           onClick={handlePlayPause}
@@ -420,6 +442,24 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
             <Play className="w-4 h-4 ml-0.5" />
           )}
         </button>
+
+        {/* Skip next — only when queue is active */}
+        {queueActive && (
+          <button
+            onClick={skipToNext}
+            disabled={!hasNext}
+            style={{ pointerEvents: "auto" }}
+            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 border ${
+              hasNext
+                ? "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                : "border-border text-muted-foreground/30 cursor-not-allowed"
+            }`}
+            aria-label="Next queue item"
+            title="Next queue item"
+          >
+            <SkipForward className="w-3.5 h-3.5" />
+          </button>
+        )}
 
         {/* Progress area */}
         <div className="flex flex-col gap-1 min-w-0 flex-1 sm:flex-none">
