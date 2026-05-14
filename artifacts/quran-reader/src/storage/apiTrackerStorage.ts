@@ -99,6 +99,12 @@ export class ApiTrackerStorage implements ITrackerStorage {
     await jsonPost<unknown>("/api/backup/restore", data);
   }
 
+  async seedPriorKnowledge(items: Array<{ reference: string; vibe: number }>): Promise<void> {
+    for (const { reference, vibe } of items) {
+      await this.createLog({ type: "surah", reference, vibeScale: vibe });
+    }
+  }
+
   async isEmpty(): Promise<boolean> {
     const [logs, srs, plans] = await Promise.all([
       this.getLogs(),

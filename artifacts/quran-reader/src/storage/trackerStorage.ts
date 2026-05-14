@@ -87,6 +87,9 @@ export interface ITrackerStorage {
   backup(): Promise<BackupData>;
   restore(data: BackupData): Promise<void>;
 
+  // Prior knowledge seeding (onboarding)
+  seedPriorKnowledge(items: Array<{ reference: string; vibe: number }>): Promise<void>;
+
   // Migration support
   isEmpty(): Promise<boolean>;
   clear(): Promise<void>;

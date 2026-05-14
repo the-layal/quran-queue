@@ -23,7 +23,16 @@ const KEYS = {
   firstActionDate: "hafith_first_action_date",
   nudgeDismissed: "hafith_nudge_dismissed",
   bookmarks: "hafith_bookmarks",
+  onboardingComplete: "hafith_onboarding_complete",
 };
+
+export function isOnboardingComplete(): boolean {
+  return localStorage.getItem(KEYS.onboardingComplete) === "1";
+}
+
+export function markOnboardingComplete(): void {
+  localStorage.setItem(KEYS.onboardingComplete, "1");
+}
 
 function ensureDataVersion(): void {
   const stored = localStorage.getItem(KEYS.dataVersion);
@@ -521,6 +530,35 @@ export class LocalTrackerStorage implements ITrackerStorage {
     if (logs.length > 0 && !localStorage.getItem(KEYS.firstActionDate)) {
       writeJSON(KEYS.firstActionDate, todayStr());
     }
+  }
+
+  async seedPriorKnowledge(items: Array<{ reference: string; vibe: number }>): Promise<void> {
+    const SEED: Record<number, { interval: number; repetitions: number; easeFactor: number }> = {
+      1: { interval: 1,  repetitions: 1, easeFactor: 220 },
+      2: { interval: 3,  repetitions: 2, easeFactor: 235 },
+      3: { interval: 7,  repetitions: 3, easeFactor: 250 },
+      4: { interval: 21, repetitions: 4, easeFactor: 265 },
+      5: { interval: 60, repetitions: 5, easeFactor: 280 },
+    };
+    const srsItems = readSrs();
+    const now = new Date();
+    for (const { reference, vibe } of items) {
+      if (srsItems.find((s) => s.reference === reference)) continue;
+      const seed = SEED[vibe] ?? SEED[3];
+      const next = new Date(now);
+      next.setDate(next.getDate() + seed.interval);
+      srsItems.push({
+        id: nextId(),
+        type: "surah",
+        reference,
+        easeFactor: seed.easeFactor,
+        interval: seed.interval,
+        repetitions: seed.repetitions,
+        nextReviewDate: next.toISOString(),
+      });
+    }
+    writeSrs(srsItems);
+    if (items.length > 0) recordAction();
   }
 
   async isEmpty(): Promise<boolean> {

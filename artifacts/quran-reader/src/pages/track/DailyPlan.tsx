@@ -9,6 +9,8 @@ import { BrainCircuit, Settings2, CheckCircle2, ListTodo, ChevronLeft, ChevronRi
 import { cn } from "@/lib/utils";
 import { VibeScale } from "@/components/ui/VibeScale";
 import { getPageCountForReference, getSurahNamesForPageRange } from "@/lib/page-utils";
+import PriorKnowledgeSetup from "@/components/PriorKnowledgeSetup";
+import { isOnboardingComplete, markOnboardingComplete } from "@/storage/localTrackerStorage";
 
 function parseReference(ref: string) {
   const parts = ref.split(":");
@@ -154,6 +156,26 @@ export default function DailyPlanPage() {
   const [inlineVibe, setInlineVibe] = useState(0);
   const [advancedMode, setAdvancedMode] = useState<string | null>(null);
 
+  // null = still checking, true = show onboarding, false = skip
+  const [onboardingNeeded, setOnboardingNeeded] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (isOnboardingComplete()) { setOnboardingNeeded(false); return; }
+    storage.isEmpty().then((empty) => setOnboardingNeeded(empty));
+  }, [storage]);
+
+  const handleOnboardingComplete = async (selections: Array<{ reference: string; vibe: number }>) => {
+    if (selections.length > 0) await storage.seedPriorKnowledge(selections);
+    markOnboardingComplete();
+    setOnboardingNeeded(false);
+    await reload();
+  };
+
+  const handleOnboardingSkip = () => {
+    markOnboardingComplete();
+    setOnboardingNeeded(false);
+  };
+
   const reload = useCallback(async () => {
     const [p, all] = await Promise.all([storage.getTodayPlan(), storage.getAllPlans()]);
     setPlan(p);
@@ -234,12 +256,24 @@ export default function DailyPlanPage() {
     setLogModalOpen(true);
   };
 
-  if (isLoadingPlan) {
+  if (isLoadingPlan || onboardingNeeded === null) {
     return (
       <AppShell>
         <div className="p-4 max-w-6xl mx-auto">
           <div className="animate-pulse"><div className="h-2 bg-secondary rounded" /></div>
         </div>
+      </AppShell>
+    );
+  }
+
+  if (onboardingNeeded) {
+    return (
+      <AppShell>
+        <GuestBanner />
+        <PriorKnowledgeSetup
+          onComplete={handleOnboardingComplete}
+          onSkip={handleOnboardingSkip}
+        />
       </AppShell>
     );
   }
