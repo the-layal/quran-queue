@@ -100,9 +100,8 @@ export class ApiTrackerStorage implements ITrackerStorage {
   }
 
   async seedPriorKnowledge(items: Array<{ reference: string; vibe: number }>): Promise<void> {
-    for (const { reference, vibe } of items) {
-      await this.createLog({ type: "surah", reference, vibeScale: vibe });
-    }
+    if (items.length === 0) return;
+    await jsonPost<unknown>("/api/srs/seed", items);
   }
 
   async isEmpty(): Promise<boolean> {

@@ -191,6 +191,48 @@ router.get("/srs/due", async (req: Request, res: Response) => {
   res.json(await storage.getDueSrsItems(req.user!.id));
 });
 
+const SEED_TABLE: Record<number, { interval: number; repetitions: number; easeFactor: number }> = {
+  1: { interval: 1,  repetitions: 1, easeFactor: 220 },
+  2: { interval: 3,  repetitions: 2, easeFactor: 235 },
+  3: { interval: 7,  repetitions: 3, easeFactor: 250 },
+  4: { interval: 21, repetitions: 4, easeFactor: 265 },
+  5: { interval: 60, repetitions: 5, easeFactor: 280 },
+};
+
+const seedSchema = z.array(z.object({
+  reference: z.string().min(1),
+  vibe: z.number().int().min(1).max(5),
+})).max(114);
+
+router.post("/srs/seed", async (req: Request, res: Response) => {
+  if (!isAuth(req, res)) return;
+  try {
+    const userId = req.user!.id;
+    const items = seedSchema.parse(req.body);
+    const now = new Date();
+    for (const { reference, vibe } of items) {
+      const existing = await storage.getSrsItemByReference(userId, reference);
+      if (existing) continue;
+      const seed = SEED_TABLE[vibe] ?? SEED_TABLE[3];
+      const nextReviewDate = new Date(now);
+      nextReviewDate.setDate(nextReviewDate.getDate() + seed.interval);
+      await storage.createSrsItem({
+        userId,
+        type: "surah",
+        reference,
+        easeFactor: seed.easeFactor,
+        interval: seed.interval,
+        repetitions: seed.repetitions,
+        nextReviewDate,
+      });
+    }
+    res.json({ seeded: items.length });
+  } catch (err) {
+    if (err instanceof z.ZodError) { res.status(400).json({ error: err.issues }); return; }
+    throw err;
+  }
+});
+
 // ── Daily plans ───────────────────────────────────────────────────────────────
 
 router.get("/plans/today", async (req: Request, res: Response) => {
