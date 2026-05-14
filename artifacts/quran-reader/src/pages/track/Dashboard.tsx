@@ -4,7 +4,7 @@ import GuestBanner from "@/components/GuestBanner";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useTrackerStorage } from "@/context/useTrackerStorage";
 import type { DailyPlan, TrackerStats } from "@/storage/trackerStorage";
-import { Trophy, ArrowRight, PenLine, CheckCircle2, Play, Flame, Plus, Target, X, ChevronDown, ChevronUp, Link2, RefreshCw, Loader2 } from "lucide-react";
+import { Trophy, ArrowRight, PenLine, CheckCircle2, Play, Flame, Plus, Target, X, ChevronDown, ChevronUp, Link2, RefreshCw, Loader2, Star } from "lucide-react";
 import { TOTAL_PAGES, SURAHS } from "@/lib/quran-data";
 import { getAyahsForReference } from "@/lib/page-utils";
 import { Link } from "wouter";
@@ -12,6 +12,7 @@ import { LogModal } from "@/components/LogModal";
 import GoalModal from "@/components/GoalModal";
 import { useGoals, type Goal } from "@/hooks/useGoals";
 import { useQFConnection } from "@/hooks/useQFConnection";
+import { useSrsItems } from "@/hooks/useTracker";
 import { cn } from "@/lib/utils";
 
 function getSurahName(id: number): string {
@@ -273,6 +274,7 @@ export default function Dashboard() {
   const [todayPlan, setTodayPlan] = useState<DailyPlan | null>(null);
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
+  const { data: srsItems } = useSrsItems();
 
   const { goals, reload: reloadGoals, createGoal, deleteGoal } = useGoals();
   const { isQFConnected } = useQFConnection();
@@ -325,6 +327,11 @@ export default function Dashboard() {
     TOTAL_PAGES > 0 ? Math.floor((memorizedPages / TOTAL_PAGES) * 100) : 0;
   const plannedItems = todayPlan?.plannedItems || [];
   const completedItems = todayPlan?.completedItems || [];
+
+  const retiredPlanRefs = useMemo(
+    () => new Set((srsItems ?? []).filter((s) => s.retired).map((s) => s.reference)),
+    [srsItems],
+  );
 
   const activeGoals = goals.filter((g) => g.status === "active");
   const completedGoals = goals.filter((g) => g.status === "complete");
@@ -483,6 +490,9 @@ export default function Dashboard() {
                             {formatReference(ref)}
                           </p>
                         </div>
+                        {retiredPlanRefs.has(ref) && (
+                          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 flex-shrink-0" title="Perfectly Known" />
+                        )}
                         {isDone && (
                           <span className="text-[9px] uppercase tracking-wider font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">
                             Done

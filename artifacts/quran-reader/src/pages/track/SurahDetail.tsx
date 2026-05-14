@@ -30,8 +30,12 @@ export default function SurahDetail() {
     if (!srsItems) return [];
     return srsItems
       .filter((it) => {
-        const groups = getAyahsForReference(it.reference);
-        return groups.some((g) => g.surah === surahId);
+        try {
+          const groups = getAyahsForReference(it.reference);
+          return groups.some((g) => g.surah === surahId);
+        } catch {
+          return false;
+        }
       })
       .sort((a, b) => a.nextReviewDate.localeCompare(b.nextReviewDate));
   }, [srsItems, surahId]);

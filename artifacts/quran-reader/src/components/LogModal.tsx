@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, Book } from "lucide-react";
-import { useCreateLog, useLogExtraRevision } from "@/hooks/useTracker";
+import { useCreateLog, useLogExtraRevision, useRetireSurah, useUnretireSurah, useSrsItems } from "@/hooks/useTracker";
 import { VibeScale } from "./ui/VibeScale";
 import { cn } from "@/lib/utils";
 import { SURAHS } from "@/lib/quran-data";
@@ -36,6 +36,9 @@ export function LogModal({
 
   const { mutate: createLog, isPending: isLogPending } = useCreateLog();
   const { mutate: logExtra, isPending: isExtraPending } = useLogExtraRevision();
+  const { mutate: retireMutate, isPending: isRetirePending } = useRetireSurah();
+  const { mutate: unretireMutate, isPending: isUnretirePending } = useUnretireSurah();
+  const { data: srsItems } = useSrsItems();
   const isPending = mode === "extra" ? isExtraPending : isLogPending;
 
   useEffect(() => {
@@ -89,6 +92,18 @@ export function LogModal({
     }
     return true;
   };
+
+  const isSingleSurah = type === "surah" && (!surahToId || surahToId === surahFromId);
+  const surahRef = isSingleSurah ? `surah:${surahFromId}` : null;
+  const isRetired = surahRef ? !!(srsItems?.find((s) => s.reference === surahRef)?.retired) : false;
+
+  const handleRetire = surahRef && mode === "log" ? () => {
+    retireMutate(surahRef, { onSuccess: onClose });
+  } : undefined;
+
+  const handleUnretire = surahRef && mode === "log" && isRetired ? () => {
+    unretireMutate(surahRef);
+  } : undefined;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -264,7 +279,14 @@ export function LogModal({
 
           <div className="space-y-3">
             <label className="text-sm font-medium text-foreground">How well did you know it?</label>
-            <VibeScale value={vibeScale} onChange={setVibeScale} disabled={isPending} />
+            <VibeScale
+              value={vibeScale}
+              onChange={setVibeScale}
+              disabled={isPending || isRetirePending || isUnretirePending}
+              onRetire={handleRetire}
+              onUnretire={handleUnretire}
+              isRetired={isRetired}
+            />
           </div>
 
           <button
