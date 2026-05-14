@@ -12,6 +12,10 @@ import { getPageCountForReference, getSurahNamesForPageRange, getSurahName, getA
 import PriorKnowledgeSetup from "@/components/PriorKnowledgeSetup";
 import { isOnboardingComplete, markOnboardingComplete } from "@/storage/localTrackerStorage";
 
+function getRefAyahCount(ref: string): number {
+  try { return getAyahsForReference(ref).reduce((sum, g) => sum + g.ayahs.length, 0); } catch { return 0; }
+}
+
 function parseReference(ref: string) {
   const parts = ref.split(":");
   const refType = parts[0] || "page";
@@ -419,7 +423,7 @@ export default function DailyPlanPage() {
                 const isFirst = !isCompleted && !plannedItems.slice(0, idx).some((r) => !completedItems.includes(r));
                 const isExpanded = inlineVibeRef === ref;
                 const pageCount = getPageCountForReference(ref);
-                const ayahCount = (() => { try { return getAyahsForReference(ref).reduce((sum, g) => sum + g.ayahs.length, 0); } catch { return 0; } })();
+                const ayahCount = getRefAyahCount(ref);
                 const isInlineSurah = /^surah:\d+$/.test(ref);
                 const refSrsItem = isInlineSurah ? srsItems.find((s) => s.reference === ref) : undefined;
                 const isRefRetired = refSrsItem?.retired ?? false;

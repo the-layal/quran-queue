@@ -28,6 +28,19 @@ function formatPagesShort(pages: number): string {
   return `${Math.floor(rounded)}½ pg`;
 }
 
+function formatRefMeta(ref: string): string | null {
+  try {
+    const pc = getPageCountForReference(ref);
+    const ac = getAyahsForReference(ref).reduce((s, g) => s + g.ayahs.length, 0);
+    const parts: string[] = [];
+    if (pc > 0) parts.push(formatPagesShort(pc));
+    if (ac > 0) parts.push(`${ac} ayah${ac !== 1 ? "s" : ""}`);
+    return parts.length > 0 ? parts.join(" · ") : null;
+  } catch {
+    return null;
+  }
+}
+
 function formatReference(ref: string): string {
   const parts = ref.split(":");
   const type = parts[0];
@@ -499,17 +512,9 @@ export default function Dashboard() {
                           >
                             {formatReference(ref)}
                           </p>
-                          {(() => {
-                            try {
-                              const pc = getPageCountForReference(ref);
-                              const ac = getAyahsForReference(ref).reduce((s, g) => s + g.ayahs.length, 0);
-                              const parts: string[] = [];
-                              if (pc > 0) parts.push(formatPagesShort(pc));
-                              if (ac > 0) parts.push(`${ac} ayah${ac !== 1 ? "s" : ""}`);
-                              if (parts.length === 0) return null;
-                              return <p className="text-[11px] text-muted-foreground leading-tight">{parts.join(" · ")}</p>;
-                            } catch { return null; }
-                          })()}
+                          {formatRefMeta(ref) && (
+                            <p className="text-[11px] text-muted-foreground leading-tight">{formatRefMeta(ref)}</p>
+                          )}
                         </div>
                         {retiredPlanRefs.has(ref) && (
                           <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 flex-shrink-0" aria-label="Perfectly Known" />

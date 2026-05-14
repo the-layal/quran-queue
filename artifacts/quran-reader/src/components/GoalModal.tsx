@@ -51,6 +51,12 @@ function formatPaceLabel(val: number, unit: PaceUnit): string {
   return `${val} line${val !== 1 ? "s" : ""}/day`;
 }
 
+function clampDailyTarget(target: number, totalAyahs: number, totalPages: number): number {
+  const maxPages = Math.min(5, totalPages > 0 ? totalPages : 5);
+  const maxAyahs = totalPages > 0 ? Math.round(maxPages * totalAyahs / totalPages) : totalAyahs;
+  return Math.max(1, Math.min(maxAyahs, Math.round(target)));
+}
+
 export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
   const [step, setStep] = useState(1);
   const [surahId, setSurahId] = useState<number | null>(null);
@@ -103,7 +109,9 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
     setSurahId(id);
     setAyahStart(1);
     setAyahEnd(s.ayahCount);
-    setDailyTarget(Math.max(1, Math.ceil(s.ayahCount / Math.max(1, daysUntil(targetDate)))));
+    const sTotalPages = getTotalPagesForAyahRange(id, 1, s.ayahCount);
+    const raw = Math.ceil(s.ayahCount / Math.max(1, daysUntil(targetDate)));
+    setDailyTarget(clampDailyTarget(raw, s.ayahCount, sTotalPages));
     setStep(2);
   }
 
@@ -278,7 +286,7 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
                 onChange={(e) => {
                   setTargetDate(e.target.value);
                   const d = daysUntil(e.target.value);
-                  if (d > 0) setDailyTarget(Math.max(1, Math.ceil(totalAyahs / d)));
+                  if (d > 0) setDailyTarget(clampDailyTarget(Math.ceil(totalAyahs / d), totalAyahs, totalPages));
                 }}
                 className="w-full px-3 py-2 rounded-xl bg-muted text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
