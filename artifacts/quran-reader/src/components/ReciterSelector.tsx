@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { User2, Check } from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
 import { RECITERS, getReciter } from "../data/reciters";
@@ -120,7 +121,7 @@ export default function ReciterSelector({ style }: ReciterSelectorProps) {
         </span>
       </button>
 
-      {open && pos && (
+      {open && pos && createPortal(
         <div
           ref={popoverRef}
           style={{
@@ -171,7 +172,8 @@ export default function ReciterSelector({ style }: ReciterSelectorProps) {
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
