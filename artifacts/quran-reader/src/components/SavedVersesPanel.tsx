@@ -78,7 +78,7 @@ function NoteEditor({
   );
 }
 
-export default function SavedVersesPanel({ onNavigate }: { onNavigate?: () => void }) {
+export default function SavedVersesPanel({ onNavigate, insidePanel }: { onNavigate?: () => void; insidePanel?: boolean }) {
   const { bookmarks, isLoading, isQFConnected, updateNote } = useBookmarks();
   const queryClient = useQueryClient();
   const setCurrentSurah = useQuranStore((s) => s.setCurrentSurah);
@@ -109,7 +109,7 @@ export default function SavedVersesPanel({ onNavigate }: { onNavigate?: () => vo
     })),
   });
 
-  if (bookmarks.length === 0 && !isLoading) return null;
+  if (bookmarks.length === 0 && !isLoading && !insidePanel) return null;
 
   function handleClick(surahNumber: number, ayahNumber: number) {
     setCurrentSurah(surahNumber);
@@ -120,6 +120,101 @@ export default function SavedVersesPanel({ onNavigate }: { onNavigate?: () => vo
   }
 
   const anySynced = bookmarks.some((bm) => bm.qfBookmarkId);
+
+  if (insidePanel) {
+    return (
+      <div className="divide-y divide-border/50">
+        {isLoading ? (
+          <div className="px-3 py-3 space-y-2">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-10 rounded-lg bg-muted animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <>
+            {isQFConnected && (
+              <div className="flex items-center justify-between px-4 py-2 bg-muted/30 border-b border-border">
+                <div className="flex items-center gap-2">
+                  {anySynced && (
+                    <div className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400">
+                      <CloudCheck className="w-3 h-3" />
+                      <span>Synced with Quran.com</span>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={handleSync}
+                  disabled={syncing}
+                  title="Sync bookmarks from Quran.com"
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                >
+                  {syncing
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <RefreshCw className="w-3 h-3" />}
+                  Sync
+                </button>
+              </div>
+            )}
+            {bookmarks.map((bm, idx) => {
+              const text = verseTextQueries[idx]?.data;
+              const snippet = text
+                ? text.length > 60 ? text.slice(0, 60) + "…" : text
+                : null;
+              const isEditing = editingId === bm.id;
+              return (
+                <div key={bm.id} className="group">
+                  <div className="flex items-center hover:bg-muted/50 transition-colors">
+                    <button
+                      onClick={() => handleClick(bm.surahNumber, bm.ayahNumber)}
+                      className="flex-1 min-w-0 flex items-center gap-2 px-4 py-3 text-left"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                          <span className="truncate">{getSurahName(bm.surahNumber)}</span>
+                          <span className="text-muted-foreground font-normal flex-shrink-0">
+                            {bm.surahNumber}:{bm.ayahNumber}
+                          </span>
+                          {bm.qfBookmarkId && (
+                            <CloudCheck className="w-2.5 h-2.5 text-emerald-500 flex-shrink-0" />
+                          )}
+                        </div>
+                        {snippet && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5 text-right truncate" dir="rtl" lang="ar">
+                            {snippet}
+                          </p>
+                        )}
+                        {bm.note && !isEditing && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5 italic truncate">{bm.note}</p>
+                        )}
+                      </div>
+                    </button>
+                    <div className="flex items-center gap-1 flex-shrink-0 pr-3">
+                      <button
+                        onClick={() => setEditingId(isEditing ? null : bm.id)}
+                        title={bm.note ? "Edit note" : "Add note"}
+                        className="opacity-40 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                      >
+                        <PencilLine className="w-3 h-3" />
+                      </button>
+                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </div>
+                  {isEditing && (
+                    <NoteEditor
+                      bookmarkId={bm.id}
+                      initialNote={bm.note}
+                      onSave={(id, note) => { updateNote(id, note); setEditingId(null); }}
+                      onCancel={() => setEditingId(null)}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="mx-3 mb-3 rounded-xl border border-border overflow-hidden">

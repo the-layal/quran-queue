@@ -34,6 +34,7 @@ import BrushFinenessToggle from "../components/BrushFinenessToggle";
 import BlindReviewToggle from "../components/BlindReviewToggle";
 import AudioControlBar from "../components/AudioControlBar";
 import ReviewQueuePanel from "../components/ReviewQueuePanel";
+import BookmarksPanel from "../components/BookmarksPanel";
 import { useSmartBrush } from "../hooks/useSmartBrush";
 import { useQueuePlayback } from "../hooks/useQueuePlayback";
 
@@ -806,6 +807,7 @@ export default function QuranPage() {
     document.documentElement.classList.contains("dark")
   );
   const [surahPickerOpen, setSurahPickerOpen] = useState(false);
+  const [bookmarksPanelOpen, setBookmarksPanelOpen] = useState(false);
   const [chapters, setChapters] = useState<ChapterMap>({});
 
   const isMushaf = viewMode === "mushaf";
@@ -1073,12 +1075,14 @@ export default function QuranPage() {
 
       <button
         data-tour="bookmarks"
-        onClick={() => {
-          const toggle = document.querySelector<HTMLElement>('[data-testid="button-sidebar-toggle"]');
-          toggle?.click();
-        }}
-        className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+        onClick={() => setBookmarksPanelOpen((o) => !o)}
+        className={`p-2 rounded-lg transition-colors ${
+          bookmarksPanelOpen
+            ? "bg-primary/15 text-primary"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+        }`}
         aria-label="Saved verses"
+        aria-pressed={bookmarksPanelOpen}
         title="Saved verses"
       >
         <Bookmark className="w-5 h-5" />
@@ -1116,6 +1120,7 @@ export default function QuranPage() {
       rightActions={rightActions}
       centerContent={centerContent}
     >
+      <BookmarksPanel open={bookmarksPanelOpen} onClose={() => setBookmarksPanelOpen(false)} />
       <div
         className="flex flex-col flex-1"
         style={isMushaf ? { height: "calc(100dvh - var(--app-header-h, 57px))", overflow: "hidden" } : undefined}

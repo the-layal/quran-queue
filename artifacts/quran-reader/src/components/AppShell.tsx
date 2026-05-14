@@ -14,7 +14,6 @@ import {
   User,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
-import SavedVersesPanel from "./SavedVersesPanel";
 
 interface NavItem {
   label: string;
@@ -267,11 +266,6 @@ export default function AppShell({ children, rightActions, centerContent }: AppS
         </nav>
 
         <VersePanel />
-
-        <SavedVersesPanel onNavigate={() => {
-          if (!isDesktop) setMobileOpen(false);
-          else if (isQuranPage) setQuranSessionOpen(false);
-        }} />
 
         <div className="px-4 pb-4">
           {isLoading ? (
