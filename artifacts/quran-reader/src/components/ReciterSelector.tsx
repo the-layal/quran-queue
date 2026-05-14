@@ -10,6 +10,7 @@ interface PopoverPos {
   bottom: number;
   left: number;
   width: number;
+  maxHeight: number;
 }
 
 function computePopoverPos(button: HTMLButtonElement): PopoverPos {
@@ -23,7 +24,10 @@ function computePopoverPos(button: HTMLButtonElement): PopoverPos {
 
   const bottom = window.innerHeight - rect.top + MARGIN;
 
-  return { bottom, left, width };
+  // Cap height to available space above the button so the list never escapes the top edge.
+  const maxHeight = Math.max(0, rect.top - MARGIN);
+
+  return { bottom, left, width, maxHeight };
 }
 
 interface ReciterSelectorProps {
@@ -107,8 +111,9 @@ export default function ReciterSelector({ style }: ReciterSelectorProps) {
             bottom: pos.bottom,
             left: pos.left,
             width: pos.width,
+            maxHeight: pos.maxHeight,
           }}
-          className="z-[70] bg-card border border-border rounded-xl shadow-xl p-1.5 flex flex-col gap-0.5 max-h-[60vh] overflow-y-auto overscroll-contain"
+          className="z-[70] bg-card border border-border rounded-xl shadow-xl p-1.5 flex flex-col gap-0.5 overflow-y-auto overscroll-contain"
           role="listbox"
           aria-label="Choose reciter"
         >
