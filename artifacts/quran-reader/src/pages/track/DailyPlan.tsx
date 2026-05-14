@@ -8,7 +8,7 @@ import { AdvancedVibeGrid } from "@/components/AdvancedVibeGrid";
 import { BrainCircuit, Settings2, CheckCircle2, ListTodo, ChevronLeft, ChevronRight, Circle, Play, BookOpen, Layers, X, Trash2, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VibeScale } from "@/components/ui/VibeScale";
-import { getPageCountForReference, getSurahNamesForPageRange, getSurahName } from "@/lib/page-utils";
+import { getPageCountForReference, getSurahNamesForPageRange, getSurahName, getAyahsForReference } from "@/lib/page-utils";
 import PriorKnowledgeSetup from "@/components/PriorKnowledgeSetup";
 import { isOnboardingComplete, markOnboardingComplete } from "@/storage/localTrackerStorage";
 
@@ -419,6 +419,7 @@ export default function DailyPlanPage() {
                 const isFirst = !isCompleted && !plannedItems.slice(0, idx).some((r) => !completedItems.includes(r));
                 const isExpanded = inlineVibeRef === ref;
                 const pageCount = getPageCountForReference(ref);
+                const ayahCount = (() => { try { return getAyahsForReference(ref).reduce((sum, g) => sum + g.ayahs.length, 0); } catch { return 0; } })();
                 const isInlineSurah = /^surah:\d+$/.test(ref);
                 const refSrsItem = isInlineSurah ? srsItems.find((s) => s.reference === ref) : undefined;
                 const isRefRetired = refSrsItem?.retired ?? false;
@@ -457,7 +458,9 @@ export default function DailyPlanPage() {
                                 <span className="text-[10px] uppercase tracking-wider font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">Done</span>
                               )}
                             </div>
-                            <p className="text-sm text-muted-foreground mt-0.5">{formatPageCount(pageCount)}</p>
+                            <p className="text-sm text-muted-foreground mt-0.5">
+                              {formatPageCount(pageCount)}{ayahCount > 0 ? ` · ${ayahCount} ayah${ayahCount !== 1 ? "s" : ""}` : ""}
+                            </p>
                           </div>
                         </div>
 

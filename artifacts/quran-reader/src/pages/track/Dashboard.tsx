@@ -6,7 +6,7 @@ import { useTrackerStorage } from "@/context/useTrackerStorage";
 import type { DailyPlan, TrackerStats } from "@/storage/trackerStorage";
 import { Trophy, ArrowRight, PenLine, CheckCircle2, Play, Flame, Plus, Target, X, ChevronDown, ChevronUp, Link2, RefreshCw, Loader2, Star } from "lucide-react";
 import { TOTAL_PAGES, SURAHS } from "@/lib/quran-data";
-import { getAyahsForReference, getTotalPagesForAyahRange, ayahsToPages } from "@/lib/page-utils";
+import { getAyahsForReference, getTotalPagesForAyahRange, ayahsToPages, getPageCountForReference } from "@/lib/page-utils";
 import { Link } from "wouter";
 import { LogModal } from "@/components/LogModal";
 import GoalModal from "@/components/GoalModal";
@@ -499,6 +499,17 @@ export default function Dashboard() {
                           >
                             {formatReference(ref)}
                           </p>
+                          {(() => {
+                            try {
+                              const pc = getPageCountForReference(ref);
+                              const ac = getAyahsForReference(ref).reduce((s, g) => s + g.ayahs.length, 0);
+                              const parts: string[] = [];
+                              if (pc > 0) parts.push(formatPagesShort(pc));
+                              if (ac > 0) parts.push(`${ac} ayah${ac !== 1 ? "s" : ""}`);
+                              if (parts.length === 0) return null;
+                              return <p className="text-[11px] text-muted-foreground leading-tight">{parts.join(" · ")}</p>;
+                            } catch { return null; }
+                          })()}
                         </div>
                         {retiredPlanRefs.has(ref) && (
                           <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 flex-shrink-0" aria-label="Perfectly Known" />
