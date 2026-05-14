@@ -540,7 +540,7 @@ export default function DailyPlanPage() {
                 </button>
               </div>
 
-              {retiredNotInPlan.length > 0 && (
+              {retiredItems.length > 0 && (
                 <button
                   onClick={handleAddPerfectlyKnown}
                   disabled={isAddingPerfectlyKnown}

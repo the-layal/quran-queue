@@ -253,6 +253,11 @@ router.post("/srs/retire", async (req: Request, res: Response) => {
       });
     }
     await storage.updateSrsItem(item.id, { retired: true, retiredAt: new Date() });
+    const todayPlan = await storage.getDailyPlan(userId, getTodayStr());
+    if (todayPlan) {
+      const plannedItems = (todayPlan.plannedItems || []).filter((r) => r !== reference);
+      await storage.updateDailyPlan(todayPlan.id, { plannedItems });
+    }
     res.json({ retired: true });
   } catch (err) {
     if (err instanceof z.ZodError) { res.status(400).json({ error: err.issues }); return; }
@@ -351,13 +356,16 @@ router.post("/plans/today", async (req: Request, res: Response) => {
       return { plannedItems, currentPageCount };
     };
 
+    const allSrsFull = await storage.getSrsItems(userId);
+    const retiredSet = new Set(allSrsFull.filter((s) => s.retired).map((s) => s.reference));
+
     if (!plan) {
       const carryoverRefs: string[] = [];
       const yesterdayPlan = await storage.getDailyPlan(userId, getYesterdayStr());
       if (yesterdayPlan) {
         const completed = yesterdayPlan.completedItems || [];
         const planned = yesterdayPlan.plannedItems || [];
-        for (const ref of planned) if (!completed.includes(ref)) carryoverRefs.push(ref);
+        for (const ref of planned) if (!completed.includes(ref) && !retiredSet.has(ref)) carryoverRefs.push(ref);
       }
 
       let currentPageCount = 0;
@@ -388,7 +396,7 @@ router.post("/plans/today", async (req: Request, res: Response) => {
       });
     } else {
       const completedItems = plan.completedItems || [];
-      const existingPlanned = plan.plannedItems || [];
+      const existingPlanned = (plan.plannedItems || []).filter((r) => !retiredSet.has(r) || completedItems.includes(r));
       let currentPageCount = 0;
       const existingPages = new Set<number>();
 

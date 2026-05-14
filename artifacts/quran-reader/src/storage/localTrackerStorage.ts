@@ -293,6 +293,11 @@ export class LocalTrackerStorage implements ITrackerStorage {
       });
     }
     writeSrs(items);
+    const plan = await this.getTodayPlan();
+    if (plan) {
+      const plannedItems = plan.plannedItems.filter((r) => r !== reference);
+      this.replacePlan({ ...plan, plannedItems });
+    }
   }
 
   async unretireSurah(reference: string): Promise<void> {
@@ -349,11 +354,13 @@ export class LocalTrackerStorage implements ITrackerStorage {
     const existingIdx = plans.findIndex((p) => p.date === t);
 
     if (existingIdx === -1) {
+      const retiredRefSet = new Set(readSrs().filter((i) => i.retired).map((i) => i.reference));
       const carryover: string[] = [];
       const yPlan = plans.find((p) => p.date === yesterdayStr());
       if (yPlan) {
         const completed = yPlan.completedItems || [];
-        for (const ref of yPlan.plannedItems || []) if (!completed.includes(ref)) carryover.push(ref);
+        for (const ref of yPlan.plannedItems || [])
+          if (!completed.includes(ref) && !retiredRefSet.has(ref)) carryover.push(ref);
       }
       const planned: string[] = [...carryover];
       let usedPages = planned.reduce((s, r) => s + getPageEquivalent(r), 0);
@@ -379,8 +386,13 @@ export class LocalTrackerStorage implements ITrackerStorage {
     }
 
     const existing = plans[existingIdx];
-    const srsRefs = new Set(readSrs().map((i) => i.reference));
-    const planned = (existing.plannedItems || []).filter((r) => srsRefs.has(r));
+    const allSrs = readSrs();
+    const srsRefs = new Set(allSrs.map((i) => i.reference));
+    const retiredRefsUpdate = new Set(allSrs.filter((i) => i.retired).map((i) => i.reference));
+    const completedExisting = existing.completedItems || [];
+    const planned = (existing.plannedItems || []).filter(
+      (r) => srsRefs.has(r) && (!retiredRefsUpdate.has(r) || completedExisting.includes(r)),
+    );
     let usedPages = planned.reduce((s, r) => s + getPageEquivalent(r), 0);
     if (usedPages < bandwidth) {
       const due = await this.getDueSrsItems();
