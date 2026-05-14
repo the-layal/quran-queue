@@ -428,7 +428,7 @@ export default function DailyPlanPage() {
                                 {formatReference(ref)}
                               </h3>
                               {isRefRetired && !isCompleted && (
-                                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 flex-shrink-0" title="Perfectly Known" />
+                                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 flex-shrink-0" aria-label="Perfectly Known" />
                               )}
                               {isFirst && !isCompleted && (
                                 <span className="text-[10px] uppercase tracking-wider font-bold bg-accent text-accent-foreground px-2 py-0.5 rounded-full">Up Next</span>

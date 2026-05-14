@@ -320,7 +320,7 @@ export default function SurahDetail() {
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-foreground truncate">{formatSegmentLabel(it.reference)}</p>
                     {it.retired && (
-                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 flex-shrink-0" title="Retired — Perfectly Known" />
+                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 flex-shrink-0" aria-label="Retired — Perfectly Known" />
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground">{it.reference}</p>

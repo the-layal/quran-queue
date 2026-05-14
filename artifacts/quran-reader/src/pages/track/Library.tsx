@@ -281,7 +281,7 @@ export default function LibraryPage() {
                     <div className="flex items-center gap-1.5">
                       <h3 className="font-semibold text-foreground">{surah.englishName}</h3>
                       {retiredRefs.has(`surah:${surah.id}`) && (
-                        <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 flex-shrink-0" title="Perfectly Known — Retired" />
+                        <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 flex-shrink-0" aria-label="Perfectly Known — Retired" />
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground">{surah.type} • {surah.ayahCount} Ayahs</p>

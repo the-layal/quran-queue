@@ -491,7 +491,7 @@ export default function Dashboard() {
                           </p>
                         </div>
                         {retiredPlanRefs.has(ref) && (
-                          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 flex-shrink-0" title="Perfectly Known" />
+                          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 flex-shrink-0" aria-label="Perfectly Known" />
                         )}
                         {isDone && (
                           <span className="text-[9px] uppercase tracking-wider font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">
