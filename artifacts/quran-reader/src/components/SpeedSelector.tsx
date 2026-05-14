@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useQuranStore } from "../store/quranStore";
 
 const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
@@ -113,7 +114,7 @@ export default function SpeedSelector({ style }: SpeedSelectorProps) {
         </span>
       </button>
 
-      {open && pos && (
+      {open && pos && createPortal(
         <div
           ref={popoverRef}
           style={{
@@ -142,7 +143,8 @@ export default function SpeedSelector({ style }: SpeedSelectorProps) {
               {formatRate(rate)}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
