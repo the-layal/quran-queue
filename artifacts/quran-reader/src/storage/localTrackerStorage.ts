@@ -269,7 +269,58 @@ export class LocalTrackerStorage implements ITrackerStorage {
 
   async getDueSrsItems(): Promise<SrsItem[]> {
     const now = new Date();
-    return readSrs().filter((i) => new Date(i.nextReviewDate) <= now);
+    return readSrs().filter((i) => !i.retired && new Date(i.nextReviewDate) <= now);
+  }
+
+  async retireSurah(reference: string): Promise<void> {
+    const items = readSrs();
+    const idx = items.findIndex((i) => i.reference === reference);
+    if (idx !== -1) {
+      items[idx] = { ...items[idx], retired: true, retiredAt: new Date().toISOString() };
+    } else {
+      const next = new Date();
+      next.setDate(next.getDate() + 365);
+      items.push({
+        id: nextId(),
+        type: "surah",
+        reference,
+        easeFactor: 280,
+        interval: 365,
+        repetitions: 5,
+        nextReviewDate: next.toISOString(),
+        retired: true,
+        retiredAt: new Date().toISOString(),
+      });
+    }
+    writeSrs(items);
+  }
+
+  async unretireSurah(reference: string): Promise<void> {
+    const items = readSrs();
+    const idx = items.findIndex((i) => i.reference === reference);
+    if (idx !== -1) {
+      const next = new Date();
+      next.setDate(next.getDate() + 60);
+      items[idx] = {
+        ...items[idx],
+        retired: false,
+        retiredAt: null,
+        interval: 60,
+        nextReviewDate: next.toISOString(),
+      };
+      writeSrs(items);
+    }
+  }
+
+  async addPerfectlyKnownToSession(): Promise<DailyPlan> {
+    const plan = await this.requireToday();
+    const retiredItems = readSrs().filter((i) => i.retired);
+    for (const item of retiredItems) {
+      if (!plan.plannedItems.includes(item.reference)) {
+        plan.plannedItems = [...plan.plannedItems, item.reference];
+      }
+    }
+    return this.replacePlan(plan);
   }
 
   async getTodayPlan(): Promise<DailyPlan | null> {

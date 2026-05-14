@@ -233,6 +233,50 @@ router.post("/srs/seed", async (req: Request, res: Response) => {
   }
 });
 
+// ── SRS retire / unretire ─────────────────────────────────────────────────────
+
+const retireSchema = z.object({ reference: z.string().min(1) });
+
+router.post("/srs/retire", async (req: Request, res: Response) => {
+  if (!isAuth(req, res)) return;
+  try {
+    const userId = req.user!.id;
+    const { reference } = retireSchema.parse(req.body);
+    let item = await storage.getSrsItemByReference(userId, reference);
+    if (!item) {
+      const far = new Date();
+      far.setFullYear(far.getFullYear() + 10);
+      item = await storage.createSrsItem({
+        userId, type: "surah", reference,
+        easeFactor: 280, interval: 365, repetitions: 5,
+        nextReviewDate: far,
+      });
+    }
+    await storage.updateSrsItem(item.id, { retired: true, retiredAt: new Date() });
+    res.json({ retired: true });
+  } catch (err) {
+    if (err instanceof z.ZodError) { res.status(400).json({ error: err.issues }); return; }
+    throw err;
+  }
+});
+
+router.post("/srs/unretire", async (req: Request, res: Response) => {
+  if (!isAuth(req, res)) return;
+  try {
+    const userId = req.user!.id;
+    const { reference } = retireSchema.parse(req.body);
+    const item = await storage.getSrsItemByReference(userId, reference);
+    if (!item) { res.status(404).json({ error: "SRS item not found" }); return; }
+    const next = new Date();
+    next.setDate(next.getDate() + 60);
+    await storage.updateSrsItem(item.id, { retired: false, retiredAt: null, interval: 60, nextReviewDate: next });
+    res.json({ retired: false });
+  } catch (err) {
+    if (err instanceof z.ZodError) { res.status(400).json({ error: err.issues }); return; }
+    throw err;
+  }
+});
+
 // ── Daily plans ───────────────────────────────────────────────────────────────
 
 router.get("/plans/today", async (req: Request, res: Response) => {
@@ -635,6 +679,25 @@ router.post("/plans/today/remove-item", async (req: Request, res: Response) => {
       res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
       return;
     }
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+router.post("/plans/today/perfectly-known", async (req: Request, res: Response) => {
+  if (!isAuth(req, res)) return;
+  try {
+    const userId = req.user!.id;
+    let plan = await storage.getDailyPlan(userId, getTodayStr());
+    if (!plan) { res.status(400).json({ message: "No plan for today. Generate a plan first." }); return; }
+    const allSrs = await storage.getSrsItems(userId);
+    const retiredRefs = allSrs.filter((s) => s.retired).map((s) => s.reference);
+    const planned = [...(plan.plannedItems || [])];
+    for (const ref of retiredRefs) {
+      if (!planned.includes(ref)) planned.push(ref);
+    }
+    plan = await storage.updateDailyPlan(plan.id, { plannedItems: planned });
+    res.json(plan);
+  } catch {
     res.status(500).json({ message: "Internal Server Error" });
   }
 });

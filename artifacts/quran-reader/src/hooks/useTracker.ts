@@ -160,3 +160,30 @@ export function useDeleteLog() {
     onSuccess: () => invalidate(),
   });
 }
+
+export function useRetireSurah() {
+  const { storage } = useTrackerStorage();
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: (reference: string) => storage.retireSurah(reference),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function useUnretireSurah() {
+  const { storage } = useTrackerStorage();
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: (reference: string) => storage.unretireSurah(reference),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function useAddPerfectlyKnownToSession() {
+  const { storage } = useTrackerStorage();
+  const invalidate = useInvalidateAll();
+  return useMutation({
+    mutationFn: () => storage.addPerfectlyKnownToSession(),
+    onSuccess: () => invalidate(),
+  });
+}

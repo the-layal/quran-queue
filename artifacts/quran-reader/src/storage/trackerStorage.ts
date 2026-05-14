@@ -20,6 +20,8 @@ export interface SrsItem {
   interval: number;
   repetitions: number;
   nextReviewDate: string;
+  retired?: boolean;
+  retiredAt?: string | null;
 }
 
 export interface DailyPlan {
@@ -68,6 +70,10 @@ export interface ITrackerStorage {
   getSrsItems(): Promise<SrsItem[]>;
   getDueSrsItems(): Promise<SrsItem[]>;
 
+  // Retirement
+  retireSurah(reference: string): Promise<void>;
+  unretireSurah(reference: string): Promise<void>;
+
   // Daily plans
   getTodayPlan(): Promise<DailyPlan | null>;
   getAllPlans(): Promise<DailyPlan[]>;
@@ -79,6 +85,7 @@ export interface ITrackerStorage {
   clearPlan(): Promise<DailyPlan>;
   logExtraRevision(input: LogInput): Promise<DailyPlan>;
   togglePlanItem(input: { date: string; reference: string }): Promise<DailyPlan>;
+  addPerfectlyKnownToSession(): Promise<DailyPlan>;
 
   // Stats
   getStats(): Promise<TrackerStats>;

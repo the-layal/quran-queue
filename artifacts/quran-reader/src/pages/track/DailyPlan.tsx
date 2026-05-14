@@ -2,10 +2,10 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import AppShell from "@/components/AppShell";
 import GuestBanner from "@/components/GuestBanner";
 import { useTrackerStorage } from "@/context/useTrackerStorage";
-import type { DailyPlan, CompleteAdvancedInput } from "@/storage/trackerStorage";
+import type { DailyPlan, CompleteAdvancedInput, SrsItem } from "@/storage/trackerStorage";
 import { LogModal } from "@/components/LogModal";
 import { AdvancedVibeGrid } from "@/components/AdvancedVibeGrid";
-import { BrainCircuit, Settings2, CheckCircle2, ListTodo, ChevronLeft, ChevronRight, Circle, Play, BookOpen, Layers, X, Trash2 } from "lucide-react";
+import { BrainCircuit, Settings2, CheckCircle2, ListTodo, ChevronLeft, ChevronRight, Circle, Play, BookOpen, Layers, X, Trash2, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VibeScale } from "@/components/ui/VibeScale";
 import { getPageCountForReference, getSurahNamesForPageRange } from "@/lib/page-utils";
@@ -144,8 +144,9 @@ export default function DailyPlanPage() {
 
   const [plan, setPlan] = useState<DailyPlan | null>(null);
   const [allPlans, setAllPlans] = useState<DailyPlan[]>([]);
+  const [srsItems, setSrsItems] = useState<SrsItem[]>([]);
   const [isLoadingPlan, setIsLoadingPlan] = useState(true);
-  const [pending, setPending] = useState<null | "create" | "complete" | "complete-adv" | "add" | "clear">(null);
+  const [pending, setPending] = useState<null | "create" | "complete" | "complete-adv" | "add" | "clear" | "perfectly-known" | "retire">(null);
 
   const [bandwidth, setBandwidth] = useState(5);
   const [isConfiguring, setIsConfiguring] = useState(false);
@@ -177,9 +178,10 @@ export default function DailyPlanPage() {
   };
 
   const reload = useCallback(async () => {
-    const [p, all] = await Promise.all([storage.getTodayPlan(), storage.getAllPlans()]);
+    const [p, all, srs] = await Promise.all([storage.getTodayPlan(), storage.getAllPlans(), storage.getSrsItems()]);
     setPlan(p);
     setAllPlans(all);
+    setSrsItems(srs);
     setIsLoadingPlan(false);
   }, [storage]);
 
@@ -256,6 +258,37 @@ export default function DailyPlanPage() {
     setLogModalOpen(true);
   };
 
+  const handleAddPerfectlyKnown = async () => {
+    setPending("perfectly-known");
+    try {
+      await storage.addPerfectlyKnownToSession();
+      await reload();
+    } finally {
+      setPending(null);
+    }
+  };
+
+  const handleRetireSurah = async (reference: string) => {
+    setPending("retire");
+    try {
+      await storage.retireSurah(reference);
+      setInlineVibeRef(null);
+      await reload();
+    } finally {
+      setPending(null);
+    }
+  };
+
+  const handleUnretireSurah = async (reference: string) => {
+    setPending("retire");
+    try {
+      await storage.unretireSurah(reference);
+      await reload();
+    } finally {
+      setPending(null);
+    }
+  };
+
   if (isLoadingPlan || onboardingNeeded === null) {
     return (
       <AppShell>
@@ -290,6 +323,10 @@ export default function DailyPlanPage() {
   const isAddingMore = pending === "add";
   const isClearing = pending === "clear";
   const isUpdatingPlan = pending === "create";
+  const isAddingPerfectlyKnown = pending === "perfectly-known";
+
+  const retiredItems = srsItems.filter((s) => s.retired);
+  const retiredNotInPlan = retiredItems.filter((s) => !plannedItems.includes(s.reference));
 
   return (
     <AppShell>
@@ -362,6 +399,9 @@ export default function DailyPlanPage() {
                 const isFirst = !isCompleted && !plannedItems.slice(0, idx).some((r) => !completedItems.includes(r));
                 const isExpanded = inlineVibeRef === ref;
                 const pageCount = getPageCountForReference(ref);
+                const isInlineSurah = /^surah:\d+$/.test(ref);
+                const refSrsItem = isInlineSurah ? srsItems.find((s) => s.reference === ref) : undefined;
+                const isRefRetired = refSrsItem?.retired ?? false;
 
                 return (
                   <div key={`${ref}-${idx}`} data-testid={`plan-item-${idx}`}>
@@ -387,6 +427,9 @@ export default function DailyPlanPage() {
                               <h3 className={cn("font-semibold text-lg", isCompleted ? "text-muted-foreground line-through" : "text-foreground")}>
                                 {formatReference(ref)}
                               </h3>
+                              {isRefRetired && !isCompleted && (
+                                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 flex-shrink-0" title="Perfectly Known" />
+                              )}
                               {isFirst && !isCompleted && (
                                 <span className="text-[10px] uppercase tracking-wider font-bold bg-accent text-accent-foreground px-2 py-0.5 rounded-full">Up Next</span>
                               )}
@@ -448,7 +491,14 @@ export default function DailyPlanPage() {
                           <AdvancedVibeGrid reference={ref} onSubmit={(v) => handleAdvancedSubmit(ref, v)} isPending={isMarkingAdvanced} />
                         ) : (
                           <>
-                            <VibeScale value={inlineVibe} onChange={setInlineVibe} disabled={isMarking} />
+                            <VibeScale
+                              value={inlineVibe}
+                              onChange={setInlineVibe}
+                              disabled={isMarking || pending === "retire"}
+                              onRetire={isInlineSurah && !isRefRetired ? () => handleRetireSurah(ref) : undefined}
+                              onUnretire={isInlineSurah && isRefRetired ? () => handleUnretireSurah(ref) : undefined}
+                              isRetired={isRefRetired}
+                            />
                             <button
                               onClick={(e) => { e.stopPropagation(); if (inlineVibe > 0) handleVibeSubmit(ref, inlineVibe); }}
                               disabled={inlineVibe === 0 || isMarking}
@@ -489,6 +539,20 @@ export default function DailyPlanPage() {
                   <BookOpen size={16} /> Extra Revision
                 </button>
               </div>
+
+              {retiredNotInPlan.length > 0 && (
+                <button
+                  onClick={handleAddPerfectlyKnown}
+                  disabled={isAddingPerfectlyKnown}
+                  data-testid="button-perfectly-known"
+                  className="w-full py-4 rounded-2xl border-2 border-dashed border-amber-300/50 hover:border-amber-400 text-muted-foreground hover:text-amber-600 font-medium transition-all hover:bg-amber-50 dark:hover:bg-amber-900/10 flex items-center justify-center gap-2"
+                >
+                  <Star className="w-4 h-4 fill-amber-400 text-amber-400 flex-shrink-0" />
+                  {isAddingPerfectlyKnown
+                    ? "Adding..."
+                    : `Review ${retiredNotInPlan.length} Perfectly Known Surah${retiredNotInPlan.length !== 1 ? "s" : ""}`}
+                </button>
+              )}
             </div>
           </div>
 

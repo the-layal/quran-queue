@@ -81,7 +81,11 @@ export class DatabaseStorage implements IStorage {
 
   async getDueSrsItems(userId: string): Promise<SrsItem[]> {
     return db.select().from(srsItemsTable)
-      .where(and(eq(srsItemsTable.userId, userId), lte(srsItemsTable.nextReviewDate, new Date())))
+      .where(and(
+        eq(srsItemsTable.userId, userId),
+        eq(srsItemsTable.retired, false),
+        lte(srsItemsTable.nextReviewDate, new Date()),
+      ))
       .orderBy(srsItemsTable.nextReviewDate);
   }
 

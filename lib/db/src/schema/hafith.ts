@@ -1,4 +1,4 @@
-import { pgTable, text, integer, timestamp, jsonb, date, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, boolean, jsonb, date, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -20,6 +20,8 @@ export const srsItemsTable = pgTable("srs_items", {
   interval: integer("interval").notNull().default(0),
   repetitions: integer("repetitions").notNull().default(0),
   nextReviewDate: timestamp("next_review_date", { withTimezone: true }).notNull().defaultNow(),
+  retired: boolean("retired").notNull().default(false),
+  retiredAt: timestamp("retired_at", { withTimezone: true }),
 }, (t) => ({
   userReferenceUnique: uniqueIndex("srs_items_user_reference_unique").on(t.userId, t.reference),
 }));

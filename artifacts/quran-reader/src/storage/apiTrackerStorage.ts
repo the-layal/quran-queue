@@ -99,6 +99,18 @@ export class ApiTrackerStorage implements ITrackerStorage {
     await jsonPost<unknown>("/api/backup/restore", data);
   }
 
+  async retireSurah(reference: string): Promise<void> {
+    await jsonPost<unknown>("/api/srs/retire", { reference });
+  }
+
+  async unretireSurah(reference: string): Promise<void> {
+    await jsonPost<unknown>("/api/srs/unretire", { reference });
+  }
+
+  async addPerfectlyKnownToSession(): Promise<DailyPlan> {
+    return jsonPost<DailyPlan>("/api/plans/today/perfectly-known", {});
+  }
+
   async seedPriorKnowledge(items: Array<{ reference: string; vibe: number }>): Promise<void> {
     if (items.length === 0) return;
     await jsonPost<unknown>("/api/srs/seed", items);
