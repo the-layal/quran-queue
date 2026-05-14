@@ -477,6 +477,7 @@ export default function Dashboard() {
                   </p>
                   {plannedItems.slice(0, 5).map((ref, idx) => {
                     const isDone = completedItems.includes(ref);
+                    const refMeta = formatRefMeta(ref);
                     return (
                       <div
                         key={`${ref}-${idx}`}
@@ -512,8 +513,8 @@ export default function Dashboard() {
                           >
                             {formatReference(ref)}
                           </p>
-                          {formatRefMeta(ref) && (
-                            <p className="text-[11px] text-muted-foreground leading-tight">{formatRefMeta(ref)}</p>
+                          {refMeta && (
+                            <p className="text-[11px] text-muted-foreground leading-tight">{refMeta}</p>
                           )}
                         </div>
                         {retiredPlanRefs.has(ref) && (
