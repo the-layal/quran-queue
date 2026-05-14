@@ -219,13 +219,20 @@ export default function AppShell({ children, rightActions, centerContent }: AppS
   const sidebarBody = (
     <>
       <div className="flex items-center justify-between px-4 py-4 border-b border-border">
-        <Link href="/" className="flex items-center gap-2 group">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+        <Link href="/" className="flex items-center gap-2.5 group">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
             <BookOpen className="w-4 h-4" />
           </div>
-          <span className="font-semibold text-base group-hover:text-primary transition-colors">
-            Hafith
-          </span>
+          <div className="flex flex-col leading-none">
+            <span
+              className="font-serif font-bold text-base group-hover:text-primary transition-colors"
+            >
+              Hafith
+            </span>
+            <span className="text-[10px] text-muted-foreground mt-0.5 tracking-wide">
+              Quran Memorization
+            </span>
+          </div>
         </Link>
         <button
           onClick={() => {

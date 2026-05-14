@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
 import QuranPage from "@/pages/QuranPage";
@@ -13,6 +14,15 @@ import { Toaster } from "@/components/ui/toaster";
 import { TrackerStorageProvider } from "@/context/TrackerStorageContext";
 import { queryClient } from "@/lib/queryClient";
 import FeatureTour from "@/components/FeatureTour";
+import LandingPage, { LANDING_SEEN_KEY } from "@/pages/LandingPage";
+
+function hasSeenLanding(): boolean {
+  try {
+    return !!localStorage.getItem(LANDING_SEEN_KEY);
+  } catch {
+    return false;
+  }
+}
 
 function Router() {
   return (
@@ -31,6 +41,21 @@ function Router() {
 }
 
 function App() {
+  const [showLanding, setShowLanding] = useState(() => !hasSeenLanding());
+
+  function handleEnter() {
+    try {
+      localStorage.setItem(LANDING_SEEN_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setShowLanding(false);
+  }
+
+  if (showLanding) {
+    return <LandingPage onEnter={handleEnter} />;
+  }
+
   return (
     <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
       <QueryClientProvider client={queryClient}>
