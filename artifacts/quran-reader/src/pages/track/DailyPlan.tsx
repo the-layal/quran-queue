@@ -8,7 +8,7 @@ import { AdvancedVibeGrid } from "@/components/AdvancedVibeGrid";
 import { BrainCircuit, Settings2, CheckCircle2, ListTodo, ChevronLeft, ChevronRight, Circle, Play, BookOpen, Layers, X, Trash2, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VibeScale } from "@/components/ui/VibeScale";
-import { getPageCountForReference, getSurahNamesForPageRange } from "@/lib/page-utils";
+import { getPageCountForReference, getSurahNamesForPageRange, getSurahName } from "@/lib/page-utils";
 import PriorKnowledgeSetup from "@/components/PriorKnowledgeSetup";
 import { isOnboardingComplete, markOnboardingComplete } from "@/storage/localTrackerStorage";
 
@@ -47,14 +47,34 @@ function formatReference(ref: string): string {
     const pageLabel = from === to ? `Page ${from}` : `Pages ${from}–${to}`;
     return surahNames ? `${pageLabel} — ${surahNames}` : pageLabel;
   }
-  if (type === "ayah") return `Ayah ${parts[1]}:${parts[2] || ""}`;
-  if (type === "surah") return `Surah ${parts[1] || ""}`;
+  if (type === "surah") {
+    const surahVal = parts[1] || "";
+    const surahRangeParts = surahVal.split("-");
+    const fromSurah = parseInt(surahRangeParts[0], 10);
+    const toSurah = surahRangeParts.length > 1 ? parseInt(surahRangeParts[1], 10) : fromSurah;
+    const fromName = getSurahName(fromSurah);
+    if (fromSurah === toSurah) {
+      return `Surah ${fromSurah} — ${fromName.en}`;
+    }
+    const toName = getSurahName(toSurah);
+    return `Surah ${fromSurah}–${toSurah} — ${fromName.en} to ${toName.en}`;
+  }
+  if (type === "ayah" || type === "ayah_range") {
+    const surahNum = parseInt(parts[1] || "0", 10);
+    const name = getSurahName(surahNum);
+    const rangePart = parts[2] || "";
+    const rangeParts = rangePart.split("-");
+    const from = rangeParts[0] || "";
+    const to = rangeParts.length > 1 ? rangeParts[1] : "";
+    const ayahRange = to ? `${from}–${to}` : from;
+    return `${name.en} ${surahNum}:${ayahRange}`;
+  }
   return ref;
 }
 
 function formatPageCount(pages: number): string {
-  if (pages === 1) return "1 pg";
-  return `${pages} pg`;
+  const rounded = Math.round(pages * 10) / 10;
+  return `${rounded} pg`;
 }
 
 function getTotalPages(refs: string[]): number {
@@ -375,7 +395,7 @@ export default function DailyPlanPage() {
             <div className="flex justify-between items-end mb-6">
               <div>
                 <h2 className="text-2xl font-serif text-foreground font-semibold flex items-center gap-2">
-                  <ListTodo className="text-primary" /> Today's Queue
+                  <ListTodo className="text-primary" /> Today's Plan
                 </h2>
                 <p className="text-muted-foreground text-sm mt-1" data-testid="text-plan-summary">
                   {completedItems.length}/{plannedItems.length} items ({formatPageCount(completedPages)}/{formatPageCount(totalPlanPages)}) completed
