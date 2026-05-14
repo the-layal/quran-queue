@@ -84,7 +84,7 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
   const sliderMax = paceUnit === "pages"
     ? Math.max(sliderMin, totalPages)
     : paceUnit === "lines"
-    ? Math.max(1, totalLines)
+    ? Math.max(1, Math.min(15, totalLines))
     : Math.max(1, totalAyahs);
   const rawSliderValue = ayahsToUnit(dailyTarget, paceUnit, totalAyahs, totalPages);
   const sliderValue = Math.max(
