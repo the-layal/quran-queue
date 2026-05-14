@@ -366,7 +366,11 @@ router.post("/plans/today/add-more", async (req: Request, res: Response) => {
       for (const p of getPagesForReference(item.reference)) knownPages.add(p);
     }
 
-    const dismissed = new Set<string>(plan.removedItems || []);
+    // Build a set of page numbers the user explicitly dismissed today
+    const dismissedPages = new Set<number>();
+    for (const ref of (plan.removedItems || [])) {
+      for (const p of getPagesForReference(ref)) dismissedPages.add(p);
+    }
 
     const newRefs: string[] = [];
     let added = 0;
@@ -375,9 +379,9 @@ router.post("/plans/today/add-more", async (req: Request, res: Response) => {
     for (const item of dueItems) {
       if (added >= input.count) break;
       if (currentItems.includes(item.reference) || newRefs.includes(item.reference)) continue;
-      if (dismissed.has(item.reference)) continue;
       const pages = getPagesForReference(item.reference);
       if (pages.every((p) => existingPages.has(p))) continue;
+      if (pages.some((p) => dismissedPages.has(p))) continue;
       newRefs.push(item.reference);
       added += getPageEquivalent(item.reference);
       for (const p of pages) existingPages.add(p);
@@ -386,7 +390,7 @@ router.post("/plans/today/add-more", async (req: Request, res: Response) => {
     if (added < input.count) {
       const freshPages: number[] = [];
       for (let p = 1; p <= TOTAL_QURAN_PAGES; p++) {
-        if (!existingPages.has(p) && !knownPages.has(p)) freshPages.push(p);
+        if (!existingPages.has(p) && !knownPages.has(p) && !dismissedPages.has(p)) freshPages.push(p);
       }
       const remaining = Math.max(0, Math.ceil(input.count - added));
       const pagesToAdd = freshPages.slice(0, remaining);
