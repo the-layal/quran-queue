@@ -17,7 +17,7 @@ interface GoalModalProps {
   onCreate: (input: CreateGoalInput) => Promise<void>;
 }
 
-type PaceUnit = "ayahs" | "lines" | "pages";
+type PaceUnit = "lines" | "pages";
 
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
@@ -38,20 +38,17 @@ function daysUntil(dateStr: string): number {
 
 function ayahsToUnit(ayahs: number, unit: PaceUnit, totalAyahs: number, totalPages: number): number {
   if (unit === "pages") return ayahsToPages(ayahs, totalAyahs, totalPages);
-  if (unit === "lines") return ayahsToLines(ayahs, totalAyahs, totalPages);
-  return ayahs;
+  return ayahsToLines(ayahs, totalAyahs, totalPages);
 }
 
 function unitToAyahs(val: number, unit: PaceUnit, totalAyahs: number, totalPages: number): number {
   if (unit === "pages") return pagesToAyahs(val, totalAyahs, totalPages);
-  if (unit === "lines") return linesToAyahs(val, totalAyahs, totalPages);
-  return Math.max(1, Math.round(val));
+  return linesToAyahs(val, totalAyahs, totalPages);
 }
 
 function formatPaceLabel(val: number, unit: PaceUnit): string {
   if (unit === "pages") return `${val} page${val !== 1 ? "s" : ""}/day`;
-  if (unit === "lines") return `${val} line${val !== 1 ? "s" : ""}/day`;
-  return `${val} ayah${val !== 1 ? "s" : ""}/day`;
+  return `${val} line${val !== 1 ? "s" : ""}/day`;
 }
 
 export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
@@ -61,7 +58,7 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
   const [ayahEnd, setAyahEnd] = useState(1);
   const [targetDate, setTargetDate] = useState(addDays(30));
   const [dailyTarget, setDailyTarget] = useState(1);
-  const [paceUnit, setPaceUnit] = useState<PaceUnit>("ayahs");
+  const [paceUnit, setPaceUnit] = useState<PaceUnit>("pages");
   const [surahQuery, setSurahQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,10 +79,8 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
     ? Math.min(0.5, totalPages)
     : 1;
   const sliderMax = paceUnit === "pages"
-    ? Math.max(sliderMin, totalPages)
-    : paceUnit === "lines"
-    ? Math.max(1, Math.min(15, totalLines))
-    : Math.max(1, totalAyahs);
+    ? Math.min(5, Math.max(sliderMin, totalPages))
+    : Math.max(1, Math.min(15, totalLines));
   const rawSliderValue = ayahsToUnit(dailyTarget, paceUnit, totalAyahs, totalPages);
   const sliderValue = Math.max(
     sliderMin,
@@ -139,7 +134,7 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
     setAyahEnd(1);
     setTargetDate(addDays(30));
     setDailyTarget(1);
-    setPaceUnit("ayahs");
+    setPaceUnit("pages");
     setSurahQuery("");
     setError(null);
     onClose();
@@ -294,7 +289,7 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
                 <label className="text-xs font-medium text-muted-foreground">Daily Pace</label>
                 <div className="flex items-center gap-2">
                   <div className="flex rounded-lg bg-muted p-0.5 text-xs">
-                    {(["ayahs", "lines", "pages"] as PaceUnit[]).map((unit) => (
+                    {(["lines", "pages"] as PaceUnit[]).map((unit) => (
                       <button
                         key={unit}
                         onClick={() => setPaceUnit(unit)}
@@ -332,7 +327,9 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
                   <span className="text-destructive">Target date has already passed</span>
                 ) : (
                   <span>
-                    At {formatPaceLabel(sliderValue, paceUnit)} you&apos;ll finish in{" "}
+                    At {formatPaceLabel(sliderValue, paceUnit)}{" "}
+                    <span className="text-muted-foreground">(~{dailyTarget} ayah{dailyTarget !== 1 ? "s" : ""})</span>{" "}
+                    you&apos;ll finish in{" "}
                     <strong>{Math.ceil(totalAyahs / dailyTarget)} day{Math.ceil(totalAyahs / dailyTarget) !== 1 ? "s" : ""}</strong>
                     {" "}(target: {daysRemaining} day{daysRemaining !== 1 ? "s" : ""})
                   </span>

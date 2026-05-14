@@ -6,7 +6,7 @@ import { useTrackerStorage } from "@/context/useTrackerStorage";
 import type { DailyPlan, TrackerStats } from "@/storage/trackerStorage";
 import { Trophy, ArrowRight, PenLine, CheckCircle2, Play, Flame, Plus, Target, X, ChevronDown, ChevronUp, Link2, RefreshCw, Loader2, Star } from "lucide-react";
 import { TOTAL_PAGES, SURAHS } from "@/lib/quran-data";
-import { getAyahsForReference } from "@/lib/page-utils";
+import { getAyahsForReference, getTotalPagesForAyahRange, ayahsToPages } from "@/lib/page-utils";
 import { Link } from "wouter";
 import { LogModal } from "@/components/LogModal";
 import GoalModal from "@/components/GoalModal";
@@ -18,6 +18,14 @@ import { cn } from "@/lib/utils";
 function getSurahName(id: number): string {
   const surah = SURAHS.find((s) => s.id === id);
   return surah ? surah.englishName : "";
+}
+
+function formatPagesShort(pages: number): string {
+  const rounded = Math.round(pages * 2) / 2;
+  if (rounded <= 0) return "< ½ pg";
+  if (rounded === 0.5) return "½ pg";
+  if (rounded % 1 === 0) return `${rounded} pg`;
+  return `${Math.floor(rounded)}½ pg`;
 }
 
 function formatReference(ref: string): string {
@@ -90,6 +98,8 @@ function GoalCard({
   const [expanded, setExpanded] = useState(false);
   const surah = SURAHS.find((s) => s.id === goal.surahNumber);
   const totalAyahs = goal.ayahEnd - goal.ayahStart + 1;
+  const totalGoalPages = getTotalPagesForAyahRange(goal.surahNumber, goal.ayahStart, goal.ayahEnd);
+  const pagesPerDay = totalAyahs > 0 ? ayahsToPages(goal.dailyTarget, totalAyahs, totalGoalPages) : 0;
   const completedSet = new Set(goal.completedAyahsList || []);
   const completedCount = completedSet.size;
   const progressPct = totalAyahs > 0 ? Math.round((completedCount / totalAyahs) * 100) : 0;
@@ -191,7 +201,7 @@ function GoalCard({
           <span className="text-muted-foreground">
             Pace:{" "}
             <span className="font-medium text-foreground">
-              {goal.dailyTarget} ayah{goal.dailyTarget !== 1 ? "s" : ""}/day
+              {formatPagesShort(pagesPerDay)} · {goal.dailyTarget} ayah{goal.dailyTarget !== 1 ? "s" : ""}/day
             </span>
           </span>
           {todayCount > 0 && (
