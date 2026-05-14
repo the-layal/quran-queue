@@ -9,23 +9,8 @@ import type {
   CompleteAdvancedInput,
 } from "./trackerStorage";
 import { getAyahsForReference } from "./referenceFanOut";
-import { getPageEquivalent, getPagesForReference } from "../lib/page-utils";
+import { getPageEquivalent } from "../lib/page-utils";
 
-const TOTAL_QURAN_PAGES = 604;
-
-function freshPageRefs(skipPages: Set<number>): string[] {
-  const refs: string[] = [];
-  for (let p = 1; p <= TOTAL_QURAN_PAGES; p++) {
-    if (!skipPages.has(p)) refs.push(`page:${p}`);
-  }
-  return refs;
-}
-
-function pagesCoveredBy(refs: string[]): Set<number> {
-  const out = new Set<number>();
-  for (const r of refs) for (const p of getPagesForReference(r)) out.add(p);
-  return out;
-}
 
 const DATA_VERSION = "2";
 const KEYS = {
@@ -281,7 +266,17 @@ export class LocalTrackerStorage implements ITrackerStorage {
   async getTodayPlan(): Promise<DailyPlan | null> {
     const t = todayStr();
     const plans = readPlans();
-    return plans.find((p) => p.date === t) ?? null;
+    const plan = plans.find((p) => p.date === t) ?? null;
+    if (!plan) return null;
+    const srsRefs = new Set(readSrs().map((i) => i.reference));
+    const filtered = plan.plannedItems.filter((r) => srsRefs.has(r));
+    if (filtered.length !== plan.plannedItems.length) {
+      const idx = plans.findIndex((p) => p.date === t);
+      plans[idx] = { ...plan, plannedItems: filtered };
+      writePlans(plans);
+      return plans[idx];
+    }
+    return plan;
   }
 
   async getAllPlans(): Promise<DailyPlan[]> {
@@ -303,21 +298,11 @@ export class LocalTrackerStorage implements ITrackerStorage {
       const planned: string[] = [...carryover];
       let usedPages = planned.reduce((s, r) => s + getPageEquivalent(r), 0);
       const due = await this.getDueSrsItems();
-      const all = await this.getSrsItems();
       for (const item of due) {
         if (usedPages >= bandwidth) break;
         if (!planned.includes(item.reference)) {
           planned.push(item.reference);
           usedPages += getPageEquivalent(item.reference);
-        }
-      }
-      if (usedPages < bandwidth) {
-        const covered = pagesCoveredBy(planned);
-        for (const item of all) for (const p of getPagesForReference(item.reference)) covered.add(p);
-        for (const ref of freshPageRefs(covered)) {
-          if (usedPages >= bandwidth) break;
-          planned.push(ref);
-          usedPages += getPageEquivalent(ref);
         }
       }
       const plan: DailyPlan = {
@@ -334,25 +319,16 @@ export class LocalTrackerStorage implements ITrackerStorage {
     }
 
     const existing = plans[existingIdx];
-    const planned = [...(existing.plannedItems || [])];
+    const srsRefs = new Set(readSrs().map((i) => i.reference));
+    const planned = (existing.plannedItems || []).filter((r) => srsRefs.has(r));
     let usedPages = planned.reduce((s, r) => s + getPageEquivalent(r), 0);
     if (usedPages < bandwidth) {
       const due = await this.getDueSrsItems();
-      const all = await this.getSrsItems();
       for (const item of due) {
         if (usedPages >= bandwidth) break;
         if (!planned.includes(item.reference)) {
           planned.push(item.reference);
           usedPages += getPageEquivalent(item.reference);
-        }
-      }
-      if (usedPages < bandwidth) {
-        const covered = pagesCoveredBy(planned);
-        for (const item of all) for (const p of getPagesForReference(item.reference)) covered.add(p);
-        for (const ref of freshPageRefs(covered)) {
-          if (usedPages >= bandwidth) break;
-          planned.push(ref);
-          usedPages += getPageEquivalent(ref);
         }
       }
     }
@@ -365,22 +341,12 @@ export class LocalTrackerStorage implements ITrackerStorage {
   async addMoreItems({ count }: { count: number }): Promise<DailyPlan> {
     const plan = await this.requireToday();
     const due = await this.getDueSrsItems();
-    const all = await this.getSrsItems();
     let added = 0;
     for (const item of due) {
       if (added >= count) break;
       if (!plan.plannedItems.includes(item.reference)) {
         plan.plannedItems = [...plan.plannedItems, item.reference];
         added += getPageEquivalent(item.reference);
-      }
-    }
-    if (added < count) {
-      const covered = pagesCoveredBy(plan.plannedItems);
-      for (const item of all) for (const p of getPagesForReference(item.reference)) covered.add(p);
-      for (const ref of freshPageRefs(covered)) {
-        if (added >= count) break;
-        plan.plannedItems = [...plan.plannedItems, ref];
-        added += getPageEquivalent(ref);
       }
     }
     return this.replacePlan(plan);
