@@ -9,7 +9,7 @@ import type {
   CompleteAdvancedInput,
 } from "./trackerStorage";
 import { getAyahsForReference } from "./referenceFanOut";
-import { getPageEquivalent } from "../lib/page-utils";
+import { getPageEquivalent, getPagesForReference } from "../lib/page-utils";
 
 
 const DATA_VERSION = "2";
@@ -341,12 +341,15 @@ export class LocalTrackerStorage implements ITrackerStorage {
   async addMoreItems({ count }: { count: number }): Promise<DailyPlan> {
     const plan = await this.requireToday();
     const due = await this.getDueSrsItems();
-    const dismissed = new Set(plan.removedItems || []);
+    const dismissedPages = new Set<number>();
+    for (const ref of (plan.removedItems || [])) {
+      for (const p of getPagesForReference(ref)) dismissedPages.add(p);
+    }
     let added = 0;
     for (const item of due) {
       if (added >= count) break;
       if (plan.plannedItems.includes(item.reference)) continue;
-      if (dismissed.has(item.reference)) continue;
+      if (getPagesForReference(item.reference).some((p) => dismissedPages.has(p))) continue;
       plan.plannedItems = [...plan.plannedItems, item.reference];
       added += getPageEquivalent(item.reference);
     }
