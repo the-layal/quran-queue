@@ -341,13 +341,14 @@ export class LocalTrackerStorage implements ITrackerStorage {
   async addMoreItems({ count }: { count: number }): Promise<DailyPlan> {
     const plan = await this.requireToday();
     const due = await this.getDueSrsItems();
+    const dismissed = new Set(plan.removedItems || []);
     let added = 0;
     for (const item of due) {
       if (added >= count) break;
-      if (!plan.plannedItems.includes(item.reference)) {
-        plan.plannedItems = [...plan.plannedItems, item.reference];
-        added += getPageEquivalent(item.reference);
-      }
+      if (plan.plannedItems.includes(item.reference)) continue;
+      if (dismissed.has(item.reference)) continue;
+      plan.plannedItems = [...plan.plannedItems, item.reference];
+      added += getPageEquivalent(item.reference);
     }
     return this.replacePlan(plan);
   }
@@ -384,6 +385,8 @@ export class LocalTrackerStorage implements ITrackerStorage {
     const plan = await this.requireToday();
     plan.plannedItems = plan.plannedItems.filter((r) => r !== reference);
     plan.completedItems = plan.completedItems.filter((r) => r !== reference);
+    const removed = plan.removedItems || [];
+    if (!removed.includes(reference)) plan.removedItems = [...removed, reference];
     return this.replacePlan(plan);
   }
 

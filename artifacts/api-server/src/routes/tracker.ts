@@ -366,6 +366,8 @@ router.post("/plans/today/add-more", async (req: Request, res: Response) => {
       for (const p of getPagesForReference(item.reference)) knownPages.add(p);
     }
 
+    const dismissed = new Set<string>(plan.removedItems || []);
+
     const newRefs: string[] = [];
     let added = 0;
     // Due SRS refs first, preserving original references
@@ -373,6 +375,7 @@ router.post("/plans/today/add-more", async (req: Request, res: Response) => {
     for (const item of dueItems) {
       if (added >= input.count) break;
       if (currentItems.includes(item.reference) || newRefs.includes(item.reference)) continue;
+      if (dismissed.has(item.reference)) continue;
       const pages = getPagesForReference(item.reference);
       if (pages.every((p) => existingPages.has(p))) continue;
       newRefs.push(item.reference);
@@ -563,7 +566,9 @@ router.post("/plans/today/remove-item", async (req: Request, res: Response) => {
 
     const plannedItems = (plan.plannedItems || []).filter((r) => r !== input.reference);
     const completedItems = (plan.completedItems || []).filter((r) => r !== input.reference);
-    const updated = await storage.updateDailyPlan(plan.id, { plannedItems, completedItems });
+    const prevRemoved = plan.removedItems || [];
+    const removedItems = prevRemoved.includes(input.reference) ? prevRemoved : [...prevRemoved, input.reference];
+    const updated = await storage.updateDailyPlan(plan.id, { plannedItems, completedItems, removedItems });
 
     const removedPages = getPagesForReference(input.reference);
     const tomorrow = new Date();

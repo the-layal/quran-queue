@@ -30,6 +30,7 @@ export interface DailyPlan {
   plannedItems: string[];
   completedItems: string[];
   extraRevisions: string[];
+  removedItems?: string[];
 }
 
 export interface TrackerStats {

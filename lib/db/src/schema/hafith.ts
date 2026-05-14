@@ -32,6 +32,7 @@ export const dailyPlansTable = pgTable("daily_plans", {
   plannedItems: jsonb("planned_items").$type<string[]>().notNull().default([]),
   completedItems: jsonb("completed_items").$type<string[]>().notNull().default([]),
   extraRevisions: jsonb("extra_revisions").$type<string[]>().notNull().default([]),
+  removedItems: jsonb("removed_items").$type<string[]>().notNull().default([]),
 });
 
 export const goalsTable = pgTable("goals", {
