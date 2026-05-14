@@ -125,7 +125,7 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
         ayahStart,
         ayahEnd,
         targetDate,
-        dailyTarget,
+        dailyTarget: clampDailyTarget(dailyTarget, totalAyahs, totalPages),
       });
       handleClose();
     } catch (e) {
@@ -230,7 +230,11 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
                   onChange={(e) => {
                     const v = Math.max(1, Math.min(selectedSurah.ayahCount, parseInt(e.target.value) || 1));
                     setAyahStart(v);
-                    if (ayahEnd < v) setAyahEnd(v);
+                    const newEnd = ayahEnd < v ? v : ayahEnd;
+                    if (ayahEnd < v) setAyahEnd(newEnd);
+                    const newAyahs = newEnd - v + 1;
+                    const newPages = getTotalPagesForAyahRange(surahId!, v, newEnd);
+                    setDailyTarget((prev) => clampDailyTarget(prev, newAyahs, newPages));
                   }}
                   className="w-full px-3 py-2 rounded-xl bg-muted text-sm focus:outline-none focus:ring-2 focus:ring-primary text-center"
                 />
@@ -245,6 +249,9 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
                   onChange={(e) => {
                     const v = Math.max(ayahStart, Math.min(selectedSurah.ayahCount, parseInt(e.target.value) || ayahStart));
                     setAyahEnd(v);
+                    const newAyahs = v - ayahStart + 1;
+                    const newPages = getTotalPagesForAyahRange(surahId!, ayahStart, v);
+                    setDailyTarget((prev) => clampDailyTarget(prev, newAyahs, newPages));
                   }}
                   className="w-full px-3 py-2 rounded-xl bg-muted text-sm focus:outline-none focus:ring-2 focus:ring-primary text-center"
                 />
