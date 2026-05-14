@@ -7,7 +7,10 @@ const POPOVER_WIDTH = 256; // 16rem
 const MARGIN = 8; // min gap from viewport edge in px
 
 interface PopoverPos {
-  bottom: number;
+  /** Fixed pixel distance from bottom of viewport (upward placement). Undefined when opening downward. */
+  bottom?: number;
+  /** Fixed pixel distance from top of viewport (downward placement). Undefined when opening upward. */
+  top?: number;
   left: number;
   width: number;
   maxHeight: number;
@@ -16,18 +19,32 @@ interface PopoverPos {
 function computePopoverPos(button: HTMLButtonElement): PopoverPos {
   const rect = button.getBoundingClientRect();
   const vw = window.innerWidth;
+  const vh = window.innerHeight;
   const width = Math.min(POPOVER_WIDTH, vw - MARGIN * 2);
 
   // Prefer right-aligned to button; clamp so it never clips left or right edge.
   let left = rect.right - width;
   left = Math.max(MARGIN, Math.min(left, vw - width - MARGIN));
 
-  const bottom = window.innerHeight - rect.top + MARGIN;
+  const spaceAbove = rect.top - MARGIN;
+  const spaceBelow = vh - rect.bottom - MARGIN;
 
-  // Cap height to available space above the button so the list never escapes the top edge.
-  const maxHeight = Math.max(0, rect.top - MARGIN);
-
-  return { bottom, left, width, maxHeight };
+  // Open toward whichever side has more room.
+  if (spaceAbove >= spaceBelow) {
+    return {
+      bottom: vh - rect.top + MARGIN,
+      left,
+      width,
+      maxHeight: Math.max(0, spaceAbove),
+    };
+  } else {
+    return {
+      top: rect.bottom + MARGIN,
+      left,
+      width,
+      maxHeight: Math.max(0, spaceBelow),
+    };
+  }
 }
 
 interface ReciterSelectorProps {
@@ -109,6 +126,7 @@ export default function ReciterSelector({ style }: ReciterSelectorProps) {
           style={{
             position: "fixed",
             bottom: pos.bottom,
+            top: pos.top,
             left: pos.left,
             width: pos.width,
             maxHeight: pos.maxHeight,
