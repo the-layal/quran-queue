@@ -10,6 +10,7 @@ import { getAyahsForReference, getTotalPagesForAyahRange, ayahsToPages, getPageC
 import { Link } from "wouter";
 import { LogModal } from "@/components/LogModal";
 import GoalModal from "@/components/GoalModal";
+import EditGoalModal from "@/components/EditGoalModal";
 import { useGoals, type Goal } from "@/hooks/useGoals";
 import { useQFConnection } from "@/hooks/useQFConnection";
 import { useSrsItems } from "@/hooks/useTracker";
@@ -102,10 +103,12 @@ function countTodayAyahsForGoal(goal: Goal, plannedItems: string[]): number {
 function GoalCard({
   goal,
   onDelete,
+  onEdit,
   todayPlannedItems,
 }: {
   goal: Goal;
   onDelete: (id: number) => void;
+  onEdit: (goal: Goal) => void;
   todayPlannedItems: string[];
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -170,6 +173,15 @@ function GoalCard({
             <span className="text-[10px] font-bold uppercase tracking-wider bg-destructive/15 text-destructive px-2 py-0.5 rounded-full">
               Overdue
             </span>
+          )}
+          {!isComplete && (
+            <button
+              onClick={() => onEdit(goal)}
+              className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              title="Edit goal"
+            >
+              <PenLine className="w-3.5 h-3.5" />
+            </button>
           )}
           <button
             onClick={() => onDelete(goal.id)}
@@ -299,7 +311,8 @@ export default function Dashboard() {
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const { data: srsItems } = useSrsItems();
 
-  const { goals, reload: reloadGoals, createGoal, deleteGoal } = useGoals();
+  const { goals, reload: reloadGoals, createGoal, deleteGoal, updateGoal } = useGoals();
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const { isQFConnected } = useQFConnection();
   const [goalSyncing, setGoalSyncing] = useState(false);
 
@@ -620,6 +633,7 @@ export default function Dashboard() {
                   key={g.id}
                   goal={g}
                   onDelete={deleteGoal}
+                  onEdit={setEditingGoal}
                   todayPlannedItems={plannedItems}
                 />
               ))}
@@ -628,6 +642,7 @@ export default function Dashboard() {
                   key={g.id}
                   goal={g}
                   onDelete={deleteGoal}
+                  onEdit={setEditingGoal}
                   todayPlannedItems={plannedItems}
                 />
               ))}
@@ -664,6 +679,16 @@ export default function Dashboard() {
           }, 3000);
         }}
       />
+      {editingGoal && (
+        <EditGoalModal
+          open={true}
+          goal={editingGoal}
+          onClose={() => setEditingGoal(null)}
+          onSave={async (id, data) => {
+            await updateGoal(id, data);
+          }}
+        />
+      )}
     </AppShell>
   );
 }
