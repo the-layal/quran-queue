@@ -79,7 +79,10 @@ export default function EditGoalModal({ open, goal, onClose, onSave }: EditGoalM
     Math.min(sliderMax, Math.round(rawSliderValue / sliderStep) * sliderStep),
   );
 
+  const isDateValid = !!targetDate && !Number.isNaN(daysRemaining);
+
   async function handleSave() {
+    if (!isDateValid || daysRemaining <= 0) return;
     setSaving(true);
     setError(null);
     try {
@@ -215,7 +218,7 @@ export default function EditGoalModal({ open, goal, onClose, onSave }: EditGoalM
             </button>
             <button
               onClick={handleSave}
-              disabled={saving || daysRemaining <= 0}
+              disabled={saving || !isDateValid || daysRemaining <= 0}
               className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {saving ? "Saving…" : "Save Changes"}

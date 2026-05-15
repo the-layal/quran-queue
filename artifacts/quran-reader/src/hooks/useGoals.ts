@@ -266,10 +266,12 @@ export function useGoals() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
         });
-        if (res.ok) {
-          const updated = (await res.json()) as Goal;
-          setGoals((prev) => prev.map((g) => (g.id === id ? updated : g)));
+        if (!res.ok) {
+          const err = (await res.json().catch(() => ({}))) as { message?: string };
+          throw new Error(err.message ?? "Failed to update goal");
         }
+        const updated = (await res.json()) as Goal;
+        setGoals((prev) => prev.map((g) => (g.id === id ? updated : g)));
       } else {
         const current = readGuestGoals();
         const updated = current.map((g) => (g.id === id ? { ...g, ...data } : g));
