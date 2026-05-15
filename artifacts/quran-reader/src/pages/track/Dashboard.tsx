@@ -4,9 +4,9 @@ import GuestBanner from "@/components/GuestBanner";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useTrackerStorage } from "@/context/useTrackerStorage";
 import type { DailyPlan, TrackerStats } from "@/storage/trackerStorage";
-import { Trophy, ArrowRight, PenLine, CheckCircle2, Play, Flame, Plus, Target, X, ChevronDown, ChevronUp, Link2, RefreshCw, Loader2, Star } from "lucide-react";
+import { Trophy, ArrowRight, PenLine, CheckCircle2, Play, Flame, Plus, Target, X, ChevronDown, ChevronUp, Link2, RefreshCw, Loader2, Star, CalendarDays } from "lucide-react";
 import { TOTAL_PAGES, SURAHS } from "@/lib/quran-data";
-import { getAyahsForReference, getTotalPagesForAyahRange, ayahsToPages, getPageCountForReference } from "@/lib/page-utils";
+import { getAyahsForReference, getTotalPagesForAyahRange, ayahsToPages, getPageCountForReference, LINES_PER_PAGE } from "@/lib/page-utils";
 import { Link } from "wouter";
 import { LogModal } from "@/components/LogModal";
 import GoalModal from "@/components/GoalModal";
@@ -100,6 +100,61 @@ function countTodayAyahsForGoal(goal: Goal, plannedItems: string[]): number {
   return inPlan.size;
 }
 
+interface ScheduleChunk {
+  day: number;
+  date: Date;
+  ayahFrom: number;
+  ayahTo: number;
+  pages: number;
+  completed: boolean;
+}
+
+function buildSchedule(goal: Goal): ScheduleChunk[] {
+  if (goal.dailyTarget <= 0) return [];
+  const completedSet = new Set(goal.completedAyahsList || []);
+  const startDate = new Date(goal.createdAt);
+  startDate.setHours(0, 0, 0, 0);
+  const chunks: ScheduleChunk[] = [];
+  let ayah = goal.ayahStart;
+  let day = 0;
+  while (ayah <= goal.ayahEnd) {
+    const ayahFrom = ayah;
+    const ayahTo = Math.min(ayah + goal.dailyTarget - 1, goal.ayahEnd);
+    const pages = getTotalPagesForAyahRange(goal.surahNumber, ayahFrom, ayahTo);
+    let allDone = true;
+    for (let a = ayahFrom; a <= ayahTo; a++) {
+      if (!completedSet.has(a)) { allDone = false; break; }
+    }
+    const date = new Date(startDate);
+    date.setDate(date.getDate() + day);
+    chunks.push({ day: day + 1, date, ayahFrom, ayahTo, pages, completed: allDone });
+    ayah = ayahTo + 1;
+    day++;
+  }
+  return chunks;
+}
+
+function formatScheduleDate(date: Date): string {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff === -1) return "Yesterday";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function isToday(date: Date): boolean {
+  const today = new Date();
+  return (
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate()
+  );
+}
+
 function GoalCard({
   goal,
   onDelete,
@@ -112,6 +167,7 @@ function GoalCard({
   todayPlannedItems: string[];
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [scheduleExpanded, setScheduleExpanded] = useState(false);
   const surah = SURAHS.find((s) => s.id === goal.surahNumber);
   const totalAyahs = goal.ayahEnd - goal.ayahStart + 1;
   const totalGoalPages = getTotalPagesForAyahRange(goal.surahNumber, goal.ayahStart, goal.ayahEnd);
@@ -299,6 +355,83 @@ function GoalCard({
           )}
         </div>
       )}
+
+      {/* Schedule toggle */}
+      <button
+        onClick={() => setScheduleExpanded((v) => !v)}
+        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <CalendarDays className="w-3 h-3" />
+        {scheduleExpanded ? "Hide" : "Show"} schedule
+        {scheduleExpanded ? (
+          <ChevronUp className="w-3 h-3 ml-0.5" />
+        ) : (
+          <ChevronDown className="w-3 h-3 ml-0.5" />
+        )}
+      </button>
+
+      {scheduleExpanded && (() => {
+        const schedule = buildSchedule(goal);
+        if (schedule.length === 0) return null;
+        const todayIndex = schedule.findIndex((c) => isToday(c.date));
+        return (
+          <div className="pt-1 max-h-52 overflow-y-auto space-y-1 pr-0.5">
+            {schedule.map((chunk) => {
+              const today = isToday(chunk.date);
+              const past = !chunk.completed && chunk.date < new Date(new Date().setHours(0, 0, 0, 0));
+              return (
+                <div
+                  key={chunk.day}
+                  className={cn(
+                    "flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] transition-colors",
+                    chunk.completed
+                      ? "bg-primary/8 text-muted-foreground"
+                      : today
+                      ? "bg-primary/15 text-foreground ring-1 ring-primary/30"
+                      : past
+                      ? "bg-destructive/8 text-muted-foreground"
+                      : "bg-muted/50 text-muted-foreground",
+                  )}
+                >
+                  {/* Status icon */}
+                  <div className="flex-shrink-0 w-4 flex items-center justify-center">
+                    {chunk.completed ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-primary" />
+                    ) : today ? (
+                      <div className="w-2 h-2 rounded-full bg-primary" />
+                    ) : (
+                      <div className={cn("w-2 h-2 rounded-full", past ? "bg-destructive/50" : "bg-muted-foreground/30")} />
+                    )}
+                  </div>
+
+                  {/* Date */}
+                  <span className={cn("w-16 flex-shrink-0 tabular-nums", today && "font-semibold text-foreground", chunk.completed && "line-through")}>
+                    {formatScheduleDate(chunk.date)}
+                  </span>
+
+                  {/* Ayah range */}
+                  <span className={cn("flex-1 font-medium truncate", chunk.completed ? "line-through" : today ? "text-foreground" : "")}>
+                    {chunk.ayahFrom === chunk.ayahTo
+                      ? `Ayah ${chunk.ayahFrom}`
+                      : `Ayahs ${chunk.ayahFrom}–${chunk.ayahTo}`}
+                  </span>
+
+                  {/* Pages · lines */}
+                  <span className="flex-shrink-0 tabular-nums text-muted-foreground whitespace-nowrap">
+                    {formatPagesShort(chunk.pages)} · {Math.max(1, Math.round(chunk.pages * LINES_PER_PAGE))}
+                    <span className="text-[10px]"> ln</span>
+                  </span>
+                </div>
+              );
+            })}
+            {todayIndex === -1 && !isComplete && (
+              <p className="text-[10px] text-muted-foreground text-center pt-0.5">
+                Schedule started {new Date(goal.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+              </p>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
