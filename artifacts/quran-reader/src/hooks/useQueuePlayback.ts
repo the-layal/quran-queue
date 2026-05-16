@@ -563,6 +563,7 @@ export function useQueuePlayback(): QueuePlaybackState {
             ? startSec + seekOffsetSec
             : Math.max(0, startSec - PREROLL_SEC);
         audio.currentTime = targetTime;
+        audio.playbackRate = playbackRateRef.current;
         const p = audio.play();
         if (p) {
           p.then(startTicking).catch(() => {
