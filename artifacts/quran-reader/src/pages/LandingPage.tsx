@@ -364,21 +364,21 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
               {[
                 {
                   id: "sq1",
-                  label: "Morning Adhkar",
+                  label: "Page 47",
                   reps: "×3",
                   items: [
-                    { surah: "Al-Fatiha", range: "1:1", reps: "×3" },
-                    { surah: "Al-Fatiha", range: "1:2–3", reps: "×3" },
-                    { surah: "Al-Ikhlas", range: "112:1–2", reps: "×3" },
+                    { surah: "Al-Baqarah", range: "2:280", reps: "×5" },
+                    { surah: "Al-Baqarah", range: "2:281", reps: "×5" },
                   ],
                 },
                 {
                   id: "sq2",
-                  label: "Juz 30 Review",
-                  reps: "×2",
+                  label: "Page 48",
+                  reps: "×3",
                   items: [
-                    { surah: "Al-Baqarah", range: "2:255", reps: "×5" },
-                    { surah: "Al-Falaq", range: "113:1–3", reps: "×5" },
+                    { surah: "Al-Baqarah", range: "2:282 Line 1", reps: "×5" },
+                    { surah: "Al-Baqarah", range: "2:282 Line 2", reps: "×5" },
+                    { surah: "Al-Baqarah", range: "2:282 Line 3", reps: "×5" },
                   ],
                 },
               ].map((sq, gi) => (
