@@ -324,7 +324,7 @@ router.post("/plans/today", async (req: Request, res: Response) => {
           }
         }
       }
-      const allItems = await storage.getSrsItems(userId);
+      const allItems = (await storage.getSrsItems(userId)).filter((i) => !i.retired);
       for (const item of allItems) {
         for (const p of getPagesForReference(item.reference)) {
           if (!existingPages.has(p) && !candidatePages.includes(p)) {
