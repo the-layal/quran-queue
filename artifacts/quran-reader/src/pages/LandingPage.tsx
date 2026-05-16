@@ -296,7 +296,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
                   </svg>
                 </div>
                 {/* Ayah label */}
-                <span className="text-[10px] font-medium text-foreground truncate flex-1 min-w-0">Ta-Ha · 20:39-42</span>
+                <span className="text-[10px] font-medium text-foreground truncate flex-1 min-w-0">Taha · 20:39-42</span>
               </div>
 
               {/* Progress bar with tick marks and timestamps */}
