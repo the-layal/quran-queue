@@ -11,6 +11,9 @@ const HERO_PILLS = [
 ];
 
 
+const AYAH_201_TRANSLATION =
+  "And among them is he who says: Our Lord, give us good in this world and good in the Hereafter and protect us from the punishment of the Fire. (2:201)";
+
 const AYAH_201_WORDS = [
   { id: "w0",  text: "وَمِنْهُم",   tr: "wa min-hum",    line: 0 },
   { id: "w1",  text: "مَّن",        tr: "man",            line: 0 },
@@ -32,6 +35,7 @@ function HighlightCard() {
   const [selected, setSelected] = useState<Set<string>>(new Set(["w0", "w1", "w2"]));
   const [fineness, setFineness] = useState<"word" | "line" | "ayah">("word");
   const [showTranslit, setShowTranslit] = useState(false);
+  const [showTranslation, setShowTranslation] = useState(false);
 
   function toggle(wordId: string, line: number) {
     setSelected((prev) => {
@@ -82,6 +86,11 @@ function HighlightCard() {
             )}
           </div>
         ))}
+        {showTranslation && (
+          <p className="text-[9px] text-muted-foreground leading-snug pt-1 border-t border-border/40">
+            {AYAH_201_TRANSLATION}
+          </p>
+        )}
         <div className="flex items-center justify-between pt-1.5 border-t border-border/40">
           <div className="flex gap-1.5">
             {(["word", "line", "ayah"] as const).map((f) => (
@@ -98,16 +107,28 @@ function HighlightCard() {
               </button>
             ))}
           </div>
-          <button
-            onClick={() => setShowTranslit((v) => !v)}
-            className={`text-[9px] font-semibold rounded-full px-2.5 py-0.5 transition-colors ${
-              showTranslit
-                ? "bg-primary text-primary-foreground"
-                : "bg-secondary text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            Tr
-          </button>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setShowTranslit((v) => !v)}
+              className={`text-[9px] font-semibold rounded-full px-2.5 py-0.5 transition-colors ${
+                showTranslit
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              Tr
+            </button>
+            <button
+              onClick={() => setShowTranslation((v) => !v)}
+              className={`text-[9px] font-semibold rounded-full px-2.5 py-0.5 transition-colors ${
+                showTranslation
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              En
+            </button>
+          </div>
         </div>
       </div>
       <div>
