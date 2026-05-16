@@ -100,9 +100,17 @@ export async function loadAudioData(
         const segments = entry.segments ?? [];
         const maxSegEnd = segments.reduce((m, s) => Math.max(m, s[2]), 0);
         const durationMs = entry.duration != null ? entry.duration * 1000 : null;
-        // Use the larger of (max segment end ms) and (duration*1000) so we never
-        // truncate audio that extends past the last word's end timestamp.
-        const timestampTo = Math.max(maxSegEnd, durationMs ?? 0);
+        // Extra tail time added when no duration is available.  The playback
+        // engine fires its region-end check 80 ms early, so without padding the
+        // last word is clipped and its highlight is never shown.
+        const AYAH_MP3_TAIL_PADDING_MS = 800;
+        // When duration is known, use the larger of the last segment end and the
+        // real duration.  When it is null (most non-Alafasy reciters), append the
+        // tail padding so the engine does not cut off the final syllable.
+        const timestampTo =
+          durationMs != null
+            ? Math.max(maxSegEnd, durationMs)
+            : maxSegEnd + AYAH_MP3_TAIL_PADDING_MS;
         map[key] = {
           surah_number: entry.surah_number,
           ayah_number: entry.ayah_number,
