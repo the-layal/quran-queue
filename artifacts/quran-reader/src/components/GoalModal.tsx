@@ -332,7 +332,9 @@ export default function GoalModal({ open, onClose, onCreate }: GoalModalProps) {
                 value={sliderValue}
                 onChange={(e) => {
                   const raw = parseFloat(e.target.value);
-                  setDailyTarget(unitToAyahs(raw, paceUnit, totalAyahs, totalPages));
+                  const newDailyTarget = unitToAyahs(raw, paceUnit, totalAyahs, totalPages);
+                  setDailyTarget(newDailyTarget);
+                  setTargetDate(addDays(Math.ceil(totalAyahs / Math.max(1, newDailyTarget))));
                 }}
                 className="w-full accent-primary cursor-pointer"
               />

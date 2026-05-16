@@ -24,6 +24,12 @@ function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function addDays(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 function daysUntil(dateStr: string): number {
   const target = new Date(dateStr + "T00:00:00");
   const now = new Date();
@@ -174,7 +180,9 @@ export default function EditGoalModal({ open, goal, onClose, onSave }: EditGoalM
               value={sliderValue}
               onChange={(e) => {
                 const raw = parseFloat(e.target.value);
-                setDailyTarget(unitToAyahs(raw, paceUnit, totalAyahs, totalPages));
+                const newDailyTarget = unitToAyahs(raw, paceUnit, totalAyahs, totalPages);
+                setDailyTarget(newDailyTarget);
+                setTargetDate(addDays(Math.ceil(totalAyahs / Math.max(1, newDailyTarget))));
               }}
               className="w-full accent-primary cursor-pointer"
             />
