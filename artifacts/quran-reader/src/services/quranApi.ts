@@ -96,17 +96,19 @@ export async function loadAudioData(
 
       const raw: Record<string, AyahMp3Entry> = await res.json();
       map = {};
+      // Extra tail time added when no duration field is present in the data.
+      // The playback engine fires its region-end check 80 ms early, so without
+      // padding the last word is clipped and its highlight is never shown.
+      // Most non-Alafasy reciters (Abdul Basit, Maher, Hani, Ghamdi, Husary)
+      // have duration: null, so this constant applies to all of them.
+      const AYAH_MP3_TAIL_PADDING_MS = 800;
       for (const [key, entry] of Object.entries(raw)) {
         const segments = entry.segments ?? [];
         const maxSegEnd = segments.reduce((m, s) => Math.max(m, s[2]), 0);
         const durationMs = entry.duration != null ? entry.duration * 1000 : null;
-        // Extra tail time added when no duration is available.  The playback
-        // engine fires its region-end check 80 ms early, so without padding the
-        // last word is clipped and its highlight is never shown.
-        const AYAH_MP3_TAIL_PADDING_MS = 800;
         // When duration is known, use the larger of the last segment end and the
-        // real duration.  When it is null (most non-Alafasy reciters), append the
-        // tail padding so the engine does not cut off the final syllable.
+        // real duration.  When it is null, append the tail padding so the engine
+        // does not cut off the final syllable.
         const timestampTo =
           durationMs != null
             ? Math.max(maxSegEnd, durationMs)
