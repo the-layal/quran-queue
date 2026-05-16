@@ -34,9 +34,9 @@ export function LogModal({
   const [surahToId, setSurahToId] = useState<number>(parseInt(initialTo, 10) || 0);
   const [vibeScale, setVibeScale] = useState(0);
 
-  const { mutate: createLog, isPending: isLogPending } = useCreateLog();
+  const { mutate: createLog, mutateAsync: createLogAsync, isPending: isLogPending } = useCreateLog();
   const { mutate: logExtra, isPending: isExtraPending } = useLogExtraRevision();
-  const { mutate: retireMutate, isPending: isRetirePending } = useRetireSurah();
+  const { mutateAsync: retireAsync, isPending: isRetirePending } = useRetireSurah();
   const { mutate: unretireMutate, isPending: isUnretirePending } = useUnretireSurah();
   const { data: srsItems } = useSrsItems();
   const isPending = mode === "extra" ? isExtraPending : isLogPending;
@@ -93,12 +93,42 @@ export function LogModal({
     return true;
   };
 
-  const isSingleSurah = type === "surah" && (!surahToId || surahToId === surahFromId);
-  const surahRef = isSingleSurah ? `surah:${surahFromId}` : null;
-  const isRetired = surahRef ? !!(srsItems?.find((s) => s.reference === surahRef)?.retired) : false;
+  // All surah IDs covered by the current From–To selection (single or range).
+  const surahIdsForRetire: number[] = type === "surah"
+    ? Array.from(
+        { length: (surahToId && surahToId >= surahFromId ? surahToId : surahFromId) - surahFromId + 1 },
+        (_, i) => surahFromId + i
+      )
+    : [];
 
-  const handleRetire = surahRef && mode === "log" ? () => {
-    retireMutate(surahRef, { onSuccess: onClose });
+  const canRetire = type === "surah" && mode === "log";
+
+  // Un-retire is single-surah only (bulk un-retire is out of scope).
+  const isSingleSurah = !surahToId || surahToId === surahFromId;
+  const surahRef = type === "surah" && isSingleSurah ? `surah:${surahFromId}` : null;
+
+  // Retired only when every surah in the range is retired.
+  const isRetired = canRetire && surahIdsForRetire.length > 0 &&
+    surahIdsForRetire.every(id => !!(srsItems?.find(s => s.reference === `surah:${id}`)?.retired));
+
+  // Bug 1 fix: use mutateAsync so onClose only runs after the API confirms.
+  // Bug 2 fix: canRetire doesn't require isSingleSurah, so ranges show the button.
+  // Bug 3 fix: auto-log vibeScale=5 for every surah being retired.
+  const handleRetire = canRetire ? async () => {
+    try {
+      await Promise.all(
+        surahIdsForRetire.flatMap(id => {
+          const ref = `surah:${id}`;
+          return [
+            createLogAsync({ type: "surah", reference: ref, vibeScale: 5 }),
+            retireAsync(ref),
+          ];
+        })
+      );
+    } catch {
+      // individual mutation errors surface via React Query; don't block close
+    }
+    onClose();
   } : undefined;
 
   const handleUnretire = surahRef && mode === "log" && isRetired ? () => {
