@@ -311,9 +311,9 @@ router.post("/plans/today", async (req: Request, res: Response) => {
     const todayStr = getTodayStr();
     let plan = await storage.getDailyPlan(userId, todayStr);
 
-    // Schedule due SRS refs first (preserving reference type), then fresh
-    // pages 1..604 in order. Skips pages already covered by the plan or by
-    // any known SRS item.
+    // Due SRS items first, then remaining bandwidth filled from all SRS items (not-yet-due),
+    // mirroring the original collectCandidatePages approach. Only falls through to the full
+    // 1..604 sweep when the user has no SRS data at all (skipped onboarding / full-Quran mode).
     const fillFromDueAndFresh = async (
       plannedItems: string[],
       existingPages: Set<number>,
@@ -338,11 +338,23 @@ router.post("/plans/today", async (req: Request, res: Response) => {
         currentPageCount += weight;
         for (const p of pages) existingPages.add(p);
       }
-      // Then fresh pages 1..604 in order, excluding pages already covered
-      // (either by the plan or by any known SRS item).
-      // Only introduce fresh pages when the user has no SRS data at all (full-Quran / skipped onboarding).
-      // Once any surah is registered, the plan must stay bounded to what the user has logged.
-      if (allItems.length > 0) return { plannedItems, currentPageCount };
+      // Fill remaining bandwidth from all SRS items (ordered by nextReviewDate).
+      // This keeps the plan strictly bounded to what the user has registered.
+      if (allItems.length > 0) {
+        for (const item of allItems) {
+          if (currentPageCount >= bandwidth) break;
+          if (plannedItems.includes(item.reference)) continue;
+          const pages = getPagesForReference(item.reference);
+          if (pages.every((p) => existingPages.has(p))) continue;
+          const weight = getPageEquivalent(item.reference);
+          if (currentPageCount + weight > bandwidth && plannedItems.length > 0) break;
+          plannedItems.push(item.reference);
+          currentPageCount += weight;
+          for (const p of pages) existingPages.add(p);
+        }
+        return { plannedItems, currentPageCount };
+      }
+      // No SRS items at all (skipped onboarding / full-Quran mode): sweep 1..604
       const freshPages: number[] = [];
       for (let p = 1; p <= TOTAL_QURAN_PAGES; p++) {
         if (!existingPages.has(p) && !knownPages.has(p)) freshPages.push(p);
@@ -403,7 +415,10 @@ router.post("/plans/today", async (req: Request, res: Response) => {
       });
     } else {
       const completedItems = plan.completedItems || [];
-      const existingPlanned = (plan.plannedItems || []).filter((r) => !retiredSet.has(r) || completedItems.includes(r));
+      const srsRefSet = new Set(allSrsFull.map((i) => i.reference));
+      const existingPlanned = (plan.plannedItems || []).filter(
+        (r) => (srsRefSet.has(r) || completedItems.includes(r)) && (!retiredSet.has(r) || completedItems.includes(r)),
+      );
       let currentPageCount = 0;
       const existingPages = new Set<number>();
 

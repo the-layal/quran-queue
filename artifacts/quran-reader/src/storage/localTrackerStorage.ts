@@ -352,13 +352,21 @@ export class LocalTrackerStorage implements ITrackerStorage {
     // Defined inline so it can close over readSrs() — mirrors server fillFromDueAndFresh.
     function fillFreshPages(planned: string[], usedPages: number): { planned: string[]; usedPages: number } {
       const srsItems = readSrs();
-      // Only introduce unseen pages when the user has no SRS data (full-Quran / skipped onboarding).
-      // Once any surah is registered, the plan must stay bounded to what the user has logged.
-      if (srsItems.length > 0) return { planned, usedPages };
-      const knownPages = new Set<number>();
-      for (const item of srsItems) {
-        for (const p of getPagesForReference(item.reference)) knownPages.add(p);
+      // Fill remaining bandwidth from all SRS items (ordered by nextReviewDate),
+      // mirroring the original collectCandidatePages approach.
+      // Only sweep 1..604 when the user has no SRS data at all (skipped onboarding / full-Quran mode).
+      if (srsItems.length > 0) {
+        for (const item of srsItems) {
+          if (usedPages >= bandwidth) break;
+          if (planned.includes(item.reference)) continue;
+          const weight = getPageEquivalent(item.reference);
+          if (usedPages + weight > bandwidth && planned.length > 0) break;
+          planned.push(item.reference);
+          usedPages += weight;
+        }
+        return { planned, usedPages };
       }
+      const knownPages = new Set<number>();
       const coveredPages = new Set<number>();
       for (const ref of planned) {
         for (const p of getPagesForReference(ref)) coveredPages.add(p);
