@@ -74,8 +74,8 @@ export default function EditGoalModal({ open, goal, onClose, onSave }: EditGoalM
   const paceNeeded = daysRemaining > 0 ? Math.ceil(totalAyahs / daysRemaining) : totalAyahs;
   const paceTooSlow = dailyTarget < paceNeeded;
 
-  const sliderStep = paceUnit === "pages" ? 0.5 : 1;
-  const sliderMin = paceUnit === "pages" ? Math.min(0.5, totalPages) : 1;
+  const sliderStep = paceUnit === "pages" ? 0.25 : 1;
+  const sliderMin = paceUnit === "pages" ? Math.min(0.25, totalPages) : 1;
   const sliderMax = paceUnit === "pages"
     ? Math.min(5, Math.max(sliderMin, totalPages))
     : Math.max(1, Math.min(15, totalLines));
