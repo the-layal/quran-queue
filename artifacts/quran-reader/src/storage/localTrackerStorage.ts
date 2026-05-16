@@ -396,13 +396,15 @@ export class LocalTrackerStorage implements ITrackerStorage {
     const existingIdx = plans.findIndex((p) => p.date === t);
 
     if (existingIdx === -1) {
-      const retiredRefSet = new Set(readSrs().filter((i) => i.retired).map((i) => i.reference));
+      const allSrsForCarry = readSrs();
+      const retiredRefSet = new Set(allSrsForCarry.filter((i) => i.retired).map((i) => i.reference));
+      const srsRefSetForCarry = new Set(allSrsForCarry.map((i) => i.reference));
       const carryover: string[] = [];
       const yPlan = plans.find((p) => p.date === yesterdayStr());
       if (yPlan) {
         const completed = yPlan.completedItems || [];
         for (const ref of yPlan.plannedItems || [])
-          if (!completed.includes(ref) && !retiredRefSet.has(ref)) carryover.push(ref);
+          if (!completed.includes(ref) && !retiredRefSet.has(ref) && srsRefSetForCarry.has(ref)) carryover.push(ref);
       }
       let planned: string[] = [...carryover];
       let usedPages = planned.reduce((s, r) => s + getPageEquivalent(r), 0);

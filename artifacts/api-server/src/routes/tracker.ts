@@ -377,6 +377,7 @@ router.post("/plans/today", async (req: Request, res: Response) => {
 
     const allSrsFull = await storage.getSrsItems(userId);
     const retiredSet = new Set(allSrsFull.filter((s) => s.retired).map((s) => s.reference));
+    const srsRefSet = new Set(allSrsFull.map((s) => s.reference));
 
     if (!plan) {
       const carryoverRefs: string[] = [];
@@ -384,7 +385,8 @@ router.post("/plans/today", async (req: Request, res: Response) => {
       if (yesterdayPlan) {
         const completed = yesterdayPlan.completedItems || [];
         const planned = yesterdayPlan.plannedItems || [];
-        for (const ref of planned) if (!completed.includes(ref) && !retiredSet.has(ref)) carryoverRefs.push(ref);
+        for (const ref of planned)
+          if (!completed.includes(ref) && !retiredSet.has(ref) && srsRefSet.has(ref)) carryoverRefs.push(ref);
       }
 
       let currentPageCount = 0;
@@ -415,7 +417,6 @@ router.post("/plans/today", async (req: Request, res: Response) => {
       });
     } else {
       const completedItems = plan.completedItems || [];
-      const srsRefSet = new Set(allSrsFull.map((i) => i.reference));
       const existingPlanned = (plan.plannedItems || []).filter(
         (r) => (srsRefSet.has(r) || completedItems.includes(r)) && (!retiredSet.has(r) || completedItems.includes(r)),
       );
@@ -448,7 +449,7 @@ router.post("/plans/today", async (req: Request, res: Response) => {
         }
         plan = await storage.updateDailyPlan(plan.id, { bandwidth: input.bandwidth, plannedItems });
       } else {
-        plan = await storage.updateDailyPlan(plan.id, { bandwidth: input.bandwidth });
+        plan = await storage.updateDailyPlan(plan.id, { bandwidth: input.bandwidth, plannedItems: existingPlanned });
       }
     }
 

@@ -645,7 +645,26 @@ export function useSmartBrush(
       activeRangeIdsRef.current = new Set();
       anchorIndexRef.current = aidx;
 
-      applyRange(aidx, aidx);
+      // Gap-fill: if the base selection has units on this page and the tapped
+      // unit is non-adjacent, fill everything between the boundary base unit
+      // and the tapped unit so the selection stays contiguous.
+      if (effectiveBase.size > 0) {
+        let minBaseIdx = -1;
+        let maxBaseIdx = -1;
+        for (let i = 0; i < units.length; i++) {
+          if (units[i].some((id) => effectiveBase.has(id))) {
+            if (minBaseIdx === -1) minBaseIdx = i;
+            maxBaseIdx = i;
+          }
+        }
+        if (minBaseIdx !== -1 && (aidx > maxBaseIdx || aidx < minBaseIdx)) {
+          applyRange(aidx > maxBaseIdx ? maxBaseIdx : aidx, aidx > maxBaseIdx ? aidx : minBaseIdx);
+        } else {
+          applyRange(aidx, aidx);
+        }
+      } else {
+        applyRange(aidx, aidx);
+      }
     },
     [mode, containerRef, resolveAnchorWordId, applyRange, setSelectedWordIds]
   );
