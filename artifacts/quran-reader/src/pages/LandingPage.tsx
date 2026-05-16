@@ -124,7 +124,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
                 <div className="bg-card rounded-2xl p-5 border border-border/50 shadow-md shadow-primary/5">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-serif font-bold text-lg text-foreground">Daily Plan</h3>
-                    <span className="text-xs text-muted-foreground font-medium">3 / 5 completed</span>
+                    <span className="text-xs text-muted-foreground font-medium">2 / 4 completed</span>
                   </div>
                   <div className="space-y-1.5">
                     {[
