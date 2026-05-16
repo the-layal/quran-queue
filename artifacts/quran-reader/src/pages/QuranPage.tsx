@@ -29,7 +29,6 @@ import SurahHeader from "../components/SurahHeader";
 import MushafSvgPage from "../components/MushafSvgPage";
 import BrushFinenessToggle from "../components/BrushFinenessToggle";
 import BlindReviewToggle from "../components/BlindReviewToggle";
-// import VersePreviewChip from "../components/VersePreviewChip"; // commented out — re-enable if needed
 import AudioControlBar from "../components/AudioControlBar";
 import ReviewQueuePanel from "../components/ReviewQueuePanel";
 
@@ -1110,7 +1109,6 @@ export default function QuranPage() {
 
       {/* ── Footer navigation ───────────────────────────────────────────── */}
       <footer ref={footerRef} className={`${isMushaf ? "fixed bottom-0 right-0" : "sticky bottom-0"} z-30 bg-background/90 backdrop-blur-sm border-t border-border`} style={isMushaf ? { left: "var(--sidebar-w, 0px)" } : undefined}>
-        {/* <VersePreviewChip /> */}{/* commented out — re-enable if needed */}
         {/* Controls row — two equal halves meeting at a fixed centre separator */}
         <div className="flex items-center py-1.5 border-b border-border/40 px-2 min-h-[38px]">
           {/* Left half — right-aligned, contains BrushFinenessToggle */}
