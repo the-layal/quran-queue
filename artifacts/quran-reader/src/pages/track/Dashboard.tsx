@@ -204,7 +204,7 @@ function GoalCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <p className="text-sm font-semibold text-foreground leading-tight truncate">
+            <p className="text-base font-semibold text-foreground leading-tight truncate">
               {surah?.englishName ?? `Surah ${goal.surahNumber}`}
             </p>
             {isSynced && (
@@ -213,7 +213,7 @@ function GoalCard({
               </span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <p className="text-sm text-muted-foreground mt-0.5">
             {goal.ayahStart === 1 && goal.ayahEnd === surah?.ayahCount
               ? "Full surah"
               : `Ayahs ${goal.ayahStart}–${goal.ayahEnd}`}
@@ -515,7 +515,7 @@ export default function Dashboard() {
             <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
             <div className="flex flex-col md:flex-row items-center justify-between gap-8 relative z-10">
               <div className="flex-1 w-full text-center md:text-left">
-                <h3 className="text-sm font-bold tracking-widest text-accent uppercase mb-2">
+                <h3 className="text-base font-bold tracking-widest text-accent uppercase mb-2">
                   Total Progress
                 </h3>
                 <h2
@@ -527,7 +527,7 @@ export default function Dashboard() {
                     / {TOTAL_PAGES} pages
                   </span>
                 </h2>
-                <p className="text-xs text-muted-foreground mb-4">
+                <p className="text-sm text-muted-foreground mb-4">
                   Only memorization rated 3+ counts toward progress
                 </p>
                 <p className="text-muted-foreground max-w-sm mx-auto md:mx-0 leading-relaxed">
@@ -545,7 +545,7 @@ export default function Dashboard() {
                     >
                       {dueToday}
                     </p>
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
+                    <p className="text-sm text-muted-foreground uppercase tracking-wider mt-1">
                       Due Today
                     </p>
                   </div>
@@ -557,7 +557,7 @@ export default function Dashboard() {
                     >
                       {dayStreak}
                     </p>
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
+                    <p className="text-sm text-muted-foreground uppercase tracking-wider mt-1">
                       Day Streak
                     </p>
                   </div>
@@ -618,7 +618,7 @@ export default function Dashboard() {
 
               {todayPlan && plannedItems.length > 0 ? (
                 <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground mb-3 font-medium">
+                  <p className="text-sm text-muted-foreground mb-3 font-medium">
                     {completedItems.length}/{plannedItems.length} completed
                   </p>
                   {plannedItems.slice(0, 5).map((ref, idx) => {
@@ -652,7 +652,7 @@ export default function Dashboard() {
                         <div className="flex-1 min-w-0">
                           <p
                             className={cn(
-                              "text-sm font-semibold text-foreground truncate",
+                              "text-base font-semibold text-foreground truncate",
                               isDone &&
                                 "line-through text-muted-foreground",
                             )}
@@ -675,7 +675,7 @@ export default function Dashboard() {
                     );
                   })}
                   {plannedItems.length > 5 && (
-                    <p className="text-xs text-muted-foreground text-center pt-1">
+                    <p className="text-sm text-muted-foreground text-center pt-1">
                       +{plannedItems.length - 5} more
                     </p>
                   )}
@@ -686,7 +686,7 @@ export default function Dashboard() {
                     <Trophy size={24} />
                   </div>
                   <p className="text-foreground font-medium">No plan yet</p>
-                  <p className="text-sm text-muted-foreground mt-1">
+                  <p className="text-base text-muted-foreground mt-1">
                     Generate a daily plan to get started.
                   </p>
                 </div>
@@ -712,7 +712,7 @@ export default function Dashboard() {
                 Memorization Goals
               </h3>
               {goals.length > 0 && (
-                <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-medium">
+                <span className="text-sm bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-medium">
                   {activeGoals.length} active
                 </span>
               )}
@@ -723,7 +723,7 @@ export default function Dashboard() {
                   onClick={handleGoalSync}
                   disabled={goalSyncing}
                   title="Sync goals from Quran.com"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors text-sm font-medium disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors text-base font-medium disabled:opacity-50"
                 >
                   {goalSyncing
                     ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -734,7 +734,7 @@ export default function Dashboard() {
               <button
                 data-testid="button-new-goal"
                 onClick={() => setIsGoalModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm font-medium"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-base font-medium"
               >
                 <Plus className="w-4 h-4" />
                 New Goal
@@ -748,12 +748,12 @@ export default function Dashboard() {
                 <Target size={22} />
               </div>
               <p className="text-foreground font-medium">No goals yet</p>
-              <p className="text-sm text-muted-foreground mt-1 mb-4">
+              <p className="text-base text-muted-foreground mt-1 mb-4">
                 Set a memorization goal to track your progress ayah by ayah.
               </p>
               <button
                 onClick={() => setIsGoalModalOpen(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-base font-medium hover:bg-primary/90 transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 Create Your First Goal

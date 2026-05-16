@@ -72,7 +72,7 @@ function HighlightCard() {
               </span>
             ))}
             {lineIdx === 2 && (
-              <span className="font-quran text-sm text-muted-foreground/70 select-none">۝٢٠١</span>
+              <span className="font-quran text-sm text-muted-foreground/70 select-none">٢٠١</span>
             )}
           </div>
         ))}
@@ -94,7 +94,7 @@ function HighlightCard() {
       </div>
       <div>
         <h4 className="font-serif font-bold text-foreground mb-1">Highlight</h4>
-        <p className="text-sm text-muted-foreground leading-relaxed">Select words, lines, or a whole ayah to review.</p>
+        <p className="text-sm text-muted-foreground leading-relaxed">Select and deselect words, lines, or whole ayahs to listen to. Try it out.</p>
       </div>
     </div>
   );
@@ -123,7 +123,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
             data-testid="button-login"
             className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold shadow-md shadow-primary/20 hover:shadow-lg hover:-translate-y-0.5 transition-all"
           >
-            Get Started
+            Begin
           </button>
         </div>
       </nav>
@@ -144,10 +144,13 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
               <span className="text-primary">beautifully tracked</span>
             </h2>
             <p className="text-lg text-muted-foreground leading-relaxed mb-10 max-w-lg">
-              Hafith uses a smart spaced repetition algorithm to schedule your reviews,
+              Hafith uses a smart spaced repetition algorithm to schedule your Quran reviews,
               track your progress, and keep your memorization strong — all with a calm,
               focused interface.
             </p>
+            <p className="text-lg text-muted-foreground leading-relaxed mb-10 max-w-lg">
+              The embedded Quran reader allows for word- and line-level highlighting for specific audio playback and repetition.
+            </p>  
             <div className="flex flex-col sm:flex-row gap-4">
               <button
                 onClick={onEnter}
@@ -190,7 +193,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
                       <div className="flex gap-3">
                         <div className="bg-background rounded-2xl px-4 py-3 flex-1 border border-border/50 text-center">
                           <Trophy className="w-5 h-5 text-accent mx-auto mb-1" />
-                          <p className="text-xl font-bold text-foreground">8</p>
+                          <p className="text-xl font-bold text-foreground">4</p>
                           <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Due Today</p>
                         </div>
                         <div className="bg-background rounded-2xl px-4 py-3 flex-1 border border-border/50 text-center">
@@ -230,9 +233,9 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
                   </div>
                   <div className="space-y-1.5">
                     {[
-                      { label: "Al-Fatiha", done: true },
-                      { label: "Al-Baqarah — Ayah 255", done: true },
-                      { label: "Al-Mulk", done: false },
+                      { label: "Al-Qalam", done: true },
+                      { label: "Ali Imran — Ayahs 1-22", done: true },
+                      { label: "Luqman", done: false },
                       { label: "Al-Kahf — Ayahs 1–10", done: false },
                     ].map((item) => (
                       <div
@@ -293,7 +296,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
                   </svg>
                 </div>
                 {/* Ayah label */}
-                <span className="text-[10px] font-medium text-foreground truncate flex-1 min-w-0">Al-Baqarah · 2:255</span>
+                <span className="text-[10px] font-medium text-foreground truncate flex-1 min-w-0">Al-Baqarah · 2:202</span>
               </div>
 
               {/* Progress bar with tick marks and timestamps */}
@@ -326,7 +329,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
             </div>
             <div>
               <h4 className="font-serif font-bold text-foreground mb-1">Listen</h4>
-              <p className="text-sm text-muted-foreground leading-relaxed">Any reciter, any verse — fine-grained audio control.</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">Any reciter, any verse — fine-grained audio control and playback highlighting.</p>
             </div>
           </div>
 
@@ -388,7 +391,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
             </div>
             <div>
               <h4 className="font-serif font-bold text-foreground mb-1">Queue</h4>
-              <p className="text-sm text-muted-foreground leading-relaxed">Build custom playlists of any verses to loop and review.</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">Build custom playlists of any verses to loop and review. Share your queues with anyone.</p>
             </div>
           </div>
 
