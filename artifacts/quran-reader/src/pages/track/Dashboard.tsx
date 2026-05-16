@@ -515,7 +515,7 @@ export default function Dashboard() {
             <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
             <div className="flex flex-col md:flex-row items-center justify-between gap-8 relative z-10">
               <div className="flex-1 w-full text-center md:text-left">
-                <h3 className="text-base font-bold tracking-widest text-accent uppercase mb-2">
+                <h3 className="text-base font-bold tracking-widest text-foreground uppercase mb-2">
                   Total Progress
                 </h3>
                 <h2

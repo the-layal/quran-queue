@@ -174,7 +174,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
             <div className="absolute -bottom-4 -right-4 w-full h-full bg-primary/5 rounded-3xl -z-0" />
 
             {/* Scaled dashboard mockup */}
-            <div className="relative z-10 overflow-hidden" style={{ height: "420px" }}>
+            <div className="relative z-10 overflow-hidden" style={{ height: "430px" }}>
               <div className="absolute inset-0 origin-top-left scale-[0.72] w-[138%] space-y-3">
 
                 {/* Total Progress card */}
@@ -183,23 +183,23 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
                   <div className="flex items-center justify-between gap-6 relative z-10">
                     {/* Left: text + stat tiles */}
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-xs font-bold tracking-widest text-accent uppercase mb-1">Total Progress</h3>
-                      <p className="text-4xl font-serif text-foreground leading-none mb-0.5">
-                        127 <span className="text-xl text-muted-foreground">/ 604 pages</span>
+                      <h3 className="text-base font-bold tracking-widest text-foreground uppercase mb-1">Total Progress</h3>
+                      <p className="text-5xl font-serif text-foreground leading-none mb-0.5">
+                        127 <span className="text-3xl text-muted-foreground">/ 604 pages</span>
                       </p>
-                      <p className="text-sm text-muted-foreground mb-4 leading-snug">
+                      <p className="text-lg text-muted-foreground mb-4 leading-snug">
                         MashaAllah, you've memorized 21% of the Quran.
                       </p>
                       <div className="flex gap-3">
                         <div className="bg-background rounded-2xl px-4 py-3 flex-1 border border-border/50 text-center">
-                          <Trophy className="w-5 h-5 text-accent mx-auto mb-1" />
-                          <p className="text-xl font-bold text-foreground">4</p>
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Due Today</p>
+                          <Trophy className="w-5 h-5 text-primary mx-auto mb-1" />
+                          <p className="text-3xl font-bold text-foreground">4</p>
+                          <p className="text-[20px] text-muted-foreground uppercase tracking-wider">Due Today</p>
                         </div>
                         <div className="bg-background rounded-2xl px-4 py-3 flex-1 border border-border/50 text-center">
                           <Flame className="w-5 h-5 text-primary mx-auto mb-1" />
-                          <p className="text-xl font-bold text-foreground">14</p>
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Day Streak</p>
+                          <p className="text-3xl font-bold text-foreground">14</p>
+                          <p className="text-[20px] text-muted-foreground uppercase tracking-wider">Day Streak</p>
                         </div>
                       </div>
                     </div>
@@ -219,19 +219,19 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
                         />
                       </svg>
                       <div className="absolute inset-0 flex items-center justify-center flex-col">
-                        <span className="text-2xl font-serif font-bold text-foreground">21%</span>
+                        <span className="text-4xl font-serif font-bold text-foreground">21%</span>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Daily Plan card */}
-                <div className="bg-card rounded-2xl p-5 border border-border/50 shadow-md shadow-primary/5">
+                <div className="bg-card rounded-3xl p-5 border border-border/50 shadow-md shadow-primary/5 relative overflow-hidden">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-serif font-bold text-lg text-foreground">Daily Plan</h3>
-                    <span className="text-xs text-muted-foreground font-medium">2 / 4 completed</span>
+                    <h3 className="font-serif font-bold text-2xl text-foreground">Daily Plan</h3>
+                    <span className="text-xl text-muted-foreground font-medium">2 / 4 completed</span>
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     {[
                       { label: "Al-Qalam", done: true },
                       { label: "Ali Imran — Ayahs 1-22", done: true },
@@ -243,19 +243,16 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
                         className={`flex items-center gap-3 p-2.5 rounded-xl border border-transparent${item.done ? " opacity-50" : ""}`}
                       >
                         <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${item.done ? "bg-primary/15 text-primary" : "bg-primary/10 text-primary"}`}>
-                          {item.done ? <CheckCircle2 size={14} /> : <Play size={12} className="ml-0.5" />}
+                          {item.done ? <CheckCircle2 size={20} /> : <Play size={20} className="ml-0.5" />}
                         </div>
-                        <p className={`text-sm font-semibold flex-1 truncate ${item.done ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                        <p className={`text-xl font-semibold flex-1 truncate ${item.done ? "line-through text-muted-foreground" : "text-foreground"}`}>
                           {item.label}
                         </p>
                         {item.done && (
-                          <span className="text-[9px] uppercase tracking-wider font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">Done</span>
+                          <span className="text-[15px] uppercase tracking-wider font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">Done</span>
                         )}
                       </div>
                     ))}
-                  </div>
-                  <div className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-secondary/50 text-foreground text-sm font-medium border border-border/50">
-                    Continue Session
                   </div>
                 </div>
 

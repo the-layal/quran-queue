@@ -229,8 +229,8 @@ export default function AppShell({ children, rightActions, centerContent }: AppS
             >
               Hafith
             </span>
-            <span className="text-[10px] text-muted-foreground mt-0.5 tracking-wide">
-              Quran Memorization
+            <span className="text-[12px] text-muted-foreground mt-0.5 tracking-wide">
+               Memorization Companion
             </span>
           </div>
         </Link>
