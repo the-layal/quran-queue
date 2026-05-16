@@ -20,6 +20,8 @@ export interface SrsItem {
   interval: number;
   repetitions: number;
   nextReviewDate: string;
+  retired?: boolean;
+  retiredAt?: string | null;
 }
 
 export interface DailyPlan {
@@ -30,6 +32,7 @@ export interface DailyPlan {
   plannedItems: string[];
   completedItems: string[];
   extraRevisions: string[];
+  removedItems?: string[];
 }
 
 export interface TrackerStats {
@@ -67,6 +70,10 @@ export interface ITrackerStorage {
   getSrsItems(): Promise<SrsItem[]>;
   getDueSrsItems(): Promise<SrsItem[]>;
 
+  // Retirement
+  retireSurah(reference: string): Promise<void>;
+  unretireSurah(reference: string): Promise<void>;
+
   // Daily plans
   getTodayPlan(): Promise<DailyPlan | null>;
   getAllPlans(): Promise<DailyPlan[]>;
@@ -78,6 +85,7 @@ export interface ITrackerStorage {
   clearPlan(): Promise<DailyPlan>;
   logExtraRevision(input: LogInput): Promise<DailyPlan>;
   togglePlanItem(input: { date: string; reference: string }): Promise<DailyPlan>;
+  addPerfectlyKnownToSession(): Promise<DailyPlan>;
 
   // Stats
   getStats(): Promise<TrackerStats>;
@@ -85,6 +93,9 @@ export interface ITrackerStorage {
   // Backup
   backup(): Promise<BackupData>;
   restore(data: BackupData): Promise<void>;
+
+  // Prior knowledge seeding (onboarding)
+  seedPriorKnowledge(items: Array<{ reference: string; vibe: number }>): Promise<void>;
 
   // Migration support
   isEmpty(): Promise<boolean>;

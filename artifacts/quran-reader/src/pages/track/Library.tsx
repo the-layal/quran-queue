@@ -2,10 +2,10 @@ import { useState, useMemo, useEffect } from "react";
 import AppShell from "@/components/AppShell";
 import GuestBanner from "@/components/GuestBanner";
 import { SURAHS } from "@/lib/quran-data";
-import { Search, CalendarClock, PenLine, LayoutGrid, List } from "lucide-react";
+import { Search, CalendarClock, PenLine, LayoutGrid, List, Star } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
-import { useLogs } from "@/hooks/useTracker";
+import { useLogs, useSrsItems } from "@/hooks/useTracker";
 import { getAyahsForReference } from "@/storage/referenceFanOut";
 import { LogModal } from "@/components/LogModal";
 
@@ -32,10 +32,16 @@ export default function LibraryPage() {
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [view, setView] = useState<LibraryView>(getInitialView);
   const { data: logs } = useLogs();
+  const { data: srsItems } = useSrsItems();
 
   useEffect(() => {
     try { window.localStorage.setItem(VIEW_STORAGE_KEY, view); } catch { /* ignore */ }
   }, [view]);
+
+  const retiredRefs = useMemo(() => {
+    if (!srsItems) return new Set<string>();
+    return new Set(srsItems.filter((s) => s.retired).map((s) => s.reference));
+  }, [srsItems]);
 
   const { surahStatus, surahVibes, surahOldestDate, surahAvgVibe } = useMemo(() => {
     const statusMap: Record<number, StatusFilter> = {};
@@ -54,7 +60,8 @@ export default function LibraryPage() {
     const sorted = [...logs].reverse();
     for (const log of sorted) {
       const logDate = new Date(log.createdAt);
-      const groups = getAyahsForReference(log.reference);
+      let groups: ReturnType<typeof getAyahsForReference> = [];
+      try { groups = getAyahsForReference(log.reference); } catch { continue; }
       for (const g of groups) {
         for (const a of g.ayahs) {
           if (!loggedAyahs[g.surah]) loggedAyahs[g.surah] = new Set();
@@ -271,11 +278,19 @@ export default function LibraryPage() {
                     {surah.id}
                   </div>
                   <div>
-                    <h3 className="font-semibold text-foreground">{surah.englishName}</h3>
+                    <div className="flex items-center gap-1.5">
+                      <h3 className="font-semibold text-foreground">{surah.englishName}</h3>
+                      {retiredRefs.has(`surah:${surah.id}`) && (
+                        <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 flex-shrink-0" aria-label="Perfectly Known — Retired" />
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground">{surah.type} • {surah.ayahCount} Ayahs</p>
                   </div>
                 </div>
-                <span className="font-serif text-lg text-primary text-right" dir="rtl">{surah.name}</span>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {statusBadge(surah.id)}
+                  <span className="font-serif text-lg text-primary text-right" dir="rtl">{surah.name}</span>
+                </div>
               </Link>
             ))}
             {filteredSurahs.length === 0 && (
@@ -298,13 +313,16 @@ export default function LibraryPage() {
                   key={surah.id}
                   href={`/track/library/${surah.id}`}
                   data-testid={`card-surah-${surah.id}`}
-                  title={`${surah.id}. ${surah.englishName} — ${surah.ayahCount} ayahs`}
+                  title={`${surah.id}. ${surah.englishName} — ${surah.ayahCount} ayahs${retiredRefs.has(`surah:${surah.id}`) ? " ★ Perfectly Known" : ""}`}
                   className={cn(
-                    "aspect-square rounded-xl flex items-center justify-center text-sm font-semibold border transition-all duration-200 cursor-pointer hover:scale-110",
+                    "relative aspect-square rounded-xl flex items-center justify-center text-sm font-semibold border transition-all duration-200 cursor-pointer hover:scale-110",
                     getHeatmapColor(surah.id),
                   )}
                 >
                   {surah.id}
+                  {retiredRefs.has(`surah:${surah.id}`) && (
+                    <span className="absolute top-0.5 right-0.5 text-amber-400 leading-none" style={{ fontSize: "8px" }}>★</span>
+                  )}
                 </Link>
               ))}
             </div>

@@ -12,8 +12,14 @@ import {
   LogIn,
   LogOut,
   User,
+  Moon,
+  Sun,
+  Bookmark,
+  ListMusic,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
+import { useQuranStore } from "../store/quranStore";
+import BookmarksPanel from "./BookmarksPanel";
 
 interface NavItem {
   label: string;
@@ -74,19 +80,20 @@ const FIXED_VERSE: VerseEntry = {
 
 function VersePanel() {
   const verse = FIXED_VERSE;
+
   return (
     <div
       className="mx-3 mb-3 p-3 rounded-xl bg-primary/5 border border-primary/15"
       data-testid="sidebar-verse-panel"
     >
       <p
-        className="text-right text-base leading-relaxed text-foreground mb-1.5"
+        className="text-right text-base leading-relaxed text-foreground"
         dir="rtl"
         lang="ar"
       >
         {verse.arabic}
       </p>
-      <p className="text-xs text-muted-foreground leading-snug">{verse.translation}</p>
+      <p className="text-xs text-muted-foreground leading-snug mt-1">{verse.translation}</p>
       <p className="text-[10px] text-primary/80 font-semibold mt-1.5">{verse.reference}</p>
     </div>
   );
@@ -118,6 +125,24 @@ export default function AppShell({ children, rightActions, centerContent }: AppS
   const isDesktop = useIsDesktop();
   const isQuranPage = location === "/";
   const { user, isLoading, isAuthenticated, login, logout } = useAuth();
+
+  const darkMode = useQuranStore((s) => s.darkMode);
+  const setDarkMode = useQuranStore((s) => s.setDarkMode);
+  const bookmarksPanelOpen = useQuranStore((s) => s.bookmarksPanelOpen);
+  const setBookmarksPanelOpen = useQuranStore((s) => s.setBookmarksPanelOpen);
+  const queuePanelOpen = useQuranStore((s) => s.queuePanelOpen);
+  const setQueuePanelOpen = useQuranStore((s) => s.setQueuePanelOpen);
+
+  const [, navigate] = useLocation();
+
+  function handleQueueButton() {
+    if (location === "/") {
+      setQueuePanelOpen(!queuePanelOpen);
+    } else {
+      navigate("/");
+      setQueuePanelOpen(true);
+    }
+  }
 
   const headerRef = useRef<HTMLElement>(null);
 
@@ -190,6 +215,14 @@ export default function AppShell({ children, rightActions, centerContent }: AppS
 
   const desktopVisible = isDesktop && !collapsed;
 
+  // Sidebar width CSS var so the fixed footer can offset itself.
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--sidebar-w",
+      desktopVisible ? "288px" : "0px",
+    );
+  }, [desktopVisible]);
+
   const handleToggle = useCallback(() => {
     if (!isDesktop) {
       setMobileOpen((o) => !o);
@@ -211,13 +244,20 @@ export default function AppShell({ children, rightActions, centerContent }: AppS
   const sidebarBody = (
     <>
       <div className="flex items-center justify-between px-4 py-4 border-b border-border">
-        <Link href="/" className="flex items-center gap-2 group">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+        <Link href="/" className="flex items-center gap-2.5 group">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
             <BookOpen className="w-4 h-4" />
           </div>
-          <span className="font-semibold text-base group-hover:text-primary transition-colors">
-            Hafith
-          </span>
+          <div className="flex flex-col leading-none">
+            <span
+              className="font-serif font-bold text-base group-hover:text-primary transition-colors"
+            >
+              Hafith
+            </span>
+            <span className="text-[12px] text-muted-foreground mt-0.5 tracking-wide">
+               Memorization Companion
+            </span>
+          </div>
         </Link>
         <button
           onClick={() => {
@@ -337,9 +377,45 @@ export default function AppShell({ children, rightActions, centerContent }: AppS
           </div>
 
           <div className="flex items-center gap-1">
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+              aria-label="Toggle dark mode"
+            >
+              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+            <button
+              onClick={() => setBookmarksPanelOpen(!bookmarksPanelOpen)}
+              className={`p-2 rounded-lg transition-colors ${
+                bookmarksPanelOpen
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+              aria-label="Saved verses"
+              aria-pressed={bookmarksPanelOpen}
+              title="Saved verses"
+            >
+              <Bookmark className="w-5 h-5" />
+            </button>
+            <button
+              onClick={handleQueueButton}
+              data-tour="queue-button"
+              className={`p-2 rounded-lg transition-colors ${
+                queuePanelOpen && location === "/"
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+              aria-label={queuePanelOpen ? "Close review queue" : "Open review queue"}
+              aria-pressed={queuePanelOpen && location === "/"}
+              title="Review queue"
+            >
+              <ListMusic className="w-5 h-5" />
+            </button>
             {rightActions}
           </div>
         </header>
+
+        <BookmarksPanel open={bookmarksPanelOpen} onClose={() => setBookmarksPanelOpen(false)} />
 
         {children}
       </div>

@@ -21,6 +21,12 @@ export const usersTable = pgTable("users", {
   profileImageUrl: varchar("profile_image_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  qfAccessToken: varchar("qf_access_token"),
+  qfRefreshToken: varchar("qf_refresh_token"),
+  qfTokenExpiry: timestamp("qf_token_expiry", { withTimezone: true }),
+  qfDisplayName: varchar("qf_display_name"),
+  qfEmail: varchar("qf_email"),
+  qfSyncError: varchar("qf_sync_error"),
 });
 
 export type UpsertUser = typeof usersTable.$inferInsert;

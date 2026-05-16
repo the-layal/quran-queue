@@ -2,13 +2,19 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import AppShell from "@/components/AppShell";
 import GuestBanner from "@/components/GuestBanner";
 import { useTrackerStorage } from "@/context/useTrackerStorage";
-import type { DailyPlan, CompleteAdvancedInput } from "@/storage/trackerStorage";
+import type { DailyPlan, CompleteAdvancedInput, SrsItem } from "@/storage/trackerStorage";
 import { LogModal } from "@/components/LogModal";
 import { AdvancedVibeGrid } from "@/components/AdvancedVibeGrid";
-import { BrainCircuit, Settings2, CheckCircle2, ListTodo, ChevronLeft, ChevronRight, Circle, Play, BookOpen, Layers, X, Trash2 } from "lucide-react";
+import { BrainCircuit, Settings2, CheckCircle2, ListTodo, ChevronLeft, ChevronRight, Circle, Play, BookOpen, Layers, X, Trash2, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VibeScale } from "@/components/ui/VibeScale";
-import { getPageCountForReference, getSurahNamesForPageRange } from "@/lib/page-utils";
+import { getPageCountForReference, getSurahNamesForPageRange, getSurahName, getAyahsForReference } from "@/lib/page-utils";
+import PriorKnowledgeSetup from "@/components/PriorKnowledgeSetup";
+import { isOnboardingComplete, markOnboardingComplete } from "@/storage/localTrackerStorage";
+
+function getRefAyahCount(ref: string): number {
+  try { return getAyahsForReference(ref).reduce((sum, g) => sum + g.ayahs.length, 0); } catch { return 0; }
+}
 
 function parseReference(ref: string) {
   const parts = ref.split(":");
@@ -45,14 +51,34 @@ function formatReference(ref: string): string {
     const pageLabel = from === to ? `Page ${from}` : `Pages ${from}–${to}`;
     return surahNames ? `${pageLabel} — ${surahNames}` : pageLabel;
   }
-  if (type === "ayah") return `Ayah ${parts[1]}:${parts[2] || ""}`;
-  if (type === "surah") return `Surah ${parts[1] || ""}`;
+  if (type === "surah") {
+    const surahVal = parts[1] || "";
+    const surahRangeParts = surahVal.split("-");
+    const fromSurah = parseInt(surahRangeParts[0], 10);
+    const toSurah = surahRangeParts.length > 1 ? parseInt(surahRangeParts[1], 10) : fromSurah;
+    const fromName = getSurahName(fromSurah);
+    if (fromSurah === toSurah) {
+      return `Surah ${fromSurah} — ${fromName.en}`;
+    }
+    const toName = getSurahName(toSurah);
+    return `Surah ${fromSurah}–${toSurah} — ${fromName.en} to ${toName.en}`;
+  }
+  if (type === "ayah" || type === "ayah_range") {
+    const surahNum = parseInt(parts[1] || "0", 10);
+    const name = getSurahName(surahNum);
+    const rangePart = parts[2] || "";
+    const rangeParts = rangePart.split("-");
+    const from = rangeParts[0] || "";
+    const to = rangeParts.length > 1 ? rangeParts[1] : "";
+    const ayahRange = to ? `${from}–${to}` : from;
+    return `${name.en} ${surahNum}:${ayahRange}`;
+  }
   return ref;
 }
 
 function formatPageCount(pages: number): string {
-  if (pages === 1) return "1 pg";
-  return `${pages} pg`;
+  const rounded = Math.round(pages * 10) / 10;
+  return `${rounded} pg`;
 }
 
 function getTotalPages(refs: string[]): number {
@@ -142,8 +168,9 @@ export default function DailyPlanPage() {
 
   const [plan, setPlan] = useState<DailyPlan | null>(null);
   const [allPlans, setAllPlans] = useState<DailyPlan[]>([]);
+  const [srsItems, setSrsItems] = useState<SrsItem[]>([]);
   const [isLoadingPlan, setIsLoadingPlan] = useState(true);
-  const [pending, setPending] = useState<null | "create" | "complete" | "complete-adv" | "add" | "clear">(null);
+  const [pending, setPending] = useState<null | "create" | "complete" | "complete-adv" | "add" | "clear" | "perfectly-known" | "retire">(null);
 
   const [bandwidth, setBandwidth] = useState(5);
   const [isConfiguring, setIsConfiguring] = useState(false);
@@ -154,10 +181,31 @@ export default function DailyPlanPage() {
   const [inlineVibe, setInlineVibe] = useState(0);
   const [advancedMode, setAdvancedMode] = useState<string | null>(null);
 
+  // null = still checking, true = show onboarding, false = skip
+  const [onboardingNeeded, setOnboardingNeeded] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (isOnboardingComplete()) { setOnboardingNeeded(false); return; }
+    storage.isEmpty().then((empty) => setOnboardingNeeded(empty));
+  }, [storage]);
+
+  const handleOnboardingComplete = async (selections: Array<{ reference: string; vibe: number }>) => {
+    if (selections.length > 0) await storage.seedPriorKnowledge(selections);
+    markOnboardingComplete();
+    setOnboardingNeeded(false);
+    await reload();
+  };
+
+  const handleOnboardingSkip = () => {
+    markOnboardingComplete();
+    setOnboardingNeeded(false);
+  };
+
   const reload = useCallback(async () => {
-    const [p, all] = await Promise.all([storage.getTodayPlan(), storage.getAllPlans()]);
+    const [p, all, srs] = await Promise.all([storage.getTodayPlan(), storage.getAllPlans(), storage.getSrsItems()]);
     setPlan(p);
     setAllPlans(all);
+    setSrsItems(srs);
     setIsLoadingPlan(false);
   }, [storage]);
 
@@ -234,12 +282,55 @@ export default function DailyPlanPage() {
     setLogModalOpen(true);
   };
 
-  if (isLoadingPlan) {
+  const handleAddPerfectlyKnown = async () => {
+    setPending("perfectly-known");
+    try {
+      await storage.addPerfectlyKnownToSession();
+      await reload();
+    } finally {
+      setPending(null);
+    }
+  };
+
+  const handleRetireSurah = async (reference: string) => {
+    setPending("retire");
+    try {
+      await storage.retireSurah(reference);
+      setInlineVibeRef(null);
+      await reload();
+    } finally {
+      setPending(null);
+    }
+  };
+
+  const handleUnretireSurah = async (reference: string) => {
+    setPending("retire");
+    try {
+      await storage.unretireSurah(reference);
+      await reload();
+    } finally {
+      setPending(null);
+    }
+  };
+
+  if (isLoadingPlan || onboardingNeeded === null) {
     return (
       <AppShell>
         <div className="p-4 max-w-6xl mx-auto">
           <div className="animate-pulse"><div className="h-2 bg-secondary rounded" /></div>
         </div>
+      </AppShell>
+    );
+  }
+
+  if (onboardingNeeded) {
+    return (
+      <AppShell>
+        <GuestBanner />
+        <PriorKnowledgeSetup
+          onComplete={handleOnboardingComplete}
+          onSkip={handleOnboardingSkip}
+        />
       </AppShell>
     );
   }
@@ -256,6 +347,10 @@ export default function DailyPlanPage() {
   const isAddingMore = pending === "add";
   const isClearing = pending === "clear";
   const isUpdatingPlan = pending === "create";
+  const isAddingPerfectlyKnown = pending === "perfectly-known";
+
+  const retiredItems = srsItems.filter((s) => s.retired);
+  const retiredNotInPlan = retiredItems.filter((s) => !plannedItems.includes(s.reference));
 
   return (
     <AppShell>
@@ -304,7 +399,7 @@ export default function DailyPlanPage() {
             <div className="flex justify-between items-end mb-6">
               <div>
                 <h2 className="text-2xl font-serif text-foreground font-semibold flex items-center gap-2">
-                  <ListTodo className="text-primary" /> Today's Queue
+                  <ListTodo className="text-primary" /> Today's Plan
                 </h2>
                 <p className="text-muted-foreground text-sm mt-1" data-testid="text-plan-summary">
                   {completedItems.length}/{plannedItems.length} items ({formatPageCount(completedPages)}/{formatPageCount(totalPlanPages)}) completed
@@ -328,6 +423,10 @@ export default function DailyPlanPage() {
                 const isFirst = !isCompleted && !plannedItems.slice(0, idx).some((r) => !completedItems.includes(r));
                 const isExpanded = inlineVibeRef === ref;
                 const pageCount = getPageCountForReference(ref);
+                const ayahCount = getRefAyahCount(ref);
+                const isInlineSurah = /^surah:\d+$/.test(ref);
+                const refSrsItem = isInlineSurah ? srsItems.find((s) => s.reference === ref) : undefined;
+                const isRefRetired = refSrsItem?.retired ?? false;
 
                 return (
                   <div key={`${ref}-${idx}`} data-testid={`plan-item-${idx}`}>
@@ -353,6 +452,9 @@ export default function DailyPlanPage() {
                               <h3 className={cn("font-semibold text-lg", isCompleted ? "text-muted-foreground line-through" : "text-foreground")}>
                                 {formatReference(ref)}
                               </h3>
+                              {isRefRetired && !isCompleted && (
+                                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 flex-shrink-0" aria-label="Perfectly Known" />
+                              )}
                               {isFirst && !isCompleted && (
                                 <span className="text-[10px] uppercase tracking-wider font-bold bg-accent text-accent-foreground px-2 py-0.5 rounded-full">Up Next</span>
                               )}
@@ -360,7 +462,9 @@ export default function DailyPlanPage() {
                                 <span className="text-[10px] uppercase tracking-wider font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">Done</span>
                               )}
                             </div>
-                            <p className="text-sm text-muted-foreground mt-0.5">{formatPageCount(pageCount)}</p>
+                            <p className="text-sm text-muted-foreground mt-0.5">
+                              {formatPageCount(pageCount)}{ayahCount > 0 ? ` · ${ayahCount} ayah${ayahCount !== 1 ? "s" : ""}` : ""}
+                            </p>
                           </div>
                         </div>
 
@@ -414,7 +518,14 @@ export default function DailyPlanPage() {
                           <AdvancedVibeGrid reference={ref} onSubmit={(v) => handleAdvancedSubmit(ref, v)} isPending={isMarkingAdvanced} />
                         ) : (
                           <>
-                            <VibeScale value={inlineVibe} onChange={setInlineVibe} disabled={isMarking} />
+                            <VibeScale
+                              value={inlineVibe}
+                              onChange={setInlineVibe}
+                              disabled={isMarking || pending === "retire"}
+                              onRetire={isInlineSurah && !isRefRetired ? () => handleRetireSurah(ref) : undefined}
+                              onUnretire={isInlineSurah && isRefRetired ? () => handleUnretireSurah(ref) : undefined}
+                              isRetired={isRefRetired}
+                            />
                             <button
                               onClick={(e) => { e.stopPropagation(); if (inlineVibe > 0) handleVibeSubmit(ref, inlineVibe); }}
                               disabled={inlineVibe === 0 || isMarking}
@@ -455,6 +566,20 @@ export default function DailyPlanPage() {
                   <BookOpen size={16} /> Extra Revision
                 </button>
               </div>
+
+              {retiredItems.length > 0 && (
+                <button
+                  onClick={handleAddPerfectlyKnown}
+                  disabled={isAddingPerfectlyKnown}
+                  data-testid="button-perfectly-known"
+                  className="w-full py-4 rounded-2xl border-2 border-dashed border-amber-300/50 hover:border-amber-400 text-muted-foreground hover:text-amber-600 font-medium transition-all hover:bg-amber-50 dark:hover:bg-amber-900/10 flex items-center justify-center gap-2"
+                >
+                  <Star className="w-4 h-4 fill-amber-400 text-amber-400 flex-shrink-0" />
+                  {isAddingPerfectlyKnown
+                    ? "Adding..."
+                    : `Review ${retiredNotInPlan.length} Perfectly Known Surah${retiredNotInPlan.length !== 1 ? "s" : ""}`}
+                </button>
+              )}
             </div>
           </div>
 

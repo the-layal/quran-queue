@@ -11,9 +11,19 @@ import {
   Share2,
   Copy,
   ExternalLink,
+  ChevronDown,
+  ChevronRight,
+  Layers,
+  Ungroup,
+  CheckSquare,
+  ArrowRight,
+  ArrowLeft,
+  Plus,
 } from "lucide-react";
 import SpeedSelector from "./SpeedSelector";
 import { useQuranStore } from "../store/quranStore";
+import { isSubQueue } from "../store/quranStore";
+import type { SubQueue, QueueEntry } from "../store/quranStore";
 import type { QueuePlaybackState } from "../hooks/useQueuePlayback";
 import { computeQueueItemLabel } from "../utils/queueLabel";
 import { toast } from "../hooks/use-toast";
@@ -22,6 +32,15 @@ import type { ChapterMap, BrushFineness, AudioDataMap } from "../types/quran";
 import { loadAudioData } from "../services/quranApi";
 import { computePlaybackRegions } from "../utils/audioRegions";
 import { REPEAT_OPTIONS, clampRepeat, nextRepeat, repeatLabel } from "../utils/repeatOptions";
+import {
+  getPageLineData,
+  splitIntoNSections,
+  splitIntoGroupsOfN,
+  previewSplitIntoNSections,
+  previewGroupsOfN,
+  type GroupedGranularity,
+  type SectionPreview,
+} from "../utils/subqueuePresets";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -122,9 +141,11 @@ function buildLinePreset(repeatCount: number): ReviewQueueItem[] {
 function RepeatBadge({
   count,
   onCycle,
+  title = "Tap to change repeat count",
 }: {
   count: number;
   onCycle: () => void;
+  title?: string;
 }) {
   return (
     <button
@@ -133,10 +154,190 @@ function RepeatBadge({
         onCycle();
       }}
       className="flex-shrink-0 min-w-[26px] h-[18px] rounded-full border border-border text-[9px] font-bold tabular-nums text-muted-foreground hover:border-primary hover:text-primary transition-colors px-1.5 flex items-center justify-center"
-      title="Tap to change repeat count"
+      title={title}
     >
       {repeatLabel(count)}
     </button>
+  );
+}
+
+// ── GroupedPresetSection ───────────────────────────────────────────────────
+
+type GroupedMode = "split-n" | "groups-of-n";
+
+function GroupedPresetSection({
+  onApply,
+  chapters,
+}: {
+  onApply: (subQueues: SubQueue[]) => void;
+  chapters: ChapterMap;
+}) {
+  const [mode, setMode] = useState<GroupedMode>("split-n");
+  const [n, setN] = useState(3);
+  const [granularity, setGranularity] = useState<GroupedGranularity>("line");
+  const [itemRepeat, setItemRepeat] = useState(1);
+  const [subQueueRepeat, setSubQueueRepeat] = useState(1);
+  const [preview, setPreview] = useState<SectionPreview[]>([]);
+
+  // Recompute preview whenever params change
+  useEffect(() => {
+    const lines = getPageLineData();
+    if (lines.length === 0) { setPreview([]); return; }
+    const p = mode === "split-n"
+      ? previewSplitIntoNSections(lines, n)
+      : previewGroupsOfN(lines, n);
+    setPreview(p);
+  }, [mode, n]);
+
+  const handleApply = () => {
+    const lines = getPageLineData();
+    if (lines.length === 0) return;
+    const subQueues = mode === "split-n"
+      ? splitIntoNSections(lines, n, granularity, chapters, itemRepeat, subQueueRepeat)
+      : splitIntoGroupsOfN(lines, n, granularity, chapters, itemRepeat, subQueueRepeat);
+    if (subQueues.length > 0) onApply(subQueues);
+  };
+
+  const changeN = (delta: number) => {
+    setN((v) => Math.max(1, Math.min(20, v + delta)));
+  };
+
+  return (
+    <div className="mt-2 pt-2 border-t border-border">
+      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+        Grouped presets
+      </p>
+
+      {/* Mode toggle */}
+      <div className="flex rounded-lg border border-border overflow-hidden mb-2 text-[10px] font-semibold">
+        <button
+          onClick={() => setMode("split-n")}
+          className={`flex-1 py-1 transition-colors ${mode === "split-n" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted"}`}
+        >
+          Split into N
+        </button>
+        <button
+          onClick={() => setMode("groups-of-n")}
+          className={`flex-1 py-1 transition-colors ${mode === "groups-of-n" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted"}`}
+        >
+          Groups of N
+        </button>
+      </div>
+
+      {/* N stepper */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[10px] text-muted-foreground flex-1">
+          {mode === "split-n" ? "Sections" : "Lines per group"}
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => changeN(-1)}
+            disabled={n <= 1}
+            className="w-5 h-5 rounded border border-border text-muted-foreground hover:bg-muted flex items-center justify-center text-xs disabled:opacity-40"
+          >
+            −
+          </button>
+          <span className="text-xs font-semibold tabular-nums w-4 text-center">{n}</span>
+          <button
+            onClick={() => changeN(1)}
+            disabled={n >= 20}
+            className="w-5 h-5 rounded border border-border text-muted-foreground hover:bg-muted flex items-center justify-center text-xs disabled:opacity-40"
+          >
+            +
+          </button>
+        </div>
+      </div>
+
+      {/* Item granularity */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[10px] text-muted-foreground flex-1">Items</span>
+        <div className="flex rounded-lg border border-border overflow-hidden text-[10px] font-semibold">
+          <button
+            onClick={() => setGranularity("line")}
+            className={`px-2 py-0.5 transition-colors ${granularity === "line" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted"}`}
+          >
+            Line
+          </button>
+          <button
+            onClick={() => setGranularity("ayah")}
+            className={`px-2 py-0.5 transition-colors ${granularity === "ayah" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-muted"}`}
+          >
+            Ayah
+          </button>
+        </div>
+      </div>
+
+      {/* Item repeat */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[10px] text-muted-foreground flex-1">Repeat per item</span>
+        <div className="flex gap-1">
+          {REPEAT_OPTIONS.map((v) => (
+            <button
+              key={v}
+              onClick={() => setItemRepeat(v)}
+              className={`min-w-[22px] h-[18px] rounded border text-[9px] font-bold transition-colors px-1 ${
+                itemRepeat === v
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:border-primary hover:text-primary"
+              }`}
+            >
+              {repeatLabel(v)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Group repeat */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[10px] text-muted-foreground flex-1">Repeat per group</span>
+        <div className="flex gap-1">
+          {REPEAT_OPTIONS.map((v) => (
+            <button
+              key={v}
+              onClick={() => setSubQueueRepeat(v)}
+              className={`min-w-[22px] h-[18px] rounded border text-[9px] font-bold transition-colors px-1 ${
+                subQueueRepeat === v
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:border-primary hover:text-primary"
+              }`}
+            >
+              {repeatLabel(v)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Live preview */}
+      {preview.length > 0 && (
+        <div className="mb-2 rounded-lg bg-muted/40 p-2">
+          <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+            Preview — {preview.length} group{preview.length !== 1 ? "s" : ""}
+          </p>
+          <div className="flex flex-col gap-0.5 max-h-20 overflow-y-auto">
+            {preview.map((s, i) => (
+              <span key={i} className="text-[10px] text-foreground tabular-nums">
+                {i + 1}. {s.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {preview.length === 0 && (
+        <p className="text-[10px] text-muted-foreground italic mb-2">
+          No Mushaf page visible
+        </p>
+      )}
+
+      <button
+        onClick={handleApply}
+        disabled={preview.length === 0}
+        className="w-full py-1.5 rounded-lg bg-primary/10 border border-primary/30 text-primary text-[11px] font-semibold hover:bg-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+      >
+        <Layers className="w-3 h-3" />
+        Generate {preview.length > 0 ? `${preview.length} groups` : "groups"}
+      </button>
+    </div>
   );
 }
 
@@ -162,18 +363,63 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
   const queueRepeatAll = useQuranStore((s) => s.queueRepeatAll);
   const setQueueItemRepeat = useQuranStore((s) => s.setQueueItemRepeat);
   const setQueueRepeatAll = useQuranStore((s) => s.setQueueRepeatAll);
+  const setSubQueueRepeatAll = useQuranStore((s) => s.setSubQueueRepeatAll);
   const queueLoopCount = useQuranStore((s) => s.queueLoopCount);
   const setQueueLoopCount = useQuranStore((s) => s.setQueueLoopCount);
   const setReviewQueue = useQuranStore((s) => s.setReviewQueue);
+  const setQueueEntries = useQuranStore((s) => s.setQueueEntries);
   const setIsSharedQueue = useQuranStore((s) => s.setIsSharedQueue);
   const svgToJsonWordMap = useQuranStore((s) => s.svgToJsonWordMap);
+  const addSubQueue = useQuranStore((s) => s.addSubQueue);
+  const dissolveSubQueue = useQuranStore((s) => s.dissolveSubQueue);
+  const setSubQueueRepeat = useQuranStore((s) => s.setSubQueueRepeat);
+  const toggleSubQueueCollapsed = useQuranStore((s) => s.toggleSubQueueCollapsed);
+  const reorderItemInSubQueue = useQuranStore((s) => s.reorderItemInSubQueue);
+  const promoteToSubQueue = useQuranStore((s) => s.promoteToSubQueue);
+  const moveQueueItem = useQuranStore((s) => s.moveQueueItem);
+  const renameSubQueue = useQuranStore((s) => s.renameSubQueue);
 
-  const { queueIsPlaying, activeItemIndex, playQueue, pauseQueue, stopQueue } =
+  const { queueIsPlaying, activeItemIndex, activeSubItemIndex, playQueue, pauseQueue, stopQueue } =
     queuePlayback;
 
-  const dragFromRef = useRef<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  // Drag state — encodes location as "top:<index>", "sub:<sqId>:<index>", or "sub-header:<sqId>"
+  const dragFromRef = useRef<string | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null); // only for sub-header "append" highlight
+
+  type DropIndicator =
+    | { kind: "top"; insertBefore: number }
+    | { kind: "sub"; subQueueId: string; insertBefore: number };
+  const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(null);
+
+  // Inline rename state for subqueue labels
+  const [renamingSubQueueId, setRenamingSubQueueId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const [isSharing, setIsSharing] = useState(false);
+
+  // Multi-select mode for promoting flat items into a subqueue
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
+
+  const toggleSelectMode = () => {
+    setSelectMode((v) => !v);
+    setSelectedIndices(new Set());
+  };
+
+  const toggleSelectIndex = (i: number) => {
+    setSelectedIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  };
+
+  const handleGroupSelected = () => {
+    if (selectedIndices.size < 2) return;
+    promoteToSubQueue(Array.from(selectedIndices).sort((a, b) => a - b), "Group");
+    setSelectMode(false);
+    setSelectedIndices(new Set());
+  };
 
   // Duration map: item.id → duration in seconds
   const [durationMap, setDurationMap] = useState<Record<string, number>>({});
@@ -181,12 +427,14 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
   const audioDataReciterIdRef = useRef<string | null>(null);
   const selectedReciterId = useQuranStore((s) => s.selectedReciterId);
 
+  // Flat list of all ReviewQueueItems for duration computation
+  const allItems: ReviewQueueItem[] = reviewQueue.flatMap((entry) =>
+    isSubQueue(entry) ? entry.items : [entry as ReviewQueueItem]
+  );
+
   useEffect(() => {
     let cancelled = false;
     async function computeDurations() {
-      // Reload audio data whenever the reciter changes — different reciters
-      // have different per-ayah durations, so cached Alafasy data would
-      // produce stale numbers after a switch.
       if (
         !audioDataRef.current ||
         audioDataReciterIdRef.current !== selectedReciterId
@@ -201,14 +449,14 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
       if (cancelled) return;
       const aData = audioDataRef.current;
       const map: Record<string, number> = {};
-      for (const item of reviewQueue) {
+      for (const item of allItems) {
         map[item.id] = computeItemDurationSec(item, aData, svgToJsonWordMap);
       }
       setDurationMap(map);
     }
     computeDurations();
     return () => { cancelled = true; };
-  }, [reviewQueue, svgToJsonWordMap, selectedReciterId]);
+  }, [reviewQueue, svgToJsonWordMap, selectedReciterId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Presets popover
   const [showPresets, setShowPresets] = useState(false);
@@ -231,38 +479,233 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
     return () => document.removeEventListener("mousedown", handler);
   }, [showPresets]);
 
-  // ── Drag-to-reorder ──────────────────────────────────────────────────────
+  // ── Drag helpers ──────────────────────────────────────────────────────────
 
-  const handleDragStart = (index: number) => (e: React.DragEvent) => {
-    dragFromRef.current = index;
+  // Parse drag-from string into a typed source descriptor.
+  const parseDragFrom = (key: string) => {
+    if (key.startsWith("top:")) {
+      return { type: "top" as const, index: parseInt(key.split(":")[1], 10) };
+    }
+    if (key.startsWith("sub:")) {
+      const parts = key.split(":");
+      return { type: "sub" as const, subQueueId: parts[1], index: parseInt(parts[2], 10) };
+    }
+    return null;
+  };
+
+  // ── Drag-to-reorder (top-level) ───────────────────────────────────────────
+
+  const handleTopDragStart = (index: number) => (e: React.DragEvent) => {
+    dragFromRef.current = `top:${index}`;
     e.dataTransfer.effectAllowed = "move";
   };
 
-  const handleDragOver = (index: number) => (e: React.DragEvent) => {
+  const handleTopDragOver = (index: number) => (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    setDragOverIndex(index);
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const insertBefore = e.clientY < rect.top + rect.height / 2 ? index : index + 1;
+    setDropIndicator({ kind: "top", insertBefore });
+    setDragOverKey(null);
   };
 
-  const handleDrop = (index: number) => (e: React.DragEvent) => {
+  const handleTopDrop = (index: number) => (e: React.DragEvent) => {
     e.preventDefault();
-    const from = dragFromRef.current;
-    if (from !== null && from !== index) reorderQueue(from, index);
+    const fromKey = dragFromRef.current;
+    if (fromKey) {
+      const from = parseDragFrom(fromKey);
+      if (from) {
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const insertBefore = e.clientY < rect.top + rect.height / 2 ? index : index + 1;
+        if (from.type === "top") {
+          // Convert insertBefore (original-array position) to post-removal splice index
+          const toIndex = from.index < insertBefore ? insertBefore - 1 : insertBefore;
+          if (from.index !== toIndex) reorderQueue(from.index, toIndex);
+        } else {
+          moveQueueItem(from, { type: "top", index: insertBefore });
+        }
+      }
+    }
     dragFromRef.current = null;
-    setDragOverIndex(null);
+    setDropIndicator(null);
+    setDragOverKey(null);
   };
 
   const handleDragEnd = () => {
     dragFromRef.current = null;
-    setDragOverIndex(null);
+    setDropIndicator(null);
+    setDragOverKey(null);
+  };
+
+  // ── Drag-to-reorder / move (within or across subqueues) ──────────────────
+
+  const handleSubDragStart = (subQueueId: string, index: number) => (e: React.DragEvent) => {
+    e.stopPropagation();
+    dragFromRef.current = `sub:${subQueueId}:${index}`;
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleSubDragOver = (subQueueId: string, index: number) => (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const insertBefore = e.clientY < rect.top + rect.height / 2 ? index : index + 1;
+    setDropIndicator({ kind: "sub", subQueueId, insertBefore });
+    setDragOverKey(null);
+  };
+
+  const handleSubDrop = (subQueueId: string, index: number) => (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const fromKey = dragFromRef.current;
+    if (fromKey) {
+      const from = parseDragFrom(fromKey);
+      if (from) {
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const insertBefore = e.clientY < rect.top + rect.height / 2 ? index : index + 1;
+        const sameSubqueue = from.type === "sub" && from.subQueueId === subQueueId;
+        if (sameSubqueue) {
+          const toIndex = from.index < insertBefore ? insertBefore - 1 : insertBefore;
+          if (from.index !== toIndex) reorderItemInSubQueue(subQueueId, from.index, toIndex);
+        } else {
+          moveQueueItem(from, { type: "sub", subQueueId, index: insertBefore });
+        }
+      }
+    }
+    dragFromRef.current = null;
+    setDropIndicator(null);
+    setDragOverKey(null);
+  };
+
+  // Drop onto a subqueue header → append item to that subqueue
+  const handleSubHeaderDragOver = (subQueueId: string) => (e: React.DragEvent) => {
+    const fromKey = dragFromRef.current;
+    // Only allow individual items (not whole subqueues) to be dropped on headers
+    if (!fromKey || fromKey.startsWith("top:")) {
+      const from = fromKey ? parseDragFrom(fromKey) : null;
+      if (from?.type === "top") {
+        const entry = reviewQueue[from.index];
+        if (isSubQueue(entry)) return; // don't allow dropping subqueues onto headers
+      }
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverKey(`sub-header:${subQueueId}`);
+  };
+
+  const handleSubHeaderDrop = (subQueueId: string) => (e: React.DragEvent) => {
+    const fromKey = dragFromRef.current;
+    if (fromKey) {
+      const from = parseDragFrom(fromKey);
+      // If source is a whole subqueue, let the event bubble to the outer wrapper's drop handler
+      if (from?.type === "top" && isSubQueue(reviewQueue[from.index])) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (from) {
+        if (from.type === "top") {
+          moveQueueItem(from, { type: "sub", subQueueId, index: 0, append: true });
+        } else if (from.type === "sub" && from.subQueueId !== subQueueId) {
+          moveQueueItem(from, { type: "sub", subQueueId, index: 0, append: true });
+        }
+      }
+    }
+    dragFromRef.current = null;
+    setDropIndicator(null);
+    setDragOverKey(null);
+  };
+
+  // ── Inline rename helpers ─────────────────────────────────────────────────
+
+  const startRename = (sq: SubQueue) => {
+    setRenamingSubQueueId(sq.id);
+    setRenameValue(sq.label);
+  };
+
+  const commitRename = () => {
+    if (renamingSubQueueId && renameValue.trim()) {
+      renameSubQueue(renamingSubQueueId, renameValue.trim());
+    }
+    setRenamingSubQueueId(null);
+  };
+
+  // ── Indent / unindent helpers ─────────────────────────────────────────────
+
+  // Move a flat item into the nearest subqueue (preceding, or following if none).
+  const indentItem = (topIndex: number) => {
+    // Look for a subqueue above first, then below
+    for (let i = topIndex - 1; i >= 0; i--) {
+      if (isSubQueue(reviewQueue[i])) {
+        const sq = reviewQueue[i] as SubQueue;
+        moveQueueItem({ type: "top", index: topIndex }, { type: "sub", subQueueId: sq.id, index: 0, append: true });
+        return;
+      }
+    }
+    for (let i = topIndex + 1; i < reviewQueue.length; i++) {
+      if (isSubQueue(reviewQueue[i])) {
+        const sq = reviewQueue[i] as SubQueue;
+        moveQueueItem({ type: "top", index: topIndex }, { type: "sub", subQueueId: sq.id, index: 0 });
+        return;
+      }
+    }
+  };
+
+  // Move a sub-item out to the top level, right after its parent subqueue.
+  const unindentItem = (sqId: string, subIndex: number, topIndex: number) => {
+    moveQueueItem(
+      { type: "sub", subQueueId: sqId, index: subIndex },
+      { type: "top", index: topIndex + 1 }
+    );
+  };
+
+  // ── Add group ─────────────────────────────────────────────────────────────
+
+  const pendingRenameRef = useRef(false);
+
+  useEffect(() => {
+    if (!pendingRenameRef.current) return;
+    // Find the last SubQueue in the queue (the one just added) and start renaming it
+    for (let i = reviewQueue.length - 1; i >= 0; i--) {
+      if (isSubQueue(reviewQueue[i])) {
+        pendingRenameRef.current = false;
+        startRename(reviewQueue[i] as SubQueue);
+        break;
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewQueue.length]);
+
+  const handleAddGroup = () => {
+    pendingRenameRef.current = true;
+    addSubQueue({ label: "New Group", repeatCount: 1, items: [], collapsed: false });
   };
 
   // ── Item click ───────────────────────────────────────────────────────────
 
-  const handleItemClick = (item: ReviewQueueItem) => {
+  const handleItemClick = (entry: QueueEntry, topIndex: number) => {
+    if (isSubQueue(entry)) {
+      if (queueIsPlaying) {
+        playQueue(topIndex, 0);
+      } else {
+        // Just collapse/expand on click when not playing
+        toggleSubQueueCollapsed(entry.id);
+      }
+    } else {
+      const item = entry as ReviewQueueItem;
+      if (queueIsPlaying) {
+        playQueue(topIndex, 0);
+      } else {
+        setActiveQueueItemId(item.id);
+        setSelectedWordIds(item.selectedWordIds);
+        setBrushFineness(item.brushFineness);
+      }
+    }
+  };
+
+  const handleSubItemClick = (item: ReviewQueueItem, topIndex: number, subIndex: number) => {
     if (queueIsPlaying) {
-      const idx = reviewQueue.indexOf(item);
-      if (idx !== -1) playQueue(idx);
+      playQueue(topIndex, subIndex);
     } else {
       setActiveQueueItemId(item.id);
       setSelectedWordIds(item.selectedWordIds);
@@ -277,10 +720,13 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
       type === "ayah"
         ? buildAyahPreset(presetRepeat, chapters)
         : buildLinePreset(presetRepeat);
+    if (items.length > 0) setReviewQueue(items);
+    setShowPresets(false);
+  };
 
-    if (items.length > 0) {
-      setReviewQueue(items);
-    }
+  const applyGroupedPreset = (subQueues: SubQueue[]) => {
+    // Replace the entire queue with the generated subqueues
+    setQueueEntries(subQueues);
     setShowPresets(false);
   };
 
@@ -290,9 +736,9 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
     if (queueIsPlaying) {
       pauseQueue();
     } else if (activeItemIndex !== null) {
-      playQueue(activeItemIndex);
+      playQueue(activeItemIndex, activeSubItemIndex ?? 0);
     } else {
-      playQueue(0);
+      playQueue(0, 0);
     }
   };
 
@@ -304,13 +750,16 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
   // ── Share ─────────────────────────────────────────────────────────────────
 
   const handleShare = async () => {
-    if (reviewQueue.length === 0 || isSharing) return;
+    const flatItems = reviewQueue.flatMap((entry) =>
+      isSubQueue(entry) ? entry.items : [entry as ReviewQueueItem]
+    );
+    if (flatItems.length === 0 || isSharing) return;
     setIsSharing(true);
     try {
       const res = await fetch("/api/queues", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: reviewQueue }),
+        body: JSON.stringify({ items: flatItems }),
       });
       if (!res.ok) throw new Error("Failed to save queue");
       const { id } = await res.json() as { id: string };
@@ -332,6 +781,10 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
   };
 
   const hasQueue = reviewQueue.length > 0;
+
+  // Count of top-level entries + leaf items for display
+  const totalLeafItems = allItems.length;
+  const hasSubQueues = reviewQueue.some((e) => isSubQueue(e));
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -359,7 +812,7 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
           <span className="text-sm font-semibold flex-1 min-w-0">Review Queue</span>
           {reviewQueue.length > 0 && (
             <span className="text-xs text-muted-foreground tabular-nums">
-              ({reviewQueue.length})
+              ({totalLeafItems})
             </span>
           )}
 
@@ -383,8 +836,8 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
             </button>
           )}
 
-          {/* Stop (visible when playing or paused with an active position) */}
-          {hasQueue && (activeItemIndex !== null) && (
+          {/* Stop */}
+          {hasQueue && activeItemIndex !== null && (
             <button
               onClick={handleHeaderStop}
               className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors border border-border text-muted-foreground hover:bg-muted"
@@ -392,6 +845,22 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
               title="Stop queue"
             >
               <Square className="w-3 h-3" />
+            </button>
+          )}
+
+          {/* Select mode toggle — only for non-shared queues with flat items */}
+          {!isSharedQueue && hasQueue && reviewQueue.some((e) => !isSubQueue(e)) && (
+            <button
+              onClick={toggleSelectMode}
+              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors border ${
+                selectMode
+                  ? "bg-primary/15 border-primary text-primary"
+                  : "border-border text-muted-foreground hover:bg-muted"
+              }`}
+              aria-label={selectMode ? "Exit select mode" : "Select items to group"}
+              title={selectMode ? "Exit select mode" : "Select items to group"}
+            >
+              <CheckSquare className="w-3.5 h-3.5" />
             </button>
           )}
 
@@ -415,26 +884,8 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
               {showPresets && (
                 <div
                   ref={presetsPopoverRef}
-                  className="absolute top-full right-0 mt-1.5 z-[60] bg-card border border-border rounded-xl shadow-xl p-3 w-52"
+                  className="absolute top-full right-0 mt-1.5 z-[60] bg-card border border-border rounded-xl shadow-xl p-3 w-56 max-h-[80vh] overflow-y-auto"
                 >
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                    Repeats per segment
-                  </p>
-                  <div className="flex gap-1 mb-3">
-                    {REPEAT_OPTIONS.map((v) => (
-                      <button
-                        key={v}
-                        onClick={() => setPresetRepeat(v)}
-                        className={`flex-1 py-1 rounded-lg text-xs font-semibold transition-colors border ${
-                          clampRepeat(presetRepeat) === v
-                            ? "bg-primary/15 border-primary text-primary"
-                            : "border-border text-muted-foreground hover:bg-muted"
-                        }`}
-                      >
-                        {repeatLabel(v)}
-                      </button>
-                    ))}
-                  </div>
                   <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
                     Generate from page
                   </p>
@@ -462,6 +913,51 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
                       </div>
                     </div>
                   </button>
+
+                  {/* Flat preset options */}
+                  <div className="mt-2 pt-2 border-t border-border/60 flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground flex-1">Repeat per item</span>
+                      <div className="flex gap-1">
+                        {REPEAT_OPTIONS.map((v) => (
+                          <button
+                            key={v}
+                            onClick={() => setPresetRepeat(v)}
+                            className={`min-w-[22px] h-[18px] rounded border text-[9px] font-bold transition-colors px-1 ${
+                              clampRepeat(presetRepeat) === v
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border text-muted-foreground hover:border-primary hover:text-primary"
+                            }`}
+                          >
+                            {repeatLabel(v)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground flex-1">Repeat per page</span>
+                      <div className="flex gap-1">
+                        {LOOP_OPTIONS.map((v) => (
+                          <button
+                            key={v}
+                            onClick={() => setQueueLoopCount(v)}
+                            className={`min-w-[22px] h-[18px] rounded border text-[9px] font-bold transition-colors px-1 ${
+                              queueLoopCount === v
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border text-muted-foreground hover:border-primary hover:text-primary"
+                            }`}
+                          >
+                            {repeatLabel(v)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <GroupedPresetSection
+                    onApply={applyGroupedPreset}
+                    chapters={chapters}
+                  />
                 </div>
               )}
             </div>
@@ -498,11 +994,11 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
           </div>
         )}
 
-        {/* Set all per-item repeats — hidden for shared (read-only) queues */}
+        {/* Set all (items) — hidden for shared (read-only) queues */}
         {hasQueue && !isSharedQueue && (
           <div className="flex items-center gap-2 px-3 py-2 border-b border-border flex-shrink-0 bg-muted/30">
             <span className="text-[10px] text-muted-foreground font-medium flex-1">
-              Set all
+              Set all (items)
             </span>
             <div className="flex gap-1">
               {REPEAT_OPTIONS.map((v) => (
@@ -522,19 +1018,37 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
           </div>
         )}
 
-        {/* Playback speed — always visible so user can set it before adding items */}
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-border flex-shrink-0 bg-muted/30">
-          <span className="text-[10px] text-muted-foreground font-medium flex-1">
-            Speed
-          </span>
-          <SpeedSelector />
-        </div>
+        {/* Set all (subqueues) — only when subqueues exist */}
+        {hasQueue && !isSharedQueue && hasSubQueues && (
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-border flex-shrink-0 bg-muted/30">
+            <span className="text-[10px] text-muted-foreground font-medium flex-1">
+              Set all (groups)
+            </span>
+            <div className="flex gap-1">
+              {REPEAT_OPTIONS.map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setSubQueueRepeatAll(v)}
+                  className={`min-w-[28px] h-[20px] rounded border text-[9px] font-bold transition-colors px-1.5 ${
+                    reviewQueue
+                      .filter(isSubQueue)
+                      .every((e) => clampRepeat((e as SubQueue).repeatCount) === v)
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  {repeatLabel(v)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
-        {/* Queue-level loop count */}
+        {/* Full Queue Loops */}
         {hasQueue && (
           <div className="flex items-center gap-2 px-3 py-2 border-b border-border flex-shrink-0 bg-muted/30">
             <span className="text-[10px] text-muted-foreground font-medium flex-1">
-              Queue loops
+              Full queue loops
             </span>
             <div className="flex gap-1">
               {LOOP_OPTIONS.map((v) => (
@@ -554,6 +1068,14 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
           </div>
         )}
 
+        {/* Playback speed — last */}
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-border flex-shrink-0 bg-muted/30">
+          <span className="text-[10px] text-muted-foreground font-medium flex-1">
+            Speed
+          </span>
+          <SpeedSelector />
+        </div>
+
         {/* Empty state */}
         {!hasQueue && (
           <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
@@ -571,72 +1093,350 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
           </div>
         )}
 
+        {/* Select mode action bar */}
+        {selectMode && (
+          <div className="flex-shrink-0 flex items-center gap-2 px-3 py-2 border-b border-border bg-primary/5">
+            <span className="text-[10px] text-muted-foreground flex-1">
+              {selectedIndices.size === 0
+                ? "Tap flat items to select"
+                : `${selectedIndices.size} selected`}
+            </span>
+            <button
+              onClick={handleGroupSelected}
+              disabled={selectedIndices.size < 2}
+              className="flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg bg-primary/15 border border-primary/40 text-primary hover:bg-primary/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Layers className="w-3 h-3" />
+              Group {selectedIndices.size >= 2 ? selectedIndices.size : ""}
+            </button>
+            <button
+              onClick={toggleSelectMode}
+              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
         {/* Queue list */}
         {hasQueue && (
           <div className="flex-1 overflow-y-auto py-1">
-            {reviewQueue.map((item, index) => {
+            {reviewQueue.map((entry, topIndex) => {
+              if (isSubQueue(entry)) {
+                const sq = entry as SubQueue;
+                const isGroupActive = activeItemIndex === topIndex;
+                const isGroupPlaying = queueIsPlaying && isGroupActive;
+                const groupRepeatCount = clampRepeat(sq.repeatCount);
+
+                return (
+                  <div
+                    key={sq.id}
+                    draggable={!isSharedQueue}
+                    onDragStart={!isSharedQueue ? handleTopDragStart(topIndex) : undefined}
+                    onDragOver={!isSharedQueue ? handleTopDragOver(topIndex) : undefined}
+                    onDrop={!isSharedQueue ? handleTopDrop(topIndex) : undefined}
+                    onDragEnd={!isSharedQueue ? handleDragEnd : undefined}
+                    className="relative"
+                  >
+                    {/* Drop-line indicator above this group */}
+                    {dropIndicator?.kind === "top" && dropIndicator.insertBefore === topIndex && (
+                      <div className="absolute top-0 left-3 right-3 h-0.5 -translate-y-px bg-primary rounded-full z-20 pointer-events-none" />
+                    )}
+                    {/* SubQueue header */}
+                    <div
+                      onClick={() => renamingSubQueueId !== sq.id && handleItemClick(sq, topIndex)}
+                      onDragOver={!isSharedQueue ? handleSubHeaderDragOver(sq.id) : undefined}
+                      onDrop={!isSharedQueue ? handleSubHeaderDrop(sq.id) : undefined}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 cursor-pointer select-none transition-colors group ${
+                        dragOverKey === `sub-header:${sq.id}`
+                          ? "bg-primary/15 border-l-2 border-primary ring-1 ring-primary/30"
+                          : isGroupActive
+                            ? "bg-primary/8 border-l-2 border-primary"
+                            : "hover:bg-muted/40 border-l-2 border-transparent"
+                      }`}
+                    >
+                      {/* Drag handle */}
+                      {!isSharedQueue && (
+                        <div className="text-muted-foreground/30 cursor-grab group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors">
+                          <GripVertical className="w-3 h-3" />
+                        </div>
+                      )}
+
+                      {/* Collapse chevron */}
+                      <div className="flex-shrink-0 text-muted-foreground/60">
+                        {sq.collapsed ? (
+                          <ChevronRight className="w-3 h-3" />
+                        ) : (
+                          <ChevronDown className="w-3 h-3" />
+                        )}
+                      </div>
+
+                      {/* Playing indicator */}
+                      <div className="w-4 flex-shrink-0 flex items-center justify-center">
+                        {isGroupPlaying ? (
+                          <Music2 className="w-3 h-3 text-primary animate-pulse" />
+                        ) : (
+                          <Layers className="w-3 h-3 text-muted-foreground/50" />
+                        )}
+                      </div>
+
+                      {/* Label — double-click to rename */}
+                      {renamingSubQueueId === sq.id ? (
+                        <input
+                          autoFocus
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onBlur={commitRename}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitRename();
+                            if (e.key === "Escape") setRenamingSubQueueId(null);
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex-1 text-xs font-semibold bg-transparent border-b border-primary outline-none min-w-0 text-primary"
+                        />
+                      ) : (
+                        <span
+                          onDoubleClick={(e) => {
+                            if (!isSharedQueue) { e.stopPropagation(); startRename(sq); }
+                          }}
+                          title={!isSharedQueue ? "Double-click to rename" : undefined}
+                          className={`flex-1 text-xs font-semibold leading-snug truncate min-w-0 ${
+                            isGroupActive ? "text-primary" : "text-foreground"
+                          }`}
+                        >
+                          {sq.label}
+                        </span>
+                      )}
+
+                      {/* Group repeat badge */}
+                      {!isSharedQueue && (
+                        <RepeatBadge
+                          count={groupRepeatCount}
+                          onCycle={() => setSubQueueRepeat(sq.id, nextRepeat(groupRepeatCount))}
+                          title="Group repeat count"
+                        />
+                      )}
+
+                      {/* Dissolve button */}
+                      {!isSharedQueue && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            dissolveSubQueue(sq.id);
+                          }}
+                          className="p-0.5 rounded hover:bg-muted text-muted-foreground/30 group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors opacity-0 group-hover:opacity-100"
+                          aria-label={`Dissolve group ${sq.label}`}
+                          title="Dissolve group"
+                        >
+                          <Ungroup className="w-3 h-3" />
+                        </button>
+                      )}
+
+                      {/* Remove subqueue */}
+                      {!isSharedQueue && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeFromQueue(sq.id);
+                          }}
+                          className="p-0.5 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground/30 group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors opacity-0 group-hover:opacity-100"
+                          aria-label={`Remove group ${sq.label}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* SubQueue items (collapsed hides them) */}
+                    {!sq.collapsed && sq.items.map((item, subIndex) => {
+                      const isActive = activeQueueItemId === item.id;
+                      const isItemPlaying = queueIsPlaying && isGroupActive && activeSubItemIndex === subIndex;
+
+                      return (
+                        <div
+                          key={item.id}
+                          draggable={!isSharedQueue}
+                          onDragStart={!isSharedQueue ? handleSubDragStart(sq.id, subIndex) : undefined}
+                          onDragOver={!isSharedQueue ? handleSubDragOver(sq.id, subIndex) : undefined}
+                          onDrop={!isSharedQueue ? handleSubDrop(sq.id, subIndex) : undefined}
+                          onDragEnd={!isSharedQueue ? handleDragEnd : undefined}
+                          onClick={() => handleSubItemClick(item, topIndex, subIndex)}
+                          className={`relative flex items-center gap-1.5 pl-8 pr-2.5 py-1.5 cursor-pointer select-none transition-colors group ${
+                            isActive
+                              ? "bg-primary/10 border-l-2 border-primary"
+                              : "hover:bg-muted/60 border-l-2 border-transparent"
+                          }`}
+                        >
+                          {/* Drop-line indicator */}
+                          {dropIndicator?.kind === "sub" && dropIndicator.subQueueId === sq.id && dropIndicator.insertBefore === subIndex && (
+                            <div className="absolute top-0 left-6 right-2 h-0.5 -translate-y-px bg-primary rounded-full z-20 pointer-events-none" />
+                          )}
+                          {!isSharedQueue && (
+                            <div className="text-muted-foreground/30 cursor-grab group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors">
+                              <GripVertical className="w-3 h-3" />
+                            </div>
+                          )}
+
+                          <div className="w-4 flex-shrink-0 flex items-center justify-center">
+                            {isItemPlaying ? (
+                              <Music2 className="w-3 h-3 text-primary animate-pulse" />
+                            ) : (
+                              <span className="text-[10px] tabular-nums text-muted-foreground/40 font-medium">
+                                {subIndex + 1}
+                              </span>
+                            )}
+                          </div>
+
+                          <span
+                            className={`flex-1 text-xs leading-snug truncate min-w-0 ${
+                              isActive ? "font-semibold text-primary" : "text-foreground"
+                            }`}
+                          >
+                            {item.label}
+                          </span>
+
+                          {durationMap[item.id] !== undefined && durationMap[item.id] > 0 && (
+                            <span className="flex-shrink-0 text-[10px] tabular-nums text-muted-foreground/70">
+                              {formatDuration(durationMap[item.id])}
+                            </span>
+                          )}
+
+                          <RepeatBadge
+                            count={clampRepeat(item.repeatCount)}
+                            onCycle={() => !isSharedQueue && setQueueItemRepeat(item.id, nextRepeat(clampRepeat(item.repeatCount)))}
+                          />
+
+                          {!isSharedQueue && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); unindentItem(sq.id, subIndex, topIndex); }}
+                              className="p-0.5 rounded hover:bg-muted text-muted-foreground/30 group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors opacity-0 group-hover:opacity-100"
+                              aria-label="Move out of group"
+                              title="Move out of group"
+                            >
+                              <ArrowLeft className="w-3 h-3" />
+                            </button>
+                          )}
+
+                          {!isSharedQueue && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeFromQueue(item.id);
+                              }}
+                              className="p-0.5 rounded hover:bg-destructive/10 hover:text-destructive text-muted-foreground/30 group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors opacity-0 group-hover:opacity-100"
+                              aria-label={`Remove ${item.label} from queue`}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Drop-line at end of subqueue items */}
+                    {dropIndicator?.kind === "sub" && dropIndicator.subQueueId === sq.id && dropIndicator.insertBefore === sq.items.length && (
+                      <div className="h-1 relative mx-6 pointer-events-none">
+                        <div className="absolute inset-x-0 top-0.5 h-0.5 bg-primary rounded-full" />
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // Flat ReviewQueueItem
+              const item = entry as ReviewQueueItem;
               const isActive = activeQueueItemId === item.id;
-              const isPlaying = queueIsPlaying && activeItemIndex === index;
+              const isItemPlaying = queueIsPlaying && activeItemIndex === topIndex && activeSubItemIndex === null;
+              const isChecked = selectedIndices.has(topIndex);
 
               return (
                 <div
                   key={item.id}
-                  draggable={!isSharedQueue}
-                  onDragStart={!isSharedQueue ? handleDragStart(index) : undefined}
-                  onDragOver={!isSharedQueue ? handleDragOver(index) : undefined}
-                  onDrop={!isSharedQueue ? handleDrop(index) : undefined}
-                  onDragEnd={!isSharedQueue ? handleDragEnd : undefined}
-                  onClick={() => handleItemClick(item)}
-                  className={`flex items-center gap-1.5 px-2.5 py-2 cursor-pointer select-none transition-colors group ${
-                    isActive
-                      ? "bg-primary/10 border-l-2 border-primary"
-                      : "hover:bg-muted/60 border-l-2 border-transparent"
-                  } ${dragOverIndex === index ? "opacity-50" : ""}`}
+                  draggable={!isSharedQueue && !selectMode}
+                  onDragStart={!isSharedQueue && !selectMode ? handleTopDragStart(topIndex) : undefined}
+                  onDragOver={!isSharedQueue && !selectMode ? handleTopDragOver(topIndex) : undefined}
+                  onDrop={!isSharedQueue && !selectMode ? handleTopDrop(topIndex) : undefined}
+                  onDragEnd={!isSharedQueue && !selectMode ? handleDragEnd : undefined}
+                  onClick={() => selectMode ? toggleSelectIndex(topIndex) : handleItemClick(item, topIndex)}
+                  className={`relative flex items-center gap-1.5 px-2.5 py-2 cursor-pointer select-none transition-colors group ${
+                    selectMode
+                      ? isChecked
+                        ? "bg-primary/10 border-l-2 border-primary"
+                        : "hover:bg-muted/40 border-l-2 border-transparent"
+                      : isActive
+                        ? "bg-primary/10 border-l-2 border-primary"
+                        : "hover:bg-muted/60 border-l-2 border-transparent"
+                  }`}
                 >
-                  {/* Drag handle (hidden for shared queues) */}
-                  {!isSharedQueue && (
-                    <div
-                      className="text-muted-foreground/30 cursor-grab group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors"
-                      onMouseDown={(e) => e.stopPropagation()}
-                    >
-                      <GripVertical className="w-3 h-3" />
+                  {/* Drop-line indicator */}
+                  {dropIndicator?.kind === "top" && dropIndicator.insertBefore === topIndex && (
+                    <div className="absolute top-0 left-3 right-3 h-0.5 -translate-y-px bg-primary rounded-full z-20 pointer-events-none" />
+                  )}
+                  {/* In select mode show a checkbox; otherwise show the drag handle */}
+                  {selectMode ? (
+                    <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
+                      <div className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center transition-colors ${
+                        isChecked ? "bg-primary border-primary" : "border-muted-foreground/40"
+                      }`}>
+                        {isChecked && (
+                          <svg viewBox="0 0 10 10" className="w-2 h-2 text-white fill-none stroke-current stroke-[2]">
+                            <polyline points="1.5,5 4,7.5 8.5,2.5" />
+                          </svg>
+                        )}
+                      </div>
                     </div>
+                  ) : (
+                    !isSharedQueue && (
+                      <div
+                        className="text-muted-foreground/30 cursor-grab group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors"
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
+                        <GripVertical className="w-3 h-3" />
+                      </div>
+                    )
                   )}
 
-                  {/* Index or playing indicator */}
                   <div className="w-4 flex-shrink-0 flex items-center justify-center">
-                    {isPlaying ? (
+                    {isItemPlaying ? (
                       <Music2 className="w-3 h-3 text-primary animate-pulse" />
                     ) : (
                       <span className="text-[10px] tabular-nums text-muted-foreground/50 font-medium">
-                        {index + 1}
+                        {topIndex + 1}
                       </span>
                     )}
                   </div>
 
-                  {/* Label + duration */}
                   <span
                     className={`flex-1 text-xs leading-snug truncate min-w-0 ${
-                      isActive ? "font-semibold text-primary" : "text-foreground"
+                      (selectMode ? isChecked : isActive) ? "font-semibold text-primary" : "text-foreground"
                     }`}
                   >
                     {item.label}
                   </span>
 
-                  {/* Per-item duration */}
                   {durationMap[item.id] !== undefined && durationMap[item.id] > 0 && (
                     <span className="flex-shrink-0 text-[10px] tabular-nums text-muted-foreground/70">
                       {formatDuration(durationMap[item.id])}
                     </span>
                   )}
 
-                  {/* Repeat badge */}
                   <RepeatBadge
                     count={clampRepeat(item.repeatCount)}
                     onCycle={() => !isSharedQueue && setQueueItemRepeat(item.id, nextRepeat(clampRepeat(item.repeatCount)))}
                   />
 
-                  {/* Delete (hidden for shared queues) */}
+                  {!isSharedQueue && hasSubQueues && !selectMode && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); indentItem(topIndex); }}
+                      className="p-0.5 rounded hover:bg-muted text-muted-foreground/30 group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors opacity-0 group-hover:opacity-100"
+                      aria-label="Move into group"
+                      title="Move into nearest group"
+                    >
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  )}
+
                   {!isSharedQueue && (
                     <button
                       onClick={(e) => {
@@ -652,23 +1452,39 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
                 </div>
               );
             })}
+
+            {/* Drop-line at end of top-level list */}
+            {dropIndicator?.kind === "top" && dropIndicator.insertBefore === reviewQueue.length && (
+              <div className="h-1 relative mx-3 pointer-events-none">
+                <div className="absolute inset-x-0 top-0.5 h-0.5 bg-primary rounded-full" />
+              </div>
+            )}
+
+            {/* Add group button */}
+            {!isSharedQueue && (
+              <button
+                onClick={handleAddGroup}
+                className="w-full flex items-center gap-1.5 px-3 py-2 text-[10px] text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/40 transition-colors"
+              >
+                <Plus className="w-3 h-3" />
+                Add group
+              </button>
+            )}
           </div>
         )}
 
         {/* Footer */}
         {hasQueue && (
           <div className="flex-shrink-0 border-t border-border px-4 py-2.5 flex flex-col gap-1.5">
-            {/* Total playlist duration */}
             {(() => {
               const hasDurations = Object.keys(durationMap).length > 0;
               if (!hasDurations) return null;
 
-              // Check if any item or the queue loop is set to infinite (0)
-              // Use clampRepeat so stale persisted 4/5 values don't mask the ∞ check.
-              const anyItemInfinite = reviewQueue.some((item) => clampRepeat(item.repeatCount) === 0);
+              const anyItemInfinite = allItems.some((item) => clampRepeat(item.repeatCount) === 0);
+              const anyGroupInfinite = reviewQueue.some((e) => isSubQueue(e) && clampRepeat((e as SubQueue).repeatCount) === 0);
               const queueInfinite = queueLoopCount === 0;
 
-              if (anyItemInfinite || queueInfinite) {
+              if (anyItemInfinite || anyGroupInfinite || queueInfinite) {
                 return (
                   <div className="text-[10px] text-muted-foreground leading-snug">
                     Total: <span className="font-semibold text-foreground">∞</span>
@@ -676,20 +1492,30 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
                 );
               }
 
-              // All repeats are finite — compute exact total
-              const perItemSec = reviewQueue.reduce(
-                (sum, item) => sum + (durationMap[item.id] ?? 0) * clampRepeat(item.repeatCount),
-                0
-              );
-              if (perItemSec === 0) return null;
+              // Compute total duration accounting for subqueue group repeats
+              let perPassSec = 0;
+              for (const entry of reviewQueue) {
+                if (isSubQueue(entry)) {
+                  const sq = entry as SubQueue;
+                  const sqDur = sq.items.reduce(
+                    (sum, item) => sum + (durationMap[item.id] ?? 0) * clampRepeat(item.repeatCount),
+                    0
+                  );
+                  perPassSec += sqDur * clampRepeat(sq.repeatCount);
+                } else {
+                  const item = entry as ReviewQueueItem;
+                  perPassSec += (durationMap[item.id] ?? 0) * clampRepeat(item.repeatCount);
+                }
+              }
+              if (perPassSec === 0) return null;
 
-              const totalSec = perItemSec * queueLoopCount;
+              const totalSec = perPassSec * queueLoopCount;
               const showLoopLine = queueLoopCount > 1;
               return (
                 <div className="text-[10px] text-muted-foreground tabular-nums leading-snug">
                   {showLoopLine ? (
                     <span>
-                      Total: {formatDuration(perItemSec)} × {queueLoopCount} loops ={" "}
+                      Total: {formatDuration(perPassSec)} × {queueLoopCount} loops ={" "}
                       <span className="font-semibold text-foreground">{formatDuration(totalSec)}</span>
                     </span>
                   ) : (
@@ -703,10 +1529,14 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
 
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground tabular-nums">
-                {reviewQueue.length} segment{reviewQueue.length !== 1 ? "s" : ""}
+                {totalLeafItems} segment{totalLeafItems !== 1 ? "s" : ""}
+                {hasSubQueues && (
+                  <span className="ml-1 text-muted-foreground/60">
+                    in {reviewQueue.filter((e) => isSubQueue(e)).length} group{reviewQueue.filter((e) => isSubQueue(e)).length !== 1 ? "s" : ""}
+                  </span>
+                )}
               </span>
               <div className="flex items-center gap-2">
-                {/* Share button */}
                 <button
                   onClick={handleShare}
                   disabled={isSharing}

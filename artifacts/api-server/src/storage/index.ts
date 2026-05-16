@@ -1,8 +1,8 @@
-import { db, logsTable, srsItemsTable, dailyPlansTable } from "@workspace/db";
+import { db, logsTable, srsItemsTable, dailyPlansTable, goalsTable, bookmarksTable } from "@workspace/db";
 import { eq, and, lte, desc } from "drizzle-orm";
-import type { Log, SrsItem, DailyPlan, InsertLog, InsertSrsItem, InsertDailyPlan } from "@workspace/db";
+import type { Log, SrsItem, DailyPlan, InsertLog, InsertSrsItem, InsertDailyPlan, Goal, Bookmark, InsertBookmark } from "@workspace/db";
 
-export type { Log, SrsItem, DailyPlan, InsertLog, InsertSrsItem, InsertDailyPlan };
+export type { Log, SrsItem, DailyPlan, InsertLog, InsertSrsItem, InsertDailyPlan, Goal, Bookmark, InsertBookmark };
 
 export interface IStorage {
   // Logs
@@ -32,7 +32,24 @@ export interface IStorage {
   ): Promise<void>;
   updateDailyPlan(id: number, plan: Partial<DailyPlan>): Promise<DailyPlan>;
 
+  // Goals
+  getGoals(userId: string): Promise<Goal[]>;
+  createGoal(
+    goal: Omit<Goal, "id" | "createdAt" | "completedAyahsList" | "status" | "qfGoalId"> &
+      Partial<Pick<Goal, "completedAyahsList" | "status">>,
+  ): Promise<Goal>;
+  updateGoal(id: number, data: Partial<Goal>): Promise<Goal>;
+  deleteGoal(id: number): Promise<void>;
+
   deleteAllUserData(userId: string): Promise<void>;
+
+  // Bookmarks
+  getBookmarks(userId: string): Promise<Bookmark[]>;
+  getBookmark(userId: string, surahNumber: number, ayahNumber: number): Promise<Bookmark | undefined>;
+  createBookmark(values: InsertBookmark): Promise<Bookmark>;
+  updateBookmark(id: number, values: Partial<Bookmark>): Promise<Bookmark>;
+  deleteBookmark(id: number): Promise<void>;
+  bulkUpsertBookmarks(userId: string, items: Array<{ surahNumber: number; ayahNumber: number; qfBookmarkId?: string | null }>): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -64,7 +81,11 @@ export class DatabaseStorage implements IStorage {
 
   async getDueSrsItems(userId: string): Promise<SrsItem[]> {
     return db.select().from(srsItemsTable)
-      .where(and(eq(srsItemsTable.userId, userId), lte(srsItemsTable.nextReviewDate, new Date())))
+      .where(and(
+        eq(srsItemsTable.userId, userId),
+        eq(srsItemsTable.retired, false),
+        lte(srsItemsTable.nextReviewDate, new Date()),
+      ))
       .orderBy(srsItemsTable.nextReviewDate);
   }
 
@@ -122,6 +143,57 @@ export class DatabaseStorage implements IStorage {
     await db.delete(logsTable).where(eq(logsTable.userId, userId));
     await db.delete(srsItemsTable).where(eq(srsItemsTable.userId, userId));
     await db.delete(dailyPlansTable).where(eq(dailyPlansTable.userId, userId));
+    await db.delete(goalsTable).where(eq(goalsTable.userId, userId));
+    await db.delete(bookmarksTable).where(eq(bookmarksTable.userId, userId));
+  }
+
+  async getBookmarks(userId: string): Promise<Bookmark[]> {
+    return db.select().from(bookmarksTable)
+      .where(eq(bookmarksTable.userId, userId))
+      .orderBy(desc(bookmarksTable.createdAt));
+  }
+
+  async getBookmark(userId: string, surahNumber: number, ayahNumber: number): Promise<Bookmark | undefined> {
+    const [row] = await db.select().from(bookmarksTable)
+      .where(and(
+        eq(bookmarksTable.userId, userId),
+        eq(bookmarksTable.surahNumber, surahNumber),
+        eq(bookmarksTable.ayahNumber, ayahNumber),
+      ));
+    return row;
+  }
+
+  async createBookmark(values: InsertBookmark): Promise<Bookmark> {
+    const [row] = await db.insert(bookmarksTable).values(values).returning();
+    return row;
+  }
+
+  async updateBookmark(id: number, values: Partial<Bookmark>): Promise<Bookmark> {
+    const [row] = await db.update(bookmarksTable).set(values).where(eq(bookmarksTable.id, id)).returning();
+    return row;
+  }
+
+  async deleteBookmark(id: number): Promise<void> {
+    await db.delete(bookmarksTable).where(eq(bookmarksTable.id, id));
+  }
+
+  async bulkUpsertBookmarks(userId: string, items: Array<{ surahNumber: number; ayahNumber: number; qfBookmarkId?: string | null }>): Promise<void> {
+    if (items.length === 0) return;
+    for (const item of items) {
+      const existing = await this.getBookmark(userId, item.surahNumber, item.ayahNumber);
+      if (!existing) {
+        await db.insert(bookmarksTable).values({
+          userId,
+          surahNumber: item.surahNumber,
+          ayahNumber: item.ayahNumber,
+          qfBookmarkId: item.qfBookmarkId ?? null,
+        });
+      } else if (item.qfBookmarkId && !existing.qfBookmarkId) {
+        await db.update(bookmarksTable)
+          .set({ qfBookmarkId: item.qfBookmarkId })
+          .where(eq(bookmarksTable.id, existing.id));
+      }
+    }
   }
 
   async restoreBackup(
@@ -136,6 +208,34 @@ export class DatabaseStorage implements IStorage {
       if (rows.srsItems.length > 0) await tx.insert(srsItemsTable).values(rows.srsItems);
       if (rows.dailyPlans.length > 0) await tx.insert(dailyPlansTable).values(rows.dailyPlans);
     });
+  }
+
+  async getGoals(userId: string): Promise<Goal[]> {
+    return db.select().from(goalsTable)
+      .where(eq(goalsTable.userId, userId))
+      .orderBy(desc(goalsTable.createdAt));
+  }
+
+  async createGoal(
+    goal: Omit<Goal, "id" | "createdAt" | "completedAyahsList" | "status" | "qfGoalId"> &
+      Partial<Pick<Goal, "completedAyahsList" | "status">>,
+  ): Promise<Goal> {
+    const [row] = await db.insert(goalsTable).values({
+      ...goal,
+      completedAyahsList: goal.completedAyahsList ?? [],
+      status: goal.status ?? "active",
+      qfGoalId: null,
+    }).returning();
+    return row;
+  }
+
+  async updateGoal(id: number, data: Partial<Goal>): Promise<Goal> {
+    const [row] = await db.update(goalsTable).set(data).where(eq(goalsTable.id, id)).returning();
+    return row;
+  }
+
+  async deleteGoal(id: number): Promise<void> {
+    await db.delete(goalsTable).where(eq(goalsTable.id, id));
   }
 }
 

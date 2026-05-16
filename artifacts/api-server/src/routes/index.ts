@@ -5,6 +5,9 @@ import qpcFontRouter from "./qpcFont";
 import queuesRouter from "./queues";
 import authRouter from "./auth";
 import trackerRouter from "./tracker";
+import qfAuthRouter from "./qfAuth";
+import goalsRouter from "./goals";
+import bookmarksRouter from "./bookmarks";
 
 const router: IRouter = Router();
 
@@ -14,5 +17,8 @@ router.use(qpcFontRouter);
 router.use(queuesRouter);
 router.use(authRouter);
 router.use(trackerRouter);
+router.use(qfAuthRouter);
+router.use(goalsRouter);
+router.use(bookmarksRouter);
 
 export default router;

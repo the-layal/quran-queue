@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, type RefObject } from "react";
-import { Loader2, AlertCircle, X } from "lucide-react";
+import { Loader2, AlertCircle, X, Bookmark, BookmarkCheck } from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
 import { useSmartBrush } from "../hooks/useSmartBrush";
 import { hasArabicLetter } from "../utils/arabicUtils";
 import { fetchSurahTranslation } from "../services/quranApi";
+import { useBookmarks } from "../hooks/useBookmarks";
 
 interface MushafSvgPageProps {
   pageNumber: number;
@@ -131,6 +132,7 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
   const translationPopoverAyahKeyRef = useRef<string | null>(null);
   const translationPopoverRef = useRef<HTMLDivElement>(null);
   const brush = useSmartBrush("mushaf", containerRef as RefObject<HTMLElement | null>);
+  const { isBookmarked, toggleBookmark } = useBookmarks();
 
   // ── Translation popover ──────────────────────────────────────────────────
   const [translationPopover, setTranslationPopover] = useState<{
@@ -1067,13 +1069,26 @@ export default function MushafSvgPage({ pageNumber, scale = 1 }: MushafSvgPagePr
               <span className="mushaf-translation-popover-ref">
                 {translationPopover.surahNumber}:{translationPopover.ayahNumber}
               </span>
-              <button
-                onClick={() => setTranslationPopover(null)}
-                className="mushaf-translation-popover-close"
-                aria-label="Close translation"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => toggleBookmark(translationPopover.surahNumber, translationPopover.ayahNumber)}
+                  className="mushaf-translation-popover-close"
+                  aria-label={isBookmarked(translationPopover.surahNumber, translationPopover.ayahNumber) ? "Remove bookmark" : "Bookmark this ayah"}
+                  title={isBookmarked(translationPopover.surahNumber, translationPopover.ayahNumber) ? "Remove bookmark" : "Bookmark this ayah"}
+                >
+                  {isBookmarked(translationPopover.surahNumber, translationPopover.ayahNumber)
+                    ? <BookmarkCheck className="w-3.5 h-3.5 text-primary" />
+                    : <Bookmark className="w-3.5 h-3.5" />
+                  }
+                </button>
+                <button
+                  onClick={() => setTranslationPopover(null)}
+                  className="mushaf-translation-popover-close"
+                  aria-label="Close translation"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
             {translationPopover.loading && (
               <div className="mushaf-translation-popover-loading">

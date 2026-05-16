@@ -96,13 +96,23 @@ export async function loadAudioData(
 
       const raw: Record<string, AyahMp3Entry> = await res.json();
       map = {};
+      // Extra tail time added when no duration field is present in the data.
+      // The playback engine fires its region-end check 80 ms early, so without
+      // padding the last word is clipped and its highlight is never shown.
+      // Most non-Alafasy reciters (Abdul Basit, Maher, Hani, Ghamdi, Husary)
+      // have duration: null, so this constant applies to all of them.
+      const AYAH_MP3_TAIL_PADDING_MS = 800;
       for (const [key, entry] of Object.entries(raw)) {
         const segments = entry.segments ?? [];
         const maxSegEnd = segments.reduce((m, s) => Math.max(m, s[2]), 0);
         const durationMs = entry.duration != null ? entry.duration * 1000 : null;
-        // Use the larger of (max segment end ms) and (duration*1000) so we never
-        // truncate audio that extends past the last word's end timestamp.
-        const timestampTo = Math.max(maxSegEnd, durationMs ?? 0);
+        // When duration is known, use the larger of the last segment end and the
+        // real duration.  When it is null, append the tail padding so the engine
+        // does not cut off the final syllable.
+        const timestampTo =
+          durationMs != null
+            ? Math.max(maxSegEnd, durationMs)
+            : maxSegEnd + AYAH_MP3_TAIL_PADDING_MS;
         map[key] = {
           surah_number: entry.surah_number,
           ayah_number: entry.ayah_number,
@@ -384,6 +394,15 @@ export async function fetchMushafPage(pageNumber: number): Promise<MushafPageDat
 
 export const TOTAL_PAGES = 604;
 export const TOTAL_SURAHS = 114;
+
+export async function fetchVerseUthmaniText(surahNumber: number, ayahNumber: number): Promise<string> {
+  const res = await fetch(
+    `${QURANCOM_BASE}/verses/by_key/${surahNumber}:${ayahNumber}?fields=text_uthmani`,
+  );
+  if (!res.ok) throw new Error(`Failed to fetch verse ${surahNumber}:${ayahNumber}`);
+  const data = (await res.json()) as { verse: { text_uthmani: string } };
+  return data.verse.text_uthmani;
+}
 
 interface QuranComTransliterationWord {
   char_type_name: "word" | "end";

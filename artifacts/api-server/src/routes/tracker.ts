@@ -7,6 +7,7 @@ import {
   groupConsecutivePages,
   getAyahsForReference,
 } from "../lib/page-utils";
+import { pushProgressToQF } from "../lib/qfGoalsService";
 
 const router: IRouter = Router();
 
@@ -102,6 +103,11 @@ router.post("/logs", async (req: Request, res: Response) => {
       await storage.updateSrsItem(srsItem.id, update);
     }
 
+    // Expand any reference type (ayah, ayah range, page, surah) and batch-update all matching goals
+    const ayahGroups = getAyahsForReference(input.reference);
+    const ayahPairs = ayahGroups.flatMap((g) => g.ayahs.map((a) => ({ surah: g.surah, ayah: a })));
+    void updateGoalProgressForAyahs(userId, ayahPairs);
+
     res.status(201).json(log);
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -185,6 +191,97 @@ router.get("/srs/due", async (req: Request, res: Response) => {
   res.json(await storage.getDueSrsItems(req.user!.id));
 });
 
+const SEED_TABLE: Record<number, { interval: number; repetitions: number; easeFactor: number }> = {
+  1: { interval: 1,  repetitions: 1, easeFactor: 220 },
+  2: { interval: 3,  repetitions: 2, easeFactor: 235 },
+  3: { interval: 7,  repetitions: 3, easeFactor: 250 },
+  4: { interval: 21, repetitions: 4, easeFactor: 265 },
+  5: { interval: 60, repetitions: 5, easeFactor: 280 },
+};
+
+const seedSchema = z.array(z.object({
+  reference: z.string().min(1),
+  vibe: z.number().int().min(1).max(5),
+})).max(114);
+
+router.post("/srs/seed", async (req: Request, res: Response) => {
+  if (!isAuth(req, res)) return;
+  try {
+    const userId = req.user!.id;
+    const items = seedSchema.parse(req.body);
+    const now = new Date();
+    for (const { reference, vibe } of items) {
+      const existing = await storage.getSrsItemByReference(userId, reference);
+      if (existing) continue;
+      const seed = SEED_TABLE[vibe] ?? SEED_TABLE[3];
+      const nextReviewDate = new Date(now);
+      nextReviewDate.setDate(nextReviewDate.getDate() + seed.interval);
+      await storage.createSrsItem({
+        userId,
+        type: "surah",
+        reference,
+        easeFactor: seed.easeFactor,
+        interval: seed.interval,
+        repetitions: seed.repetitions,
+        nextReviewDate,
+      });
+    }
+    res.json({ seeded: items.length });
+  } catch (err) {
+    if (err instanceof z.ZodError) { res.status(400).json({ error: err.issues }); return; }
+    throw err;
+  }
+});
+
+// ── SRS retire / unretire ─────────────────────────────────────────────────────
+
+const retireSchema = z.object({ reference: z.string().min(1) });
+
+router.post("/srs/retire", async (req: Request, res: Response) => {
+  if (!isAuth(req, res)) return;
+  try {
+    const userId = req.user!.id;
+    const { reference } = retireSchema.parse(req.body);
+    let item = await storage.getSrsItemByReference(userId, reference);
+    if (!item) {
+      const far = new Date();
+      far.setFullYear(far.getFullYear() + 10);
+      item = await storage.createSrsItem({
+        userId, type: "surah", reference,
+        easeFactor: 280, interval: 365, repetitions: 5,
+        nextReviewDate: far,
+      });
+    }
+    await storage.updateSrsItem(item.id, { retired: true, retiredAt: new Date() });
+    const todayPlan = await storage.getDailyPlan(userId, getTodayStr());
+    if (todayPlan) {
+      const plannedItems = (todayPlan.plannedItems || []).filter((r) => r !== reference);
+      await storage.updateDailyPlan(todayPlan.id, { plannedItems });
+    }
+    res.json({ retired: true });
+  } catch (err) {
+    if (err instanceof z.ZodError) { res.status(400).json({ error: err.issues }); return; }
+    throw err;
+  }
+});
+
+router.post("/srs/unretire", async (req: Request, res: Response) => {
+  if (!isAuth(req, res)) return;
+  try {
+    const userId = req.user!.id;
+    const { reference } = retireSchema.parse(req.body);
+    const item = await storage.getSrsItemByReference(userId, reference);
+    if (!item) { res.status(404).json({ error: "SRS item not found" }); return; }
+    const next = new Date();
+    next.setDate(next.getDate() + 60);
+    await storage.updateSrsItem(item.id, { retired: false, retiredAt: null, interval: 60, nextReviewDate: next });
+    res.json({ retired: false });
+  } catch (err) {
+    if (err instanceof z.ZodError) { res.status(400).json({ error: err.issues }); return; }
+    throw err;
+  }
+});
+
 // ── Daily plans ───────────────────────────────────────────────────────────────
 
 router.get("/plans/today", async (req: Request, res: Response) => {
@@ -259,13 +356,16 @@ router.post("/plans/today", async (req: Request, res: Response) => {
       return { plannedItems, currentPageCount };
     };
 
+    const allSrsFull = await storage.getSrsItems(userId);
+    const retiredSet = new Set(allSrsFull.filter((s) => s.retired).map((s) => s.reference));
+
     if (!plan) {
       const carryoverRefs: string[] = [];
       const yesterdayPlan = await storage.getDailyPlan(userId, getYesterdayStr());
       if (yesterdayPlan) {
         const completed = yesterdayPlan.completedItems || [];
         const planned = yesterdayPlan.plannedItems || [];
-        for (const ref of planned) if (!completed.includes(ref)) carryoverRefs.push(ref);
+        for (const ref of planned) if (!completed.includes(ref) && !retiredSet.has(ref)) carryoverRefs.push(ref);
       }
 
       let currentPageCount = 0;
@@ -296,7 +396,7 @@ router.post("/plans/today", async (req: Request, res: Response) => {
       });
     } else {
       const completedItems = plan.completedItems || [];
-      const existingPlanned = plan.plannedItems || [];
+      const existingPlanned = (plan.plannedItems || []).filter((r) => !retiredSet.has(r) || completedItems.includes(r));
       let currentPageCount = 0;
       const existingPages = new Set<number>();
 
@@ -360,6 +460,12 @@ router.post("/plans/today/add-more", async (req: Request, res: Response) => {
       for (const p of getPagesForReference(item.reference)) knownPages.add(p);
     }
 
+    // Build a set of page numbers the user explicitly dismissed today
+    const dismissedPages = new Set<number>();
+    for (const ref of (plan.removedItems || [])) {
+      for (const p of getPagesForReference(ref)) dismissedPages.add(p);
+    }
+
     const newRefs: string[] = [];
     let added = 0;
     // Due SRS refs first, preserving original references
@@ -369,6 +475,7 @@ router.post("/plans/today/add-more", async (req: Request, res: Response) => {
       if (currentItems.includes(item.reference) || newRefs.includes(item.reference)) continue;
       const pages = getPagesForReference(item.reference);
       if (pages.every((p) => existingPages.has(p))) continue;
+      if (pages.some((p) => dismissedPages.has(p))) continue;
       newRefs.push(item.reference);
       added += getPageEquivalent(item.reference);
       for (const p of pages) existingPages.add(p);
@@ -377,7 +484,7 @@ router.post("/plans/today/add-more", async (req: Request, res: Response) => {
     if (added < input.count) {
       const freshPages: number[] = [];
       for (let p = 1; p <= TOTAL_QURAN_PAGES; p++) {
-        if (!existingPages.has(p) && !knownPages.has(p)) freshPages.push(p);
+        if (!existingPages.has(p) && !knownPages.has(p) && !dismissedPages.has(p)) freshPages.push(p);
       }
       const remaining = Math.max(0, Math.ceil(input.count - added));
       const pagesToAdd = freshPages.slice(0, remaining);
@@ -412,6 +519,61 @@ async function applyVibeToReference(userId: string, type: string, reference: str
   }
 }
 
+/**
+ * Update all matching goals for a batch of (surah, ayah) pairs from a single
+ * review event, then push progress to QF once per affected goal (not per ayah).
+ */
+async function updateGoalProgressForAyahs(
+  userId: string,
+  ayahPairs: Array<{ surah: number; ayah: number }>,
+): Promise<void> {
+  if (ayahPairs.length === 0) return;
+  try {
+    const goals = await storage.getGoals(userId);
+    const activeGoals = goals.filter((g) => g.status === "active");
+    if (activeGoals.length === 0) return;
+
+    // Build a completed-set per goal, apply all ayahs, then write once per goal
+    const goalUpdates = new Map<number, { completedList: number[]; total: number; qfGoalId: string | null | undefined }>();
+
+    for (const { surah, ayah } of ayahPairs) {
+      for (const goal of activeGoals) {
+        if (goal.surahNumber !== surah || goal.ayahStart > ayah || goal.ayahEnd < ayah) continue;
+        if (!goalUpdates.has(goal.id)) {
+          goalUpdates.set(goal.id, {
+            completedList: [...(goal.completedAyahsList || [])],
+            total: goal.ayahEnd - goal.ayahStart + 1,
+            qfGoalId: goal.qfGoalId,
+          });
+        }
+        const entry = goalUpdates.get(goal.id)!;
+        if (!entry.completedList.includes(ayah)) entry.completedList.push(ayah);
+      }
+    }
+
+    // Persist each updated goal and push once to QF
+    for (const [goalId, { completedList, total, qfGoalId }] of goalUpdates) {
+      const isComplete = completedList.length >= total;
+      const updated = await storage.updateGoal(goalId, {
+        completedAyahsList: completedList,
+        status: isComplete ? "complete" : "active",
+      });
+      // Push progress to QF in background — best-effort, once per goal
+      if (qfGoalId ?? updated.qfGoalId) {
+        void pushProgressToQF(
+          userId,
+          (qfGoalId ?? updated.qfGoalId)!,
+          updated.completedAyahsList?.length ?? completedList.length,
+          total,
+          isComplete,
+        );
+      }
+    }
+  } catch {
+    // non-critical — don't block the response
+  }
+}
+
 router.post("/plans/today/complete", async (req: Request, res: Response) => {
   if (!isAuth(req, res)) return;
   try {
@@ -428,12 +590,15 @@ router.post("/plans/today/complete", async (req: Request, res: Response) => {
     await applyVibeToReference(userId, type, input.reference, input.vibeScale);
 
     const ayahGroups = getAyahsForReference(input.reference);
+    const ayahPairsComplete: Array<{ surah: number; ayah: number }> = [];
     for (const group of ayahGroups) {
       for (const ayah of group.ayahs) {
         const ayahRef = `ayah:${group.surah}:${ayah}`;
         await applyVibeToReference(userId, "ayah", ayahRef, input.vibeScale);
+        ayahPairsComplete.push({ surah: group.surah, ayah });
       }
     }
+    void updateGoalProgressForAyahs(userId, ayahPairsComplete);
 
     res.json(plan);
   } catch (err) {
@@ -471,6 +636,7 @@ router.post("/plans/today/complete-advanced", async (req: Request, res: Response
       const ayahRef = `ayah:${av.surah}:${av.ayah}`;
       await applyVibeToReference(userId, "ayah", ayahRef, av.vibe);
     }
+    void updateGoalProgressForAyahs(userId, input.ayahVibes.map((av) => ({ surah: av.surah, ayah: av.ayah })));
 
     const overallVibe = Math.round(input.ayahVibes.reduce((s, a) => s + a.vibe, 0) / input.ayahVibes.length);
     const refType = input.reference.split(":")[0] || "page";
@@ -498,7 +664,9 @@ router.post("/plans/today/remove-item", async (req: Request, res: Response) => {
 
     const plannedItems = (plan.plannedItems || []).filter((r) => r !== input.reference);
     const completedItems = (plan.completedItems || []).filter((r) => r !== input.reference);
-    const updated = await storage.updateDailyPlan(plan.id, { plannedItems, completedItems });
+    const prevRemoved = plan.removedItems || [];
+    const removedItems = prevRemoved.includes(input.reference) ? prevRemoved : [...prevRemoved, input.reference];
+    const updated = await storage.updateDailyPlan(plan.id, { plannedItems, completedItems, removedItems });
 
     const removedPages = getPagesForReference(input.reference);
     const tomorrow = new Date();
@@ -519,6 +687,25 @@ router.post("/plans/today/remove-item", async (req: Request, res: Response) => {
       res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
       return;
     }
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+router.post("/plans/today/perfectly-known", async (req: Request, res: Response) => {
+  if (!isAuth(req, res)) return;
+  try {
+    const userId = req.user!.id;
+    let plan = await storage.getDailyPlan(userId, getTodayStr());
+    if (!plan) { res.status(400).json({ message: "No plan for today. Generate a plan first." }); return; }
+    const allSrs = await storage.getSrsItems(userId);
+    const retiredRefs = allSrs.filter((s) => s.retired).map((s) => s.reference);
+    const planned = [...(plan.plannedItems || [])];
+    for (const ref of retiredRefs) {
+      if (!planned.includes(ref)) planned.push(ref);
+    }
+    plan = await storage.updateDailyPlan(plan.id, { plannedItems: planned });
+    res.json(plan);
+  } catch {
     res.status(500).json({ message: "Internal Server Error" });
   }
 });

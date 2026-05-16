@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef, useMemo, useState } from "react";
-import { Play, Pause, Repeat, Music2, Highlighter, ListMusic, CheckCheck, Loader2 } from "lucide-react";
+import { Play, Pause, Repeat, Music2, Highlighter, ListMusic, CheckCheck, Loader2, SkipBack, SkipForward } from "lucide-react";
 import SpeedSelector from "./SpeedSelector";
 import ReciterSelector from "./ReciterSelector";
 import type { ChapterMap } from "../types/quran";
@@ -30,6 +30,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
     hasAudio,
     isAudioLoading,
     regions: selRegions,
+    audioData: selAudioData,
     play: selPlay,
     pause: selPause,
     seekTo: selSeekTo,
@@ -42,9 +43,13 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
     queueTotalDurationSec,
     queueCurrentRegions,
     queueActiveLabel,
+    hasPrev,
+    hasNext,
     playQueue,
     pauseQueue,
     seekQueueTo,
+    skipToPrev,
+    skipToNext,
   } = queuePlayback;
 
   // ── Store state ───────────────────────────────────────────────────────────
@@ -55,6 +60,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
   const brushFineness = useQuranStore((s) => s.brushFineness);
   const addToQueue = useQuranStore((s) => s.addToQueue);
+  const svgToJsonWordMap = useQuranStore((s) => s.svgToJsonWordMap);
   const queuePanelOpen = useQuranStore((s) => s.queuePanelOpen);
   const setQueuePanelOpen = useQuranStore((s) => s.setQueuePanelOpen);
   const reviewQueue = useQuranStore((s) => s.reviewQueue);
@@ -91,6 +97,69 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
     }
     return fracs;
   }, [activeRegions, activeTotalDurationSec]);
+
+  const activeLineBoundaryFractions = useMemo(() => {
+    if (queueActive || !selAudioData || selRegions.length === 0 || activeTotalDurationSec <= 0) return [];
+    const TOLERANCE = 0.005;
+    const fracs: number[] = [];
+    let cumDurSec = 0;
+
+    for (let i = 0; i < selRegions.length; i++) {
+      const region = selRegions[i];
+      const { surahNumber, ayahNumber, ayahKey, startMs, durationMs } = region;
+      const ayahData = selAudioData[ayahKey];
+      if (!ayahData) { cumDurSec += durationMs / 1000; continue; }
+
+      const surahPad = String(surahNumber).padStart(3, "0");
+      const ayahPad = String(ayahNumber).padStart(3, "0");
+      const wordEls = Array.from(document.querySelectorAll<Element>(
+        `g[data-surah="${surahPad}"][data-aya="${ayahPad}"][data-type="text"]`
+      ));
+
+      if (wordEls.length > 0) {
+        const lineFirstWord = new Map<number, number>();
+        for (const el of wordEls) {
+          const ln = el.getAttribute("data-line-number");
+          const wi = el.getAttribute("data-word-index-in-ayah");
+          if (ln === null || wi === null) continue;
+          const lineNum = parseInt(ln, 10);
+          const wordIdx = parseInt(wi, 10);
+          if (!lineFirstWord.has(lineNum) || wordIdx < lineFirstWord.get(lineNum)!) {
+            lineFirstWord.set(lineNum, wordIdx);
+          }
+        }
+
+        const sortedLines = Array.from(lineFirstWord.keys()).sort((a, b) => a - b);
+        const svgMap = svgToJsonWordMap?.[ayahKey];
+
+        for (let li = 0; li < sortedLines.length; li++) {
+          if (i === 0 && li === 0) continue;
+
+          const svgWordIdx = lineFirstWord.get(sortedLines[li])!;
+          const jsonWordIdx = svgMap ? (svgMap[svgWordIdx] ?? svgWordIdx) : svgWordIdx;
+          const seg = ayahData.segments.find((s) => s[0] === jsonWordIdx);
+          if (!seg) continue;
+
+          const wordOffsetMs = seg[1] - startMs;
+          if (wordOffsetMs < 0) continue;
+
+          const frac = (cumDurSec + wordOffsetMs / 1000) / activeTotalDurationSec;
+          if (frac <= 0 || frac >= 1) continue;
+
+          const isNearAyahBoundary = activeBoundaryFractions.some(
+            (af) => Math.abs(af - frac) < TOLERANCE
+          );
+          if (!isNearAyahBoundary) {
+            fracs.push(frac);
+          }
+        }
+      }
+
+      cumDurSec += durationMs / 1000;
+    }
+
+    return fracs;
+  }, [queueActive, selAudioData, selRegions, activeTotalDurationSec, activeBoundaryFractions, svgToJsonWordMap]);
 
   const progressBarRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
@@ -222,10 +291,13 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
   // On mobile: span full width with a small gutter on each side.
   // On sm+: intrinsic width anchored to bottom-right (unchanged desktop look).
   // Idle states stay single-row; active state stacks on mobile.
+  // bottom tracks the live footer height (set by ResizeObserver in QuranPage)
+  // so the bar always floats above the footer even when controls wrap on mobile.
+  const barBottom = "calc(var(--mushaf-footer-h, 8.5rem) + 8px)";
   const barBaseRow =
-    "fixed z-40 bottom-[8.5rem] left-2 right-2 sm:left-auto sm:right-6 sm:w-auto flex flex-row items-center gap-3 rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-xl px-4 py-2.5 transition-all duration-200";
+    "fixed z-40 left-2 right-2 sm:left-auto sm:right-6 sm:w-auto flex flex-row items-center gap-3 rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-xl px-4 py-2.5 transition-all duration-200";
   const barBase =
-    "fixed z-40 bottom-[8.5rem] left-2 right-2 sm:left-auto sm:right-6 sm:w-auto flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-xl px-4 py-2.5 transition-all duration-200";
+    "fixed z-40 left-2 right-2 sm:left-auto sm:right-6 sm:w-auto flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-2xl border border-border bg-card/95 backdrop-blur-md shadow-xl px-4 py-2.5 transition-all duration-200";
 
   const queueToggleBtn = (
     <button
@@ -254,7 +326,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
     return (
       <div
         className={`${barBaseRow} opacity-60`}
-        style={{ pointerEvents: "none" }}
+        style={{ pointerEvents: "none", bottom: barBottom }}
         role="status"
         aria-label="Audio control bar"
       >
@@ -276,7 +348,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
     return (
       <div
         className={`${barBaseRow} opacity-60`}
-        style={{ pointerEvents: "none" }}
+        style={{ pointerEvents: "none", bottom: barBottom }}
         role="status"
         aria-label="Audio control bar"
       >
@@ -380,9 +452,10 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
   return (
     <div
       className={barBase}
-      style={{ pointerEvents: "none" }}
+      style={{ pointerEvents: "none", bottom: barBottom }}
       role="region"
       aria-label="Audio playback controls"
+      data-tour="audio-bar"
     >
       {/*
        * ── Primary row ──────────────────────────────────────────────────────
@@ -391,6 +464,24 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
        *          direct flex items of the outer bar (single-row desktop look).
        */}
       <div className="flex items-center gap-2 sm:contents">
+        {/* Skip previous — only when queue is active */}
+        {queueActive && (
+          <button
+            onClick={skipToPrev}
+            disabled={!hasPrev}
+            style={{ pointerEvents: "auto" }}
+            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 border ${
+              hasPrev
+                ? "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                : "border-border text-muted-foreground/30 cursor-not-allowed"
+            }`}
+            aria-label="Previous queue item"
+            title="Previous queue item"
+          >
+            <SkipBack className="w-3.5 h-3.5" />
+          </button>
+        )}
+
         {/* Play / Pause (or loading spinner while reciter audio is fetching) */}
         <button
           onClick={handlePlayPause}
@@ -416,6 +507,24 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
             <Play className="w-4 h-4 ml-0.5" />
           )}
         </button>
+
+        {/* Skip next — only when queue is active */}
+        {queueActive && (
+          <button
+            onClick={skipToNext}
+            disabled={!hasNext}
+            style={{ pointerEvents: "auto" }}
+            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 border ${
+              hasNext
+                ? "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                : "border-border text-muted-foreground/30 cursor-not-allowed"
+            }`}
+            aria-label="Next queue item"
+            title="Next queue item"
+          >
+            <SkipForward className="w-3.5 h-3.5" />
+          </button>
+        )}
 
         {/* Progress area */}
         <div className="flex flex-col gap-1 min-w-0 flex-1 sm:flex-none">
@@ -444,6 +553,13 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
                 style={{ width: `${Math.round(activeProgress * 100)}%` }}
               />
             </div>
+            {activeLineBoundaryFractions.map((frac) => (
+              <div
+                key={frac}
+                className="absolute top-1/2 -translate-y-1/2 w-px h-1.5 bg-black opacity-40 pointer-events-none"
+                style={{ left: `${frac * 100}%` }}
+              />
+            ))}
             {activeBoundaryFractions.map((frac) => (
               <div
                 key={frac}

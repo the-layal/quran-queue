@@ -1,17 +1,25 @@
 import { useRef, useState } from "react";
 import AppShell from "@/components/AppShell";
 import GuestBanner from "@/components/GuestBanner";
-import { Download, Upload, ShieldCheck, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { Download, Upload, ShieldCheck, AlertTriangle, CheckCircle2, Loader2, Link2, Unlink, ExternalLink, Compass, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useQueryClient } from "@tanstack/react-query";
 import type { BackupData } from "@/storage/trackerStorage";
+import { useQFConnection } from "@/hooks/useQFConnection";
+import { BOOKMARKS_QUERY_KEY } from "@/hooks/useBookmarks";
+import { TOUR_START_EVENT } from "@/components/FeatureTour";
 
 type RestoreState = "idle" | "confirm" | "loading" | "done" | "error";
+type SyncState = "idle" | "loading" | "done" | "error";
 
 export default function SettingsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { isQFConnected, qfDisplayName, qfEmail, qfSyncError, isLoading: qfLoading, disconnect, isDisconnecting, refetchStatus } = useQFConnection();
+
+  const searchParams = new URLSearchParams(window.location.search);
+  const qfParam = searchParams.get("qf");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [downloadLoading, setDownloadLoading] = useState(false);
@@ -19,6 +27,46 @@ export default function SettingsPage() {
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [pendingBackup, setPendingBackup] = useState<BackupData | null>(null);
   const [importedCounts, setImportedCounts] = useState<{ logs: number; srsItems: number; dailyPlans: number } | null>(null);
+
+  const [bookmarkSyncState, setBookmarkSyncState] = useState<SyncState>("idle");
+  const [bookmarkSyncMsg, setBookmarkSyncMsg] = useState<string | null>(null);
+  const [goalSyncState, setGoalSyncState] = useState<SyncState>("idle");
+  const [goalSyncMsg, setGoalSyncMsg] = useState<string | null>(null);
+
+  async function handleSyncBookmarks() {
+    setBookmarkSyncState("loading");
+    setBookmarkSyncMsg(null);
+    try {
+      const res = await fetch("/api/bookmarks/qf/sync", { credentials: "include" });
+      if (!res.ok) throw new Error("Sync failed");
+      const data = await res.json() as { synced: boolean; bookmarks: unknown[] };
+      await queryClient.invalidateQueries({ queryKey: BOOKMARKS_QUERY_KEY });
+      refetchStatus(); // sync success clears qfSyncError on server; refresh the status
+      setBookmarkSyncState("done");
+      setBookmarkSyncMsg(data.synced ? `${data.bookmarks.length} bookmark${data.bookmarks.length !== 1 ? "s" : ""} up to date` : "Could not reach Quran.com — please reconnect");
+    } catch {
+      setBookmarkSyncState("error");
+      setBookmarkSyncMsg("Sync failed. Your session may have expired — try disconnecting and reconnecting.");
+    }
+  }
+
+  async function handleSyncGoals() {
+    setGoalSyncState("loading");
+    setGoalSyncMsg(null);
+    try {
+      const res = await fetch("/api/goals/qf/sync", { credentials: "include" });
+      if (!res.ok) throw new Error("Sync failed");
+      const data = await res.json() as { synced: number };
+      // Notify any mounted goals consumers (e.g. Dashboard) to reload
+      window.dispatchEvent(new Event("hafith:goals:refresh"));
+      refetchStatus(); // sync success clears qfSyncError on server; refresh the status
+      setGoalSyncState("done");
+      setGoalSyncMsg(data.synced > 0 ? `Imported ${data.synced} new goal${data.synced !== 1 ? "s" : ""} from Quran.com` : "Goals are up to date");
+    } catch {
+      setGoalSyncState("error");
+      setGoalSyncMsg("Sync failed. Your session may have expired — try disconnecting and reconnecting.");
+    }
+  }
 
   async function handleDownload() {
     setDownloadLoading(true);
@@ -97,10 +145,32 @@ export default function SettingsPage() {
     setImportedCounts(null);
   }
 
+  function handleStartTour() {
+    window.dispatchEvent(new Event(TOUR_START_EVENT));
+  }
+
   return (
     <AppShell>
       <GuestBanner />
       <div className="p-4 max-w-xl mx-auto space-y-6">
+        <div className="bg-card rounded-2xl border border-border/50 p-6">
+          <div className="flex items-center gap-2 mb-1">
+            <Compass size={18} className="text-primary" />
+            <h2 className="font-serif font-semibold text-foreground text-lg">App Tour</h2>
+          </div>
+          <p className="text-sm text-muted-foreground mb-4">
+            Get a guided walkthrough of Hafith's key features.
+          </p>
+          <button
+            data-testid="button-start-tour"
+            onClick={handleStartTour}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            <Compass size={15} />
+            Take the tour
+          </button>
+        </div>
+
         <div className="bg-card rounded-2xl border border-border/50 p-6">
           <h2 className="font-serif font-semibold text-foreground text-lg mb-4">Account</h2>
           <div className="flex items-center gap-4">
@@ -124,6 +194,137 @@ export default function SettingsPage() {
             </a>
           </div>
         </div>
+
+        {user && (
+          <div className="bg-card rounded-2xl border border-border/50 p-6">
+            <div className="flex items-center gap-2 mb-1">
+              <Link2 size={18} className="text-primary" />
+              <h2 className="font-serif font-semibold text-foreground text-lg">Quran Foundation</h2>
+            </div>
+            <p className="text-sm text-muted-foreground mb-5">
+              Connect your Quran.foundation account to enable Goals and Bookmarks sync.
+            </p>
+
+            {qfParam === "connected" && (
+              <div className="flex items-start gap-2 bg-primary/5 border border-primary/20 rounded-xl p-3 mb-4">
+                <CheckCircle2 size={15} className="text-primary mt-0.5 shrink-0" />
+                <p className="text-xs text-foreground font-medium">Successfully connected to Quran.foundation!</p>
+              </div>
+            )}
+            {qfParam === "error" && (
+              <div className="flex items-start gap-2 bg-destructive/5 border border-destructive/20 rounded-xl p-3 mb-4">
+                <AlertTriangle size={15} className="text-destructive mt-0.5 shrink-0" />
+                <p className="text-xs text-destructive">Connection failed. Please try again.</p>
+              </div>
+            )}
+
+            {qfLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 size={15} className="animate-spin" /> Checking connection…
+              </div>
+            ) : isQFConnected ? (
+              <div className="space-y-4">
+                {qfSyncError && (
+                  <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
+                    <AlertTriangle size={14} className="text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                    <div className="text-xs text-amber-800 dark:text-amber-300">
+                      <p className="font-medium">Sync issue detected</p>
+                      <p className="mt-0.5 text-amber-700 dark:text-amber-400">A recent bookmark or goal failed to sync to Quran.com. Try syncing manually below, or disconnect and reconnect your account.</p>
+                    </div>
+                  </div>
+                )}
+                <div className="bg-secondary/30 rounded-xl p-4 border border-border/40 flex items-center gap-3">
+                  <CheckCircle2 size={16} className="text-primary shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">Connected</p>
+                    {(qfDisplayName || qfEmail) && (
+                      <p className="text-xs text-muted-foreground truncate">{qfDisplayName ?? qfEmail}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Manual sync controls */}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-foreground">Sync from Quran.com</p>
+
+                  {/* Bookmarks sync */}
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handleSyncBookmarks}
+                      disabled={bookmarkSyncState === "loading"}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border border-border hover:bg-secondary/60 text-foreground",
+                        bookmarkSyncState === "loading" && "opacity-70 pointer-events-none",
+                      )}
+                    >
+                      {bookmarkSyncState === "loading"
+                        ? <Loader2 size={12} className="animate-spin" />
+                        : <RefreshCw size={12} />}
+                      Bookmarks
+                    </button>
+                    {bookmarkSyncMsg && (
+                      <span className={cn(
+                        "text-xs",
+                        bookmarkSyncState === "error" ? "text-destructive" : "text-muted-foreground",
+                      )}>
+                        {bookmarkSyncState === "error" && <AlertTriangle size={11} className="inline mr-1" />}
+                        {bookmarkSyncState === "done" && <CheckCircle2 size={11} className="inline mr-1 text-primary" />}
+                        {bookmarkSyncMsg}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Goals sync */}
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handleSyncGoals}
+                      disabled={goalSyncState === "loading"}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border border-border hover:bg-secondary/60 text-foreground",
+                        goalSyncState === "loading" && "opacity-70 pointer-events-none",
+                      )}
+                    >
+                      {goalSyncState === "loading"
+                        ? <Loader2 size={12} className="animate-spin" />
+                        : <RefreshCw size={12} />}
+                      Goals
+                    </button>
+                    {goalSyncMsg && (
+                      <span className={cn(
+                        "text-xs",
+                        goalSyncState === "error" ? "text-destructive" : "text-muted-foreground",
+                      )}>
+                        {goalSyncState === "error" && <AlertTriangle size={11} className="inline mr-1" />}
+                        {goalSyncState === "done" && <CheckCircle2 size={11} className="inline mr-1 text-primary" />}
+                        {goalSyncMsg}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => disconnect()}
+                  disabled={isDisconnecting}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all border border-border hover:bg-secondary/60 text-foreground",
+                    isDisconnecting && "opacity-70 pointer-events-none",
+                  )}
+                >
+                  {isDisconnecting ? <Loader2 size={15} className="animate-spin" /> : <Unlink size={15} />}
+                  {isDisconnecting ? "Disconnecting…" : "Disconnect"}
+                </button>
+              </div>
+            ) : (
+              <a
+                href="/api/auth/qf/connect"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                <ExternalLink size={15} />
+                Connect Quran.foundation
+              </a>
+            )}
+          </div>
+        )}
 
         <div className="bg-card rounded-2xl border border-border/50 p-6">
           <div className="flex items-center gap-2 mb-1">

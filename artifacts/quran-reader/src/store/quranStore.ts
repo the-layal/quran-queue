@@ -15,6 +15,21 @@ export interface ReviewQueueItem {
   repeatCount: number;
 }
 
+export interface SubQueue {
+  isSubQueue: true;
+  id: string;
+  label: string;
+  repeatCount: number;
+  items: ReviewQueueItem[];
+  collapsed?: boolean;
+}
+
+export type QueueEntry = ReviewQueueItem | SubQueue;
+
+export function isSubQueue(entry: QueueEntry): entry is SubQueue {
+  return (entry as SubQueue).isSubQueue === true;
+}
+
 interface QuranStore {
   currentSurah: number;
   currentPage: number;
@@ -24,6 +39,12 @@ interface QuranStore {
   settings: Settings;
   isLoading: boolean;
   error: string | null;
+
+  darkMode: boolean;
+  setDarkMode: (dark: boolean) => void;
+
+  bookmarksPanelOpen: boolean;
+  setBookmarksPanelOpen: (open: boolean) => void;
 
   selectedWordIds: string[];
   brushFineness: BrushFineness;
@@ -40,18 +61,10 @@ interface QuranStore {
     jsonToSvg: Record<string, Record<number, number[]>>
   ) => void;
 
-  // Maps "S:A" → sorted ascending list of selectable SVG word indices for each
-  // ayah on loaded pages.  Populated by MushafSvgPage from the real SVG DOM
-  // when each page renders.  Drives cross-page adjacency checks in useSmartBrush:
-  //   first selectable  = indices[0]
-  //   last  selectable  = indices[indices.length - 1]
-  //   next  neighbor    = indices[indexOf(w) + 1]
-  // Handles ayahs with waw al-atf, waqf marks, or leading juz-star/hizb markers
-  // where SVG word indices diverge from JSON segment counts or have gaps.
   ayahSelectableIndices: Record<string, number[]>;
   setAyahSelectableIndices: (map: Record<string, number[]>) => void;
 
-  reviewQueue: ReviewQueueItem[];
+  reviewQueue: QueueEntry[];
   activeQueueItemId: string | null;
   queuePanelOpen: boolean;
   queueRepeatAll: number;
@@ -83,15 +96,33 @@ interface QuranStore {
   setQueuePanelOpen: (open: boolean) => void;
   setQueueItemRepeat: (id: string, count: number) => void;
   setQueueRepeatAll: (count: number) => void;
+  setSubQueueRepeatAll: (count: number) => void;
   setQueueLoopCount: (count: number) => void;
   setReviewQueue: (items: ReviewQueueItem[]) => void;
+  setQueueEntries: (entries: QueueEntry[]) => void;
   setIsSharedQueue: (shared: boolean) => void;
+
+  // SubQueue actions
+  addSubQueue: (sq: Omit<SubQueue, "isSubQueue" | "id">) => void;
+  dissolveSubQueue: (id: string) => void;
+  setSubQueueRepeat: (id: string, count: number) => void;
+  toggleSubQueueCollapsed: (id: string) => void;
+  reorderItemInSubQueue: (subQueueId: string, fromIndex: number, toIndex: number) => void;
+  promoteToSubQueue: (topLevelIndices: number[], label: string) => void;
+  moveQueueItem: (
+    from: { type: "top"; index: number } | { type: "sub"; subQueueId: string; index: number },
+    to: { type: "top"; index: number } | { type: "sub"; subQueueId: string; index: number; append?: boolean }
+  ) => void;
+  renameSubQueue: (id: string, label: string) => void;
 
   playbackRate: number;
   setPlaybackRate: (rate: number) => void;
 
   selectedReciterId: string;
   setSelectedReciterId: (id: string) => void;
+
+  targetScrollAyah: { surahNumber: number; ayahNumber: number } | null;
+  setTargetScrollAyah: (target: { surahNumber: number; ayahNumber: number } | null) => void;
 
   blindReviewMode: BlindReviewMode;
   manuallyRevealedIds: string[];
@@ -104,6 +135,17 @@ interface QuranStore {
 
 function genId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function clampEntry(entry: QueueEntry): QueueEntry {
+  if (isSubQueue(entry)) {
+    return {
+      ...entry,
+      repeatCount: clampRepeat(entry.repeatCount),
+      items: entry.items.map((item) => ({ ...item, repeatCount: clampRepeat(item.repeatCount) })),
+    };
+  }
+  return { ...entry, repeatCount: clampRepeat(entry.repeatCount) };
 }
 
 export const useQuranStore = create<QuranStore>()(
@@ -122,6 +164,15 @@ export const useQuranStore = create<QuranStore>()(
       },
       isLoading: false,
       error: null,
+
+      darkMode: typeof window !== "undefined" && document.documentElement.classList.contains("dark"),
+      setDarkMode: (dark) => {
+        document.documentElement.classList.toggle("dark", dark);
+        set({ darkMode: dark });
+      },
+
+      bookmarksPanelOpen: false,
+      setBookmarksPanelOpen: (open) => set({ bookmarksPanelOpen: open }),
 
       selectedWordIds: [],
       brushFineness: "word",
@@ -162,7 +213,6 @@ export const useQuranStore = create<QuranStore>()(
       setBlindReviewMode: (blindReviewMode) =>
         set((state) => ({
           blindReviewMode,
-          // Leaving context-only mode clears the locked set so all words show again.
           lockedContextIds: blindReviewMode === "context-only" ? state.lockedContextIds : [],
         })),
       revealWords: (ids) =>
@@ -208,8 +258,6 @@ export const useQuranStore = create<QuranStore>()(
       confirmSelection: () =>
         set((state) => {
           if (state.blindReviewMode === "context-only") {
-            // Freeze the hidden set so context-only keeps words hidden after
-            // the green selection highlight is cleared.
             return {
               lockedContextIds: state.selectedWordIds,
               selectedWordIds: [],
@@ -229,11 +277,36 @@ export const useQuranStore = create<QuranStore>()(
         })),
 
       removeFromQueue: (id) =>
-        set((state) => ({
-          reviewQueue: state.reviewQueue.filter((item) => item.id !== id),
-          activeQueueItemId:
-            state.activeQueueItemId === id ? null : state.activeQueueItemId,
-        })),
+        set((state) => {
+          const newQueue: QueueEntry[] = [];
+          let activeCleared = false;
+          for (const entry of state.reviewQueue) {
+            if (isSubQueue(entry)) {
+              if (entry.id === id) {
+                // If the active leaf item is inside this subqueue, clear it
+                if (
+                  state.activeQueueItemId &&
+                  entry.items.some((item) => item.id === state.activeQueueItemId)
+                ) {
+                  activeCleared = true;
+                }
+                continue; // remove the whole subqueue
+              }
+              const filteredItems = entry.items.filter((item) => item.id !== id);
+              if (filteredItems.length === 0) continue; // dissolve empty subqueue
+              newQueue.push({ ...entry, items: filteredItems });
+            } else {
+              if (entry.id !== id) newQueue.push(entry);
+            }
+          }
+          return {
+            reviewQueue: newQueue,
+            activeQueueItemId:
+              activeCleared || state.activeQueueItemId === id
+                ? null
+                : state.activeQueueItemId,
+          };
+        }),
 
       reorderQueue: (fromIndex, toIndex) =>
         set((state) => {
@@ -261,15 +334,39 @@ export const useQuranStore = create<QuranStore>()(
 
       setQueueItemRepeat: (id, count) =>
         set((state) => ({
-          reviewQueue: state.reviewQueue.map((item) =>
-            item.id === id ? { ...item, repeatCount: count } : item
-          ),
+          reviewQueue: state.reviewQueue.map((entry) => {
+            if (isSubQueue(entry)) {
+              return {
+                ...entry,
+                items: entry.items.map((item) =>
+                  item.id === id ? { ...item, repeatCount: count } : item
+                ),
+              };
+            }
+            return entry.id === id ? { ...entry, repeatCount: count } : entry;
+          }),
         })),
 
       setQueueRepeatAll: (count) =>
         set((state) => ({
           queueRepeatAll: count,
-          reviewQueue: state.reviewQueue.map((item) => ({ ...item, repeatCount: count })),
+          reviewQueue: state.reviewQueue.map((entry) => {
+            if (isSubQueue(entry)) {
+              return {
+                ...entry,
+                items: entry.items.map((item) => ({ ...item, repeatCount: count })),
+              };
+            }
+            return { ...entry, repeatCount: count };
+          }),
+        })),
+
+      setSubQueueRepeatAll: (count) =>
+        set((state) => ({
+          reviewQueue: state.reviewQueue.map((entry) => {
+            if (isSubQueue(entry)) return { ...entry, repeatCount: count };
+            return entry;
+          }),
         })),
 
       setQueueLoopCount: (count) => set({ queueLoopCount: count }),
@@ -284,12 +381,161 @@ export const useQuranStore = create<QuranStore>()(
           isSharedQueue: false,
         }),
 
+      setQueueEntries: (entries) =>
+        set({
+          reviewQueue: entries.map((entry) => clampEntry(entry)),
+          activeQueueItemId: null,
+          isSharedQueue: false,
+        }),
+
       setIsSharedQueue: (shared) => set({ isSharedQueue: shared }),
+
+      // SubQueue actions
+
+      addSubQueue: (sq) =>
+        set((state) => ({
+          reviewQueue: [
+            ...state.reviewQueue,
+            { ...sq, isSubQueue: true as const, id: genId() },
+          ],
+        })),
+
+      dissolveSubQueue: (id) =>
+        set((state) => {
+          const newQueue: QueueEntry[] = [];
+          for (const entry of state.reviewQueue) {
+            if (isSubQueue(entry) && entry.id === id) {
+              newQueue.push(...entry.items);
+            } else {
+              newQueue.push(entry);
+            }
+          }
+          return { reviewQueue: newQueue };
+        }),
+
+      setSubQueueRepeat: (id, count) =>
+        set((state) => ({
+          reviewQueue: state.reviewQueue.map((entry) =>
+            isSubQueue(entry) && entry.id === id
+              ? { ...entry, repeatCount: count }
+              : entry
+          ),
+        })),
+
+      toggleSubQueueCollapsed: (id) =>
+        set((state) => ({
+          reviewQueue: state.reviewQueue.map((entry) =>
+            isSubQueue(entry) && entry.id === id
+              ? { ...entry, collapsed: !entry.collapsed }
+              : entry
+          ),
+        })),
+
+      reorderItemInSubQueue: (subQueueId, fromIndex, toIndex) =>
+        set((state) => ({
+          reviewQueue: state.reviewQueue.map((entry) => {
+            if (!isSubQueue(entry) || entry.id !== subQueueId) return entry;
+            const items = [...entry.items];
+            if (
+              fromIndex < 0 || fromIndex >= items.length ||
+              toIndex < 0 || toIndex >= items.length ||
+              fromIndex === toIndex
+            ) return entry;
+            const [moved] = items.splice(fromIndex, 1);
+            items.splice(toIndex, 0, moved);
+            return { ...entry, items };
+          }),
+        })),
+
+      promoteToSubQueue: (topLevelIndices, label) =>
+        set((state) => {
+          const indices = new Set(topLevelIndices);
+          const promoted: ReviewQueueItem[] = [];
+          const remaining: QueueEntry[] = [];
+          state.reviewQueue.forEach((entry, i) => {
+            if (indices.has(i) && !isSubQueue(entry)) {
+              promoted.push(entry);
+            } else {
+              remaining.push(entry);
+            }
+          });
+          if (promoted.length === 0) return state;
+          const firstIdx = Math.min(...topLevelIndices);
+          const newSubQueue: SubQueue = {
+            isSubQueue: true,
+            id: genId(),
+            label,
+            repeatCount: 1,
+            items: promoted,
+            collapsed: false,
+          };
+          const result = [...remaining];
+          result.splice(Math.min(firstIdx, result.length), 0, newSubQueue);
+          return { reviewQueue: result };
+        }),
+
+      moveQueueItem: (from, to) =>
+        set((state) => {
+          // 1. Extract the item from its source
+          let item: ReviewQueueItem | null = null;
+          let queue: QueueEntry[];
+
+          if (from.type === "top") {
+            const entry = state.reviewQueue[from.index];
+            if (!entry || isSubQueue(entry)) return state;
+            item = entry as ReviewQueueItem;
+            queue = state.reviewQueue.filter((_, i) => i !== from.index);
+          } else {
+            const sq = state.reviewQueue.find(
+              (e) => isSubQueue(e) && (e as SubQueue).id === from.subQueueId
+            ) as SubQueue | undefined;
+            if (!sq || from.index < 0 || from.index >= sq.items.length) return state;
+            item = sq.items[from.index];
+            queue = state.reviewQueue.map((e) => {
+              if (!isSubQueue(e) || (e as SubQueue).id !== from.subQueueId) return e;
+              return { ...(e as SubQueue), items: (e as SubQueue).items.filter((_, i) => i !== from.index) };
+            });
+          }
+
+          if (!item) return state;
+
+          // 2. Insert at the destination
+          if (to.type === "top") {
+            let idx = to.index;
+            if (from.type === "top" && from.index < to.index) idx = Math.max(0, idx - 1);
+            idx = Math.max(0, Math.min(idx, queue.length));
+            const result = [...queue];
+            result.splice(idx, 0, item);
+            return { reviewQueue: result };
+          } else {
+            return {
+              reviewQueue: queue.map((e) => {
+                if (!isSubQueue(e) || (e as SubQueue).id !== to.subQueueId) return e;
+                const sq = e as SubQueue;
+                const items = [...sq.items];
+                let idx = to.append ? items.length : to.index;
+                idx = Math.max(0, Math.min(idx, items.length));
+                items.splice(idx, 0, item!);
+                return { ...sq, items };
+              }),
+            };
+          }
+        }),
+
+      renameSubQueue: (id, label) =>
+        set((state) => ({
+          reviewQueue: state.reviewQueue.map((e) =>
+            isSubQueue(e) && (e as SubQueue).id === id ? { ...e, label } : e
+          ),
+        })),
 
       setPlaybackRate: (rate) => set({ playbackRate: rate }),
 
       setSelectedReciterId: (id) =>
         set({ selectedReciterId: getReciter(id).id }),
+
+      targetScrollAyah: null,
+      setTargetScrollAyah: (targetScrollAyah) => set({ targetScrollAyah }),
     }),
     {
       name: "quran-reader-store",
@@ -306,17 +552,14 @@ export const useQuranStore = create<QuranStore>()(
         isSharedQueue: state.isSharedQueue,
         playbackRate: state.playbackRate,
         selectedReciterId: state.selectedReciterId,
+        darkMode: state.darkMode,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
-        // Clamp any stale persisted repeat values (e.g. old 4× or 5× options).
         state.queueRepeatAll = clampRepeat(state.queueRepeatAll);
-        state.reviewQueue = state.reviewQueue.map((item) => ({
-          ...item,
-          repeatCount: clampRepeat(item.repeatCount),
-        }));
-        // Coerce any stale/unknown reciter id back to a valid one.
+        state.reviewQueue = state.reviewQueue.map((entry) => clampEntry(entry as QueueEntry));
         state.selectedReciterId = getReciter(state.selectedReciterId).id;
+        document.documentElement.classList.toggle("dark", !!state.darkMode);
       },
     }
   )

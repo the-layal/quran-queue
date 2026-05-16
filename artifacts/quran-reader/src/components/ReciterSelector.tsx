@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { User2, Check } from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
 import { RECITERS, getReciter } from "../data/reciters";
@@ -7,23 +8,44 @@ const POPOVER_WIDTH = 256; // 16rem
 const MARGIN = 8; // min gap from viewport edge in px
 
 interface PopoverPos {
-  bottom: number;
+  /** Fixed pixel distance from bottom of viewport (upward placement). Undefined when opening downward. */
+  bottom?: number;
+  /** Fixed pixel distance from top of viewport (downward placement). Undefined when opening upward. */
+  top?: number;
   left: number;
   width: number;
+  maxHeight: number;
 }
 
 function computePopoverPos(button: HTMLButtonElement): PopoverPos {
   const rect = button.getBoundingClientRect();
   const vw = window.innerWidth;
+  const vh = window.innerHeight;
   const width = Math.min(POPOVER_WIDTH, vw - MARGIN * 2);
 
   // Prefer right-aligned to button; clamp so it never clips left or right edge.
   let left = rect.right - width;
   left = Math.max(MARGIN, Math.min(left, vw - width - MARGIN));
 
-  const bottom = window.innerHeight - rect.top + MARGIN;
+  const spaceAbove = rect.top - MARGIN;
+  const spaceBelow = vh - rect.bottom - MARGIN;
 
-  return { bottom, left, width };
+  // Open toward whichever side has more room.
+  if (spaceAbove >= spaceBelow) {
+    return {
+      bottom: vh - rect.top + MARGIN,
+      left,
+      width,
+      maxHeight: Math.max(0, spaceAbove),
+    };
+  } else {
+    return {
+      top: rect.bottom + MARGIN,
+      left,
+      width,
+      maxHeight: Math.max(0, spaceBelow),
+    };
+  }
 }
 
 interface ReciterSelectorProps {
@@ -99,16 +121,18 @@ export default function ReciterSelector({ style }: ReciterSelectorProps) {
         </span>
       </button>
 
-      {open && pos && (
+      {open && pos && createPortal(
         <div
           ref={popoverRef}
           style={{
             position: "fixed",
             bottom: pos.bottom,
+            top: pos.top,
             left: pos.left,
             width: pos.width,
+            maxHeight: pos.maxHeight,
           }}
-          className="z-[70] bg-card border border-border rounded-xl shadow-xl p-1.5 flex flex-col gap-0.5 max-h-[60vh] overflow-y-auto overscroll-contain"
+          className="z-[70] bg-card border border-border rounded-xl shadow-xl p-1.5 flex flex-col gap-0.5 overflow-y-auto overscroll-contain"
           role="listbox"
           aria-label="Choose reciter"
         >
@@ -148,7 +172,8 @@ export default function ReciterSelector({ style }: ReciterSelectorProps) {
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

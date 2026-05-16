@@ -9,23 +9,8 @@ import type {
   CompleteAdvancedInput,
 } from "./trackerStorage";
 import { getAyahsForReference } from "./referenceFanOut";
-import { getPageEquivalent, getPagesForReference } from "../lib/page-utils";
+import { getPageEquivalent, getPagesForReference, groupConsecutivePages, TOTAL_PAGES } from "../lib/page-utils";
 
-const TOTAL_QURAN_PAGES = 604;
-
-function freshPageRefs(skipPages: Set<number>): string[] {
-  const refs: string[] = [];
-  for (let p = 1; p <= TOTAL_QURAN_PAGES; p++) {
-    if (!skipPages.has(p)) refs.push(`page:${p}`);
-  }
-  return refs;
-}
-
-function pagesCoveredBy(refs: string[]): Set<number> {
-  const out = new Set<number>();
-  for (const r of refs) for (const p of getPagesForReference(r)) out.add(p);
-  return out;
-}
 
 const DATA_VERSION = "2";
 const KEYS = {
@@ -37,7 +22,17 @@ const KEYS = {
   actions: "hafith_actions",
   firstActionDate: "hafith_first_action_date",
   nudgeDismissed: "hafith_nudge_dismissed",
+  bookmarks: "hafith_bookmarks",
+  onboardingComplete: "hafith_onboarding_complete",
 };
+
+export function isOnboardingComplete(): boolean {
+  return localStorage.getItem(KEYS.onboardingComplete) === "1";
+}
+
+export function markOnboardingComplete(): void {
+  localStorage.setItem(KEYS.onboardingComplete, "1");
+}
 
 function ensureDataVersion(): void {
   const stored = localStorage.getItem(KEYS.dataVersion);
@@ -274,13 +269,79 @@ export class LocalTrackerStorage implements ITrackerStorage {
 
   async getDueSrsItems(): Promise<SrsItem[]> {
     const now = new Date();
-    return readSrs().filter((i) => new Date(i.nextReviewDate) <= now);
+    return readSrs().filter((i) => !i.retired && new Date(i.nextReviewDate) <= now);
+  }
+
+  async retireSurah(reference: string): Promise<void> {
+    const items = readSrs();
+    const idx = items.findIndex((i) => i.reference === reference);
+    if (idx !== -1) {
+      items[idx] = { ...items[idx], retired: true, retiredAt: new Date().toISOString() };
+    } else {
+      const next = new Date();
+      next.setDate(next.getDate() + 365);
+      items.push({
+        id: nextId(),
+        type: "surah",
+        reference,
+        easeFactor: 280,
+        interval: 365,
+        repetitions: 5,
+        nextReviewDate: next.toISOString(),
+        retired: true,
+        retiredAt: new Date().toISOString(),
+      });
+    }
+    writeSrs(items);
+    const plan = await this.getTodayPlan();
+    if (plan) {
+      const plannedItems = plan.plannedItems.filter((r) => r !== reference);
+      this.replacePlan({ ...plan, plannedItems });
+    }
+  }
+
+  async unretireSurah(reference: string): Promise<void> {
+    const items = readSrs();
+    const idx = items.findIndex((i) => i.reference === reference);
+    if (idx !== -1) {
+      const next = new Date();
+      next.setDate(next.getDate() + 60);
+      items[idx] = {
+        ...items[idx],
+        retired: false,
+        retiredAt: null,
+        interval: 60,
+        nextReviewDate: next.toISOString(),
+      };
+      writeSrs(items);
+    }
+  }
+
+  async addPerfectlyKnownToSession(): Promise<DailyPlan> {
+    const plan = await this.requireToday();
+    const retiredItems = readSrs().filter((i) => i.retired);
+    for (const item of retiredItems) {
+      if (!plan.plannedItems.includes(item.reference)) {
+        plan.plannedItems = [...plan.plannedItems, item.reference];
+      }
+    }
+    return this.replacePlan(plan);
   }
 
   async getTodayPlan(): Promise<DailyPlan | null> {
     const t = todayStr();
     const plans = readPlans();
-    return plans.find((p) => p.date === t) ?? null;
+    const plan = plans.find((p) => p.date === t) ?? null;
+    if (!plan) return null;
+    const srsRefs = new Set(readSrs().map((i) => i.reference));
+    const filtered = plan.plannedItems.filter((r) => srsRefs.has(r));
+    if (filtered.length !== plan.plannedItems.length) {
+      const idx = plans.findIndex((p) => p.date === t);
+      plans[idx] = { ...plan, plannedItems: filtered };
+      writePlans(plans);
+      return plans[idx];
+    }
+    return plan;
   }
 
   async getAllPlans(): Promise<DailyPlan[]> {
@@ -288,21 +349,52 @@ export class LocalTrackerStorage implements ITrackerStorage {
   }
 
   async createOrUpdatePlan({ bandwidth }: { bandwidth: number }): Promise<DailyPlan> {
+    // Defined inline so it can close over readSrs() — mirrors server fillFromDueAndFresh.
+    function fillFreshPages(planned: string[], usedPages: number): { planned: string[]; usedPages: number } {
+      const knownPages = new Set<number>();
+      for (const item of readSrs()) {
+        for (const p of getPagesForReference(item.reference)) knownPages.add(p);
+      }
+      const coveredPages = new Set<number>();
+      for (const ref of planned) {
+        for (const p of getPagesForReference(ref)) coveredPages.add(p);
+      }
+      const freshPages: number[] = [];
+      for (let p = 1; p <= TOTAL_PAGES; p++) {
+        if (!coveredPages.has(p) && !knownPages.has(p)) freshPages.push(p);
+      }
+      let i = 0;
+      while (usedPages < bandwidth && i < freshPages.length) {
+        const batchEnd = Math.min(i + (bandwidth - usedPages), freshPages.length);
+        const batch = freshPages.slice(i, batchEnd);
+        for (const ref of groupConsecutivePages(batch)) {
+          const weight = getPageEquivalent(ref);
+          if (usedPages + weight > bandwidth && planned.length > 0) break;
+          planned.push(ref);
+          usedPages += weight;
+          for (const p of getPagesForReference(ref)) coveredPages.add(p);
+        }
+        i = batchEnd;
+      }
+      return { planned, usedPages };
+    }
+
     const t = todayStr();
     const plans = readPlans();
     const existingIdx = plans.findIndex((p) => p.date === t);
 
     if (existingIdx === -1) {
+      const retiredRefSet = new Set(readSrs().filter((i) => i.retired).map((i) => i.reference));
       const carryover: string[] = [];
       const yPlan = plans.find((p) => p.date === yesterdayStr());
       if (yPlan) {
         const completed = yPlan.completedItems || [];
-        for (const ref of yPlan.plannedItems || []) if (!completed.includes(ref)) carryover.push(ref);
+        for (const ref of yPlan.plannedItems || [])
+          if (!completed.includes(ref) && !retiredRefSet.has(ref)) carryover.push(ref);
       }
-      const planned: string[] = [...carryover];
+      let planned: string[] = [...carryover];
       let usedPages = planned.reduce((s, r) => s + getPageEquivalent(r), 0);
       const due = await this.getDueSrsItems();
-      const all = await this.getSrsItems();
       for (const item of due) {
         if (usedPages >= bandwidth) break;
         if (!planned.includes(item.reference)) {
@@ -311,13 +403,7 @@ export class LocalTrackerStorage implements ITrackerStorage {
         }
       }
       if (usedPages < bandwidth) {
-        const covered = pagesCoveredBy(planned);
-        for (const item of all) for (const p of getPagesForReference(item.reference)) covered.add(p);
-        for (const ref of freshPageRefs(covered)) {
-          if (usedPages >= bandwidth) break;
-          planned.push(ref);
-          usedPages += getPageEquivalent(ref);
-        }
+        ({ planned, usedPages } = fillFreshPages(planned, usedPages));
       }
       const plan: DailyPlan = {
         id: nextId(),
@@ -333,27 +419,24 @@ export class LocalTrackerStorage implements ITrackerStorage {
     }
 
     const existing = plans[existingIdx];
-    const planned = [...(existing.plannedItems || [])];
+    const allSrs = readSrs();
+    const srsRefs = new Set(allSrs.map((i) => i.reference));
+    const retiredRefsUpdate = new Set(allSrs.filter((i) => i.retired).map((i) => i.reference));
+    const completedExisting = existing.completedItems || [];
+    let planned = (existing.plannedItems || []).filter(
+      (r) => srsRefs.has(r) && (!retiredRefsUpdate.has(r) || completedExisting.includes(r)),
+    );
     let usedPages = planned.reduce((s, r) => s + getPageEquivalent(r), 0);
+    const due = await this.getDueSrsItems();
+    for (const item of due) {
+      if (usedPages >= bandwidth) break;
+      if (!planned.includes(item.reference)) {
+        planned.push(item.reference);
+        usedPages += getPageEquivalent(item.reference);
+      }
+    }
     if (usedPages < bandwidth) {
-      const due = await this.getDueSrsItems();
-      const all = await this.getSrsItems();
-      for (const item of due) {
-        if (usedPages >= bandwidth) break;
-        if (!planned.includes(item.reference)) {
-          planned.push(item.reference);
-          usedPages += getPageEquivalent(item.reference);
-        }
-      }
-      if (usedPages < bandwidth) {
-        const covered = pagesCoveredBy(planned);
-        for (const item of all) for (const p of getPagesForReference(item.reference)) covered.add(p);
-        for (const ref of freshPageRefs(covered)) {
-          if (usedPages >= bandwidth) break;
-          planned.push(ref);
-          usedPages += getPageEquivalent(ref);
-        }
-      }
+      ({ planned, usedPages } = fillFreshPages(planned, usedPages));
     }
     const updated: DailyPlan = { ...existing, bandwidth, plannedItems: planned };
     plans[existingIdx] = updated;
@@ -364,23 +447,17 @@ export class LocalTrackerStorage implements ITrackerStorage {
   async addMoreItems({ count }: { count: number }): Promise<DailyPlan> {
     const plan = await this.requireToday();
     const due = await this.getDueSrsItems();
-    const all = await this.getSrsItems();
+    const dismissedPages = new Set<number>();
+    for (const ref of (plan.removedItems || [])) {
+      for (const p of getPagesForReference(ref)) dismissedPages.add(p);
+    }
     let added = 0;
     for (const item of due) {
       if (added >= count) break;
-      if (!plan.plannedItems.includes(item.reference)) {
-        plan.plannedItems = [...plan.plannedItems, item.reference];
-        added += getPageEquivalent(item.reference);
-      }
-    }
-    if (added < count) {
-      const covered = pagesCoveredBy(plan.plannedItems);
-      for (const item of all) for (const p of getPagesForReference(item.reference)) covered.add(p);
-      for (const ref of freshPageRefs(covered)) {
-        if (added >= count) break;
-        plan.plannedItems = [...plan.plannedItems, ref];
-        added += getPageEquivalent(ref);
-      }
+      if (plan.plannedItems.includes(item.reference)) continue;
+      if (getPagesForReference(item.reference).some((p) => dismissedPages.has(p))) continue;
+      plan.plannedItems = [...plan.plannedItems, item.reference];
+      added += getPageEquivalent(item.reference);
     }
     return this.replacePlan(plan);
   }
@@ -417,6 +494,8 @@ export class LocalTrackerStorage implements ITrackerStorage {
     const plan = await this.requireToday();
     plan.plannedItems = plan.plannedItems.filter((r) => r !== reference);
     plan.completedItems = plan.completedItems.filter((r) => r !== reference);
+    const removed = plan.removedItems || [];
+    if (!removed.includes(reference)) plan.removedItems = [...removed, reference];
     return this.replacePlan(plan);
   }
 
@@ -548,6 +627,35 @@ export class LocalTrackerStorage implements ITrackerStorage {
     if (logs.length > 0 && !localStorage.getItem(KEYS.firstActionDate)) {
       writeJSON(KEYS.firstActionDate, todayStr());
     }
+  }
+
+  async seedPriorKnowledge(items: Array<{ reference: string; vibe: number }>): Promise<void> {
+    const SEED: Record<number, { interval: number; repetitions: number; easeFactor: number }> = {
+      1: { interval: 1,  repetitions: 1, easeFactor: 220 },
+      2: { interval: 3,  repetitions: 2, easeFactor: 235 },
+      3: { interval: 7,  repetitions: 3, easeFactor: 250 },
+      4: { interval: 21, repetitions: 4, easeFactor: 265 },
+      5: { interval: 60, repetitions: 5, easeFactor: 280 },
+    };
+    const srsItems = readSrs();
+    const now = new Date();
+    for (const { reference, vibe } of items) {
+      if (srsItems.find((s) => s.reference === reference)) continue;
+      const seed = SEED[vibe] ?? SEED[3];
+      const next = new Date(now);
+      next.setDate(next.getDate() + seed.interval);
+      srsItems.push({
+        id: nextId(),
+        type: "surah",
+        reference,
+        easeFactor: seed.easeFactor,
+        interval: seed.interval,
+        repetitions: seed.repetitions,
+        nextReviewDate: next.toISOString(),
+      });
+    }
+    writeSrs(srsItems);
+    if (items.length > 0) recordAction();
   }
 
   async isEmpty(): Promise<boolean> {

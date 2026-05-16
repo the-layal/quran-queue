@@ -1,11 +1,7 @@
-import { useEffect, useLayoutEffect, useCallback, useState, useRef, type RefObject } from "react";
+import { useEffect, useCallback, useState, useRef, type RefObject } from "react";
 import {
   ChevronLeft,
   ChevronRight,
-  Settings,
-  ListMusic,
-  Moon,
-  Sun,
   Loader2,
   AlertCircle,
   BookOpen,
@@ -13,10 +9,12 @@ import {
   ChevronDown,
   Search,
   X,
-  Check,
   Eye,
   RotateCcw,
+  Bookmark,
+  BookmarkCheck,
 } from "lucide-react";
+import { useBookmarks } from "../hooks/useBookmarks";
 import AppShell from "../components/AppShell";
 import { useQuranStore } from "../store/quranStore";
 import {
@@ -31,8 +29,10 @@ import SurahHeader from "../components/SurahHeader";
 import MushafSvgPage from "../components/MushafSvgPage";
 import BrushFinenessToggle from "../components/BrushFinenessToggle";
 import BlindReviewToggle from "../components/BlindReviewToggle";
+import VersePreviewChip from "../components/VersePreviewChip";
 import AudioControlBar from "../components/AudioControlBar";
 import ReviewQueuePanel from "../components/ReviewQueuePanel";
+
 import { useSmartBrush } from "../hooks/useSmartBrush";
 import { useQueuePlayback } from "../hooks/useQueuePlayback";
 
@@ -235,6 +235,8 @@ function getOrderedWordIds(isMushaf: boolean): string[] {
 // in flight) don't race ahead and render with fallback glyphs (tofu).
 const qpcPagePromises = new Map<number, Promise<void>>();
 
+const FONT_TIMEOUT_MS = 10_000;
+
 function loadQpcPage(pageNum: number): Promise<void> {
   const cached = qpcPagePromises.get(pageNum);
   if (cached) return cached;
@@ -251,28 +253,46 @@ function loadQpcPage(pageNum: number): Promise<void> {
     style: "normal",
     weight: "normal",
   });
-  const p = face.load().then(
+
+  // Store the real load promise in cache so a background load that completes
+  // after a timeout is not discarded — future callers will resolve instantly.
+  const loadAndAdd: Promise<void> = face.load().then(
     (loaded) => {
       document.fonts.add(loaded);
     },
     (err) => {
-      // Drop from cache so a future mount can retry, but rethrow so
-      // consumers don't treat a failed load as "fonts ready" (which would
-      // re-introduce tofu rendering).
+      // Hard failure (network error): drop from cache so a future mount can
+      // retry. Do NOT drop on timeout — the load may still finish in the
+      // background and benefit a subsequent navigation.
       qpcPagePromises.delete(pageNum);
       throw err;
     },
   );
-  qpcPagePromises.set(pageNum, p);
-  return p;
+  qpcPagePromises.set(pageNum, loadAndAdd);
+
+  // Race the real load against a 10 s timeout for the current caller.
+  const timeout = new Promise<void>((_, reject) =>
+    setTimeout(
+      () => reject(new Error(`Font load timed out: page ${pageNum}`)),
+      FONT_TIMEOUT_MS,
+    ),
+  );
+  return Promise.race([loadAndAdd, timeout]);
 }
 
-function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number): boolean {
+interface QpcFontsResult {
+  fontsReady: boolean;
+  usingFallback: boolean;
+}
+
+function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number): QpcFontsResult {
   const [fontsReady, setFontsReady] = useState(false);
+  const [usingFallback, setUsingFallback] = useState(false);
 
   useEffect(() => {
     if (ayahs.length === 0) {
       setFontsReady(false);
+      setUsingFallback(false);
       return;
     }
 
@@ -287,6 +307,7 @@ function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number): boolean {
     }
 
     setFontsReady(false);
+    setUsingFallback(false);
     let cancelled = false;
 
     const pending: Promise<void>[] = [];
@@ -298,9 +319,12 @@ function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number): boolean {
         if (!cancelled) setFontsReady(true);
       })
       .catch(() => {
-        // Keep fontsReady=false on failure; loading screen stays up rather
-        // than painting tofu glyphs. A future mount will retry via the
-        // promise cache (already cleared above).
+        // Font API timed out or failed — activate bundled Uthmanic font
+        // fallback so users can still read instead of seeing a spinner forever.
+        if (!cancelled) {
+          setUsingFallback(true);
+          setFontsReady(true);
+        }
       });
 
     return () => {
@@ -308,27 +332,52 @@ function useQpcFonts(ayahs: QuranAyah[], surahNumber?: number): boolean {
     };
   }, [ayahs, surahNumber]);
 
-  return fontsReady;
+  return { fontsReady, usingFallback };
 }
+
+const FALLBACK_FONT = "UthmanicHafs1Ver18, 'Scheherazade New', serif";
 
 function VerseBlock({
   ayah,
   fontSize,
   translation,
   showTransliteration,
+  isBookmarked,
+  onToggleBookmark,
+  usingFallback,
 }: {
   ayah: QuranAyah;
   fontSize: number;
   translation?: string;
   showTransliteration?: boolean;
+  isBookmarked?: boolean;
+  onToggleBookmark?: () => void;
+  usingFallback?: boolean;
 }) {
   return (
-    <div className="verse-block flex items-start gap-3">
-      {/* Left: surah:ayah pill badge */}
-      <div className="flex-shrink-0 pt-1">
+    <div id={`verse-${ayah.surah.number}:${ayah.numberInSurah}`} className="verse-block group flex items-start gap-3">
+      {/* Left: surah:ayah pill badge + bookmark */}
+      <div className="flex-shrink-0 pt-1 flex flex-col items-center gap-1">
         <div className="ayah-badge select-none">
           {ayah.surah.number}:{ayah.numberInSurah}
         </div>
+        {onToggleBookmark && (
+          <button
+            onClick={onToggleBookmark}
+            aria-label={isBookmarked ? "Remove bookmark" : "Bookmark this ayah"}
+            className={`p-1 rounded-md transition-all duration-150 ${
+              isBookmarked
+                ? "text-primary opacity-100"
+                : "text-muted-foreground opacity-100 md:opacity-0 md:group-hover:opacity-100"
+            } hover:bg-muted focus-visible:opacity-100 focus-visible:outline-none`}
+            style={{ touchAction: "manipulation" }}
+          >
+            {isBookmarked
+              ? <BookmarkCheck className="w-3.5 h-3.5" />
+              : <Bookmark className="w-3.5 h-3.5" />
+            }
+          </button>
+        )}
       </div>
 
       {/* Right: Arabic text block + optional transliteration + optional translation */}
@@ -341,43 +390,31 @@ function VerseBlock({
         >
           {ayah.words.map((word) => {
             const translit = showTransliteration ? word.transliteration : undefined;
+            const wordFont = usingFallback
+              ? FALLBACK_FONT
+              : `QCFv2p${word.pageNumber}, serif`;
+            const wordText = usingFallback ? word.text : word.codeV2;
             return (
               <span
                 key={word.spanId}
                 id={word.spanId}
                 className={translit ? "quran-word quran-word--translit" : "quran-word"}
-                style={{ fontFamily: `QCFv2p${word.pageNumber}, serif` }}
+                style={{ fontFamily: wordFont }}
                 data-surah={word.surahNumber}
                 data-ayah={word.ayahNumber}
                 data-word={word.wordIndex}
               >
                 {translit ? (
                   <>
-                    <span className="quran-glyph">{word.codeV2}{" "}</span>
+                    <span className="quran-glyph">{wordText}{" "}</span>
                     <span className="word-translit" dir="ltr" aria-hidden="true">{translit}</span>
                   </>
                 ) : (
-                  <>{word.codeV2}{" "}</>
+                  <>{wordText}{" "}</>
                 )}
               </span>
             );
           })}
-          {ayah.endMarkerCodeV2 ? (
-            <span
-              className="ayah-end-marker select-none"
-              style={{ fontFamily: `QCFv2p${ayah.endMarkerPageNumber}, serif` }}
-              aria-label={`Ayah ${ayah.numberInSurah}`}
-            >
-              {ayah.endMarkerCodeV2}
-            </span>
-          ) : (
-            <span
-              className="ayah-end-marker select-none"
-              aria-label={`Ayah ${ayah.numberInSurah}`}
-            >
-              {toEasternArabic(ayah.numberInSurah)}
-            </span>
-          )}
         </div>
 
         {translation !== undefined && (
@@ -440,8 +477,9 @@ function SurahReadingView({
 }) {
   const firstAyah = ayahs[0];
   const containerRef = useRef<HTMLDivElement>(null);
-  const fontsReady = useQpcFonts(ayahs, surahNumber);
+  const { fontsReady, usingFallback } = useQpcFonts(ayahs, surahNumber);
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
+  const { isBookmarked, toggleBookmark } = useBookmarks();
 
   const { translations, translationLoading, translationError } =
     useReadingTranslation(surahNumber, showTranslation);
@@ -450,6 +488,18 @@ function SurahReadingView({
   const blindReviewMode = useQuranStore((s) => s.blindReviewMode);
   const manuallyRevealedIds = useQuranStore((s) => s.manuallyRevealedIds);
   const lockedContextIds = useQuranStore((s) => s.lockedContextIds);
+  const targetScrollAyah = useQuranStore((s) => s.targetScrollAyah);
+  const setTargetScrollAyah = useQuranStore((s) => s.setTargetScrollAyah);
+
+  // Scroll to a specific ayah requested from Saved Verses navigation
+  useEffect(() => {
+    if (!targetScrollAyah || targetScrollAyah.surahNumber !== surahNumber || !fontsReady) return;
+    const el = document.getElementById(`verse-${surahNumber}:${targetScrollAyah.ayahNumber}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTargetScrollAyah(null);
+    }
+  }, [targetScrollAyah, surahNumber, fontsReady, setTargetScrollAyah]);
 
   // Brush pointer handlers — must be called before any early return
   const brush = useSmartBrush("reading", containerRef as RefObject<HTMLElement | null>);
@@ -601,6 +651,9 @@ function SurahReadingView({
                 ? translations.get(ayah.numberInSurah)
                 : undefined
             }
+            isBookmarked={isBookmarked(surahNumber, ayah.numberInSurah)}
+            onToggleBookmark={() => toggleBookmark(surahNumber, ayah.numberInSurah)}
+            usingFallback={usingFallback}
           />
         ))}
       </div>
@@ -615,40 +668,6 @@ function SurahReadingView({
         ﴾ {surahInfo?.englishName ?? ""} ﴿
       </div>
     </div>
-  );
-}
-
-// ── Settings panel ────────────────────────────────────────────────────────────
-
-function SettingsPanel({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
-  if (!open) return null;
-  return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-card rounded-t-2xl border border-border shadow-xl p-6 max-w-lg mx-auto">
-        <div className="w-10 h-1 bg-muted-foreground/30 rounded-full mx-auto mb-5" />
-        <h2 className="text-base font-semibold mb-5">Settings</h2>
-
-        <div className="space-y-5">
-          <p className="text-sm text-muted-foreground">
-            Use the − / + buttons in the footer to zoom the page in or out.
-          </p>
-        </div>
-
-        <button
-          onClick={onClose}
-          className="mt-6 w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          Done
-        </button>
-      </div>
-    </>
   );
 }
 
@@ -765,48 +784,7 @@ export default function QuranPage() {
   const confirmSelection = useQuranStore((s) => s.confirmSelection);
   const hasSelection = selectedWordIds.length > 0;
 
-  // Controls row layout
-  // pillAnchor: how many px LEFT of 50% the pill centre sits.
-  // Computed once from word-by-word mode so [pill + wbw toggle] is perfectly centred.
-  // NEVER updated when blindReviewMode === "blind" (reveal buttons present) — pill stays put.
-  const controlsRowRef  = useRef<HTMLDivElement>(null);
-  const pillRef         = useRef<HTMLDivElement>(null);
-  const blindSectionRef = useRef<HTMLDivElement>(null);
-  const [pillAnchor, setPillAnchor]   = useState(56);   // px left of 50%
-  const [pillHalfW,  setPillHalfW]    = useState(65);   // half of pill width
-  const [compactPill, setCompactPill] = useState(false);
 
-  useLayoutEffect(() => {
-    const pill = pillRef.current;
-    const bs   = blindSectionRef.current;
-    const row  = controlsRowRef.current;
-
-    // Always track pill half-width so blind section stays flush after pill
-    if (pill) setPillHalfW(pill.offsetWidth / 2);
-
-    if (!bs) return;
-
-    // Lock the pill anchor ONLY from word-by-word mode — that is the reference group the user
-    // wants centred. All other mode changes keep the anchor frozen so the pill never moves.
-    if (blindReviewMode === "word-by-word") {
-      setPillAnchor((5 + bs.offsetWidth) / 2);
-    }
-    if (blindReviewMode !== "blind") {
-      setCompactPill(false);
-      return;
-    }
-
-    // Blind mode: check if blind section overflows the row right edge → compact pill
-    if (!row) return;
-    const overflow = bs.getBoundingClientRect().right - (row.getBoundingClientRect().right - 4);
-    if (overflow > 0   && !compactPill) setCompactPill(true);
-    if (overflow < -20 &&  compactPill) setCompactPill(false);
-  }, [blindReviewMode, compactPill]);
-
-  const [darkMode, setDarkMode] = useState(() =>
-    document.documentElement.classList.contains("dark")
-  );
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [surahPickerOpen, setSurahPickerOpen] = useState(false);
   const [chapters, setChapters] = useState<ChapterMap>({});
 
@@ -1038,12 +1016,6 @@ export default function QuranPage() {
     }
   }, [isMushaf, manuallyRevealedIds, revealWords]);
 
-  const toggleDark = () => {
-    const isDark = !darkMode;
-    setDarkMode(isDark);
-    document.documentElement.classList.toggle("dark", isDark);
-  };
-
   // Show the loading screen whenever we're in reading mode without data,
   // not just while a fetch is in flight. Closes the brief blank frame
   // between switching to Reading mode and the loadSurah effect setting
@@ -1064,47 +1036,17 @@ export default function QuranPage() {
           <BookOpen className="w-5 h-5" />
         )}
       </button>
-
-      <button
-        onClick={toggleDark}
-        className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-        aria-label="Toggle dark mode"
-      >
-        {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-      </button>
-
-      {isMushaf && (
-        <button
-          onClick={() => setSettingsOpen(true)}
-          className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-          aria-label="Settings"
-        >
-          <Settings className="w-5 h-5" />
-        </button>
-      )}
-
-      <button
-        onClick={() => setQueuePanelOpen(!queuePanelOpen)}
-        className={`p-2 rounded-lg transition-colors ${
-          queuePanelOpen
-            ? "bg-primary/15 text-primary"
-            : "text-muted-foreground hover:bg-muted hover:text-foreground"
-        }`}
-        aria-label={queuePanelOpen ? "Close review queue" : "Open review queue"}
-        aria-pressed={queuePanelOpen}
-        title="Review queue"
-      >
-        <ListMusic className="w-5 h-5" />
-      </button>
     </>
   );
 
   const centerContent = (
-    <SurahSelectorButton
-      chapter={chapter}
-      surahNumber={currentSurah}
-      onClick={() => setSurahPickerOpen(true)}
-    />
+    <span data-tour="surah-picker">
+      <SurahSelectorButton
+        chapter={chapter}
+        surahNumber={currentSurah}
+        onClick={() => setSurahPickerOpen(true)}
+      />
+    </span>
   );
 
   return (
@@ -1167,51 +1109,24 @@ export default function QuranPage() {
       </main>
 
       {/* ── Footer navigation ───────────────────────────────────────────── */}
-      <footer ref={footerRef} className={`${isMushaf ? "fixed inset-x-0 bottom-0" : "sticky bottom-0"} z-30 bg-background/90 backdrop-blur-sm border-t border-border`}>
-        {/* Controls row — pill pinned at absolute centre; blind section flows right from pill edge */}
-        <div ref={controlsRowRef} className="relative flex items-center py-1.5 border-b border-border/40 px-2 min-h-[38px]">
-          {/* Left edge: X / ✓ when words are selected */}
-          {hasSelection && (
-            <div className="absolute left-2 flex items-center gap-1 z-20">
-              <button
-                onClick={clearSelection}
-                title="Clear selection"
-                className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={confirmSelection}
-                title="Confirm selection"
-                className="flex items-center justify-center w-7 h-7 rounded-md text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10 transition-colors"
-              >
-                <Check className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-
-          {/* Pill — centre locked; only moves when pillAnchor is re-measured in non-blind modes */}
-          <div
-            ref={pillRef}
-            className="absolute z-10"
-            style={{ left: `calc(50% - ${pillAnchor}px)`, transform: "translateX(-50%)" }}
-          >
+      <footer ref={footerRef} className={`${isMushaf ? "fixed bottom-0 right-0" : "sticky bottom-0"} z-30 bg-background/90 backdrop-blur-sm border-t border-border`} style={isMushaf ? { left: "var(--sidebar-w, 0px)" } : undefined}>
+        <VersePreviewChip />
+        {/* Controls row — two equal halves meeting at a fixed centre separator */}
+        <div className="flex items-center py-1.5 border-b border-border/40 px-2 min-h-[38px]">
+          {/* Left half — right-aligned, contains BrushFinenessToggle */}
+          <div className="flex-1 flex items-center justify-end">
             <BrushFinenessToggle
-              hideActions
-              compactLabels={compactPill}
               showTranslationButton={isMushaf}
               showTransliterationButton={!isMushaf}
               showReadingTranslationButton={!isMushaf}
             />
           </div>
 
-          {/* Blind section — starts flush right of pill, grows rightward; pill never shifts */}
-          <div
-            ref={blindSectionRef}
-            className="absolute flex items-center gap-1"
-            style={{ left: `calc(50% - ${pillAnchor}px + ${pillHalfW + 5}px)` }}
-          >
-            <div className="w-px h-4 bg-border/60 flex-shrink-0 mx-0.5" aria-hidden />
+          {/* Fixed centre separator */}
+          <div className="w-px h-4 bg-border/60 flex-shrink-0 mx-1.5" aria-hidden />
+
+          {/* Right half — left-aligned, contains blind section */}
+          <div className="flex-1 flex items-center justify-start gap-1">
             <BlindReviewToggle />
             {blindReviewMode === "blind" && (
               <>
@@ -1222,7 +1137,7 @@ export default function QuranPage() {
                   aria-label="Reveal word"
                 >
                   <Eye className="w-3.5 h-3.5 flex-shrink-0" />
-                  {!compactPill && <span aria-hidden>Word</span>}
+                  <span aria-hidden>Word</span>
                 </button>
                 <button
                   onClick={handleRevealAyah}
@@ -1231,7 +1146,7 @@ export default function QuranPage() {
                   aria-label="Reveal ayah"
                 >
                   <Eye className="w-3.5 h-3.5 flex-shrink-0" />
-                  {!compactPill && <span aria-hidden>Ayah</span>}
+                  <span aria-hidden>Ayah</span>
                 </button>
                 <button
                   onClick={clearManualReveals}
@@ -1387,11 +1302,6 @@ export default function QuranPage() {
           }
           window.scrollTo({ top: 0 });
         }}
-      />
-
-      <SettingsPanel
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
       />
 
       <ReviewQueuePanel chapters={chapters} queuePlayback={queuePlayback} />

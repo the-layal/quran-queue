@@ -2,12 +2,13 @@ import { useParams, Link } from "wouter";
 import AppShell from "@/components/AppShell";
 import GuestBanner from "@/components/GuestBanner";
 import { SURAHS } from "@/lib/quran-data";
-import { ArrowLeft, BookOpen, Calendar, LayoutGrid } from "lucide-react";
+import { ArrowLeft, BookOpen, Calendar, LayoutGrid, Star } from "lucide-react";
 import { useState, useMemo } from "react";
 import { LogModal } from "@/components/LogModal";
-import { useLogs, useSrsItems } from "@/hooks/useTracker";
+import { useLogs, useSrsItems, useRetireSurah, useUnretireSurah } from "@/hooks/useTracker";
 import { getAyahsForReference } from "@/storage/referenceFanOut";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 type ViewMode = "standard" | "by_date";
 
@@ -19,18 +20,30 @@ export default function SurahDetail() {
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [selectedAyah, setSelectedAyah] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("standard");
+  const [confirmRetire, setConfirmRetire] = useState(false);
   const { data: logs } = useLogs();
   const { data: srsItems } = useSrsItems();
+  const retireMutation = useRetireSurah();
+  const unretireMutation = useUnretireSurah();
 
   const surahSrsItems = useMemo(() => {
     if (!srsItems) return [];
     return srsItems
       .filter((it) => {
-        const groups = getAyahsForReference(it.reference);
-        return groups.some((g) => g.surah === surahId);
+        try {
+          const groups = getAyahsForReference(it.reference);
+          return groups.some((g) => g.surah === surahId);
+        } catch {
+          return false;
+        }
       })
       .sort((a, b) => a.nextReviewDate.localeCompare(b.nextReviewDate));
   }, [srsItems, surahId]);
+
+  const surahRef = `surah:${surahId}`;
+  const surahSrsItem = srsItems?.find((it) => it.reference === surahRef);
+  const isRetired = surahSrsItem?.retired ?? false;
+  const isRetiring = retireMutation.isPending || unretireMutation.isPending;
 
   function formatSegmentLabel(ref: string): string {
     const parts = ref.split(":");
@@ -135,6 +148,14 @@ export default function SurahDetail() {
     setIsLogModalOpen(true);
   };
 
+  const handleRetire = () => {
+    retireMutation.mutate(surahRef, { onSuccess: () => setConfirmRetire(false) });
+  };
+
+  const handleUnretire = () => {
+    unretireMutation.mutate(surahRef);
+  };
+
   const renderAyahButton = (ayahNum: number) => {
     const mastery = masteryMap[ayahNum] || 0;
     return (
@@ -173,6 +194,52 @@ export default function SurahDetail() {
         <h2 className="text-xl text-foreground font-medium mb-1">{surah.englishName}</h2>
         <p className="text-muted-foreground text-sm uppercase tracking-widest">{surah.type} • {surah.ayahCount} Ayahs</p>
         {oldestReviewDate && (<p className="text-muted-foreground text-xs mt-1">Oldest review: {format(oldestReviewDate, "MMM d, yyyy")}</p>)}
+
+        <div className="mt-5 flex items-center justify-center">
+          {isRetired ? (
+            <div className="flex items-center gap-3 flex-wrap justify-center">
+              <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-2 rounded-full">
+                <Star className="w-4 h-4 fill-amber-400 text-amber-400 flex-shrink-0" />
+                <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">Perfectly Known — Retired</span>
+              </div>
+              <button
+                onClick={handleUnretire}
+                disabled={isRetiring}
+                className="text-xs text-muted-foreground hover:text-foreground underline transition-colors"
+              >
+                {isRetiring ? "Saving..." : "Un-retire"}
+              </button>
+            </div>
+          ) : confirmRetire ? (
+            <div className="flex items-center gap-3 text-sm flex-wrap justify-center">
+              <span className="text-muted-foreground">Retire this surah from your review queue?</span>
+              <button
+                onClick={handleRetire}
+                disabled={isRetiring}
+                className="font-semibold text-amber-600 hover:text-amber-700 transition-colors"
+              >
+                {isRetiring ? "Retiring..." : "Yes, retire it"}
+              </button>
+              <button
+                onClick={() => setConfirmRetire(false)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmRetire(true)}
+              className={cn(
+                "flex items-center gap-2 text-sm text-muted-foreground hover:text-amber-600 transition-colors group",
+                "border border-border/50 hover:border-amber-300 px-4 py-1.5 rounded-full",
+              )}
+            >
+              <Star className="w-4 h-4 group-hover:fill-amber-400 transition-colors" />
+              Retire as Perfectly Known
+            </button>
+          )}
+        </div>
       </div>
 
       <div>
@@ -250,19 +317,32 @@ export default function SurahDetail() {
                 className="flex flex-wrap items-center gap-3 p-4"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{formatSegmentLabel(it.reference)}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-foreground truncate">{formatSegmentLabel(it.reference)}</p>
+                    {it.retired && (
+                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 flex-shrink-0" aria-label="Retired — Perfectly Known" />
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">{it.reference}</p>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
-                  <span className="px-2 py-1 rounded-md bg-primary/10 text-primary font-semibold" title="Ease factor">
-                    EF {(it.easeFactor / 100).toFixed(2)}
-                  </span>
-                  <span className="px-2 py-1 rounded-md bg-secondary/40 text-foreground font-semibold" title="Repetitions">
-                    {it.repetitions} rep{it.repetitions === 1 ? "" : "s"}
-                  </span>
-                  <span className="px-2 py-1 rounded-md bg-accent/10 text-accent font-semibold" title={`Next review: ${it.nextReviewDate}`}>
-                    {formatRelativeDate(it.nextReviewDate)}
-                  </span>
+                  {it.retired ? (
+                    <span className="px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 font-semibold border border-amber-200 dark:border-amber-800">
+                      Retired
+                    </span>
+                  ) : (
+                    <>
+                      <span className="px-2 py-1 rounded-md bg-primary/10 text-primary font-semibold" title="Ease factor">
+                        EF {(it.easeFactor / 100).toFixed(2)}
+                      </span>
+                      <span className="px-2 py-1 rounded-md bg-secondary/40 text-foreground font-semibold" title="Repetitions">
+                        {it.repetitions} rep{it.repetitions === 1 ? "" : "s"}
+                      </span>
+                      <span className="px-2 py-1 rounded-md bg-accent/10 text-accent font-semibold" title={`Next review: ${it.nextReviewDate}`}>
+                        {formatRelativeDate(it.nextReviewDate)}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
