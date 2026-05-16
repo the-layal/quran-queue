@@ -4,6 +4,7 @@ import { useCreateLog, useLogExtraRevision, useRetireSurah, useUnretireSurah, us
 import { VibeScale } from "./ui/VibeScale";
 import { cn } from "@/lib/utils";
 import { SURAHS } from "@/lib/quran-data";
+import { toast } from "@/hooks/use-toast";
 
 type LogType = "page" | "ayah_range" | "surah";
 
@@ -115,18 +116,23 @@ export function LogModal({
   // Bug 2 fix: canRetire doesn't require isSingleSurah, so ranges show the button.
   // Bug 3 fix: auto-log vibeScale=5 for every surah being retired.
   const handleRetire = canRetire ? async () => {
-    try {
-      await Promise.all(
-        surahIdsForRetire.flatMap(id => {
-          const ref = `surah:${id}`;
-          return [
-            createLogAsync({ type: "surah", reference: ref, vibeScale: 5 }),
-            retireAsync(ref),
-          ];
-        })
-      );
-    } catch {
-      // individual mutation errors surface via React Query; don't block close
+    const results = await Promise.allSettled(
+      surahIdsForRetire.flatMap(id => {
+        const ref = `surah:${id}`;
+        return [
+          createLogAsync({ type: "surah", reference: ref, vibeScale: 5 }),
+          retireAsync(ref),
+        ];
+      })
+    );
+    const failed = results.filter(r => r.status === "rejected").length;
+    if (failed > 0) {
+      toast({
+        title: "Some surahs could not be retired",
+        description: `${failed} operation${failed > 1 ? "s" : ""} failed. Please try again.`,
+        variant: "destructive",
+      });
+      return; // keep modal open so the user can retry
     }
     onClose();
   } : undefined;
