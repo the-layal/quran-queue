@@ -166,25 +166,58 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
 
           {/* Listen */}
           <div className="bg-card rounded-2xl border border-border/50 shadow-md shadow-primary/5 p-6 flex flex-col gap-5">
-            {/* Mini audio bar mock */}
-            <div className="bg-background rounded-xl border border-border/50 px-4 py-3 space-y-2.5">
+            {/* Mini audio bar mock — mirrors real AudioControlBar layout */}
+            <div className="bg-background rounded-xl border border-border/50 px-3 py-3 space-y-2">
+              {/* Top row: skip-back · play · skip-forward · ayah label */}
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-semibold text-primary bg-primary/10 rounded-full px-2 py-0.5">
-                  Al-Minshawi
-                </span>
-                <div className="ml-auto w-6 h-6 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                {/* Skip back */}
+                <div className="w-6 h-6 rounded-lg border border-border flex items-center justify-center flex-shrink-0 text-muted-foreground">
+                  <svg viewBox="0 0 14 14" className="w-3 h-3 fill-current">
+                    <path d="M2 2h1.5v10H2V2zm1.5 5L12 2v10L3.5 7z" />
+                  </svg>
+                </div>
+                {/* Play button */}
+                <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
                   <svg viewBox="0 0 10 12" className="w-2.5 h-2.5 text-primary-foreground fill-current ml-0.5">
                     <path d="M1 1l8 5-8 5V1z" />
                   </svg>
                 </div>
+                {/* Skip forward */}
+                <div className="w-6 h-6 rounded-lg border border-border flex items-center justify-center flex-shrink-0 text-muted-foreground">
+                  <svg viewBox="0 0 14 14" className="w-3 h-3 fill-current">
+                    <path d="M12 2h-1.5v10H12V2zM10.5 7L2 2v10l8.5-5z" />
+                  </svg>
+                </div>
+                {/* Ayah label */}
+                <span className="text-[10px] font-medium text-foreground truncate flex-1 min-w-0">Al-Baqarah · 2:255</span>
               </div>
-              <div className="h-1 rounded-full bg-border/60 w-full relative">
-                <div className="h-1 rounded-full bg-primary w-[55%]" />
-                <div className="absolute top-1/2 left-[55%] -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-primary border-2 border-background -ml-[5px]" />
+
+              {/* Progress bar with tick marks and timestamps */}
+              <div className="space-y-1">
+                <div className="relative h-3 flex items-center">
+                  {/* Track */}
+                  <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 rounded-full bg-border/60 overflow-hidden">
+                    <div className="h-1 rounded-full bg-primary w-[38%]" />
+                  </div>
+                  {/* Ayah boundary tick marks */}
+                  <div className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-foreground/40" style={{ left: "25%" }} />
+                  <div className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-foreground/40" style={{ left: "62%" }} />
+                  <div className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-foreground/40" style={{ left: "84%" }} />
+                  {/* Scrubber thumb */}
+                  <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-primary shadow-sm" style={{ left: "38%" }} />
+                </div>
+                {/* Timestamps */}
+                <div className="flex justify-between">
+                  <span className="text-[9px] text-muted-foreground tabular-nums">0:32</span>
+                  <span className="text-[9px] text-muted-foreground tabular-nums">1:14</span>
+                </div>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[9px] text-muted-foreground">Al-Fatiha · 1:4</span>
-                <span className="text-[9px] font-bold text-muted-foreground bg-secondary rounded px-1.5 py-0.5">0.75×</span>
+
+              {/* Bottom row: reciter pill · speed badge · repeat badge */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] font-semibold text-primary bg-primary/10 rounded-full px-2 py-0.5">Minshawi</span>
+                <span className="text-[9px] font-bold text-muted-foreground bg-secondary rounded px-1.5 py-0.5">1×</span>
+                <span className="text-[9px] font-bold text-muted-foreground bg-secondary rounded px-1.5 py-0.5">×2</span>
               </div>
             </div>
             <div>
