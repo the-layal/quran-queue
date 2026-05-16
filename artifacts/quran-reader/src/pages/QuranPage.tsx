@@ -1177,18 +1177,22 @@ export default function QuranPage() {
 
       {/* ── Footer navigation ───────────────────────────────────────────── */}
       <footer ref={footerRef} className={`${isMushaf ? "fixed bottom-0 right-0" : "sticky bottom-0"} z-30 bg-background/90 backdrop-blur-sm border-t border-border`} style={isMushaf ? { left: "var(--sidebar-w, 0px)" } : undefined}>
-        {/* Controls row — flex centred; wraps to two lines on narrow screens */}
-        <div className="flex items-center justify-center flex-wrap gap-2 py-1.5 border-b border-border/40 px-2 min-h-[38px]">
-          {/* Brush fineness pill (+ optional action buttons when words are selected) */}
-          <BrushFinenessToggle
-            showTranslationButton={isMushaf}
-            showTransliterationButton={!isMushaf}
-            showReadingTranslationButton={!isMushaf}
-          />
+        {/* Controls row — two equal halves meeting at a fixed centre separator */}
+        <div className="flex items-center py-1.5 border-b border-border/40 px-2 min-h-[38px]">
+          {/* Left half — right-aligned, contains BrushFinenessToggle */}
+          <div className="flex-1 flex items-center justify-end">
+            <BrushFinenessToggle
+              showTranslationButton={isMushaf}
+              showTransliterationButton={!isMushaf}
+              showReadingTranslationButton={!isMushaf}
+            />
+          </div>
 
-          {/* Blind section — separated by a gap so checkmark buttons never collide */}
-          <div className="flex items-center gap-1">
-            <div className="w-px h-4 bg-border/60 flex-shrink-0 mx-0.5" aria-hidden />
+          {/* Fixed centre separator */}
+          <div className="w-px h-4 bg-border/60 flex-shrink-0 mx-1.5" aria-hidden />
+
+          {/* Right half — left-aligned, contains blind section */}
+          <div className="flex-1 flex items-center justify-start gap-1">
             <BlindReviewToggle />
             {blindReviewMode === "blind" && (
               <>
