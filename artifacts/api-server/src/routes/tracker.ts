@@ -311,68 +311,28 @@ router.post("/plans/today", async (req: Request, res: Response) => {
     const todayStr = getTodayStr();
     let plan = await storage.getDailyPlan(userId, todayStr);
 
-    // Due SRS items first, then remaining bandwidth filled from all SRS items (not-yet-due),
-    // mirroring the original collectCandidatePages approach. Only falls through to the full
-    // 1..604 sweep when the user has no SRS data at all (skipped onboarding / full-Quran mode).
-    const fillFromDueAndFresh = async (
-      plannedItems: string[],
-      existingPages: Set<number>,
-      bandwidth: number,
-      currentPageCount: number,
-    ): Promise<{ plannedItems: string[]; currentPageCount: number }> => {
-      const allItems = await storage.getSrsItems(userId);
-      const knownPages = new Set<number>();
-      for (const item of allItems) {
-        for (const p of getPagesForReference(item.reference)) knownPages.add(p);
-      }
-      // Due SRS items first, in due-item order, using the original ref
+    // Direct port of the original collectCandidatePages from quran-review-SRS/server/routes.ts.
+    // Collects page numbers from due SRS items first, then all SRS items — naturally
+    // bounded to what the user has registered. Never touches pages outside SRS.
+    const collectCandidatePages = async (existingPages: Set<number>): Promise<number[]> => {
+      const candidatePages: number[] = [];
       const dueItems = await storage.getDueSrsItems(userId);
       for (const item of dueItems) {
-        if (currentPageCount >= bandwidth) break;
-        if (plannedItems.includes(item.reference)) continue;
-        const pages = getPagesForReference(item.reference);
-        if (pages.every((p) => existingPages.has(p))) continue;
-        const weight = getPageEquivalent(item.reference);
-        if (currentPageCount + weight > bandwidth && plannedItems.length > 0) break;
-        plannedItems.push(item.reference);
-        currentPageCount += weight;
-        for (const p of pages) existingPages.add(p);
-      }
-      // Fill remaining bandwidth from all SRS items (ordered by nextReviewDate).
-      // This keeps the plan strictly bounded to what the user has registered.
-      if (allItems.length > 0) {
-        for (const item of allItems) {
-          if (currentPageCount >= bandwidth) break;
-          if (plannedItems.includes(item.reference)) continue;
-          const pages = getPagesForReference(item.reference);
-          if (pages.every((p) => existingPages.has(p))) continue;
-          const weight = getPageEquivalent(item.reference);
-          if (currentPageCount + weight > bandwidth && plannedItems.length > 0) break;
-          plannedItems.push(item.reference);
-          currentPageCount += weight;
-          for (const p of pages) existingPages.add(p);
+        for (const p of getPagesForReference(item.reference)) {
+          if (!existingPages.has(p) && !candidatePages.includes(p)) {
+            candidatePages.push(p);
+          }
         }
-        return { plannedItems, currentPageCount };
       }
-      // No SRS items at all (skipped onboarding / full-Quran mode): sweep 1..604
-      const freshPages: number[] = [];
-      for (let p = 1; p <= TOTAL_QURAN_PAGES; p++) {
-        if (!existingPages.has(p) && !knownPages.has(p)) freshPages.push(p);
-      }
-      let i = 0;
-      while (currentPageCount < bandwidth && i < freshPages.length) {
-        const batchEnd = Math.min(i + (bandwidth - currentPageCount), freshPages.length);
-        const batch = freshPages.slice(i, batchEnd);
-        for (const ref of groupConsecutivePages(batch)) {
-          const weight = getPageEquivalent(ref);
-          if (currentPageCount + weight > bandwidth && plannedItems.length > 0) break;
-          plannedItems.push(ref);
-          currentPageCount += weight;
-          for (const p of getPagesForReference(ref)) existingPages.add(p);
+      const allItems = await storage.getSrsItems(userId);
+      for (const item of allItems) {
+        for (const p of getPagesForReference(item.reference)) {
+          if (!existingPages.has(p) && !candidatePages.includes(p)) {
+            candidatePages.push(p);
+          }
         }
-        i = batchEnd;
       }
-      return { plannedItems, currentPageCount };
+      return candidatePages;
     };
 
     const allSrsFull = await storage.getSrsItems(userId);
@@ -404,7 +364,21 @@ router.post("/plans/today", async (req: Request, res: Response) => {
       }
 
       if (currentPageCount < input.bandwidth) {
-        await fillFromDueAndFresh(plannedItems, existingPages, input.bandwidth, currentPageCount);
+        const candidatePages = await collectCandidatePages(existingPages);
+        let i = 0;
+        while (currentPageCount < input.bandwidth && i < candidatePages.length) {
+          const batchEnd = Math.min(i + (input.bandwidth - currentPageCount), candidatePages.length);
+          const batch = candidatePages.slice(i, batchEnd);
+          const refs = groupConsecutivePages(batch);
+          for (const ref of refs) {
+            const count = getPageEquivalent(ref);
+            if (currentPageCount + count > input.bandwidth && plannedItems.length > 0) break;
+            plannedItems.push(ref);
+            currentPageCount += count;
+            for (const p of getPagesForReference(ref)) existingPages.add(p);
+          }
+          i = batchEnd;
+        }
       }
 
       plan = await storage.createDailyPlan({
@@ -430,7 +404,21 @@ router.post("/plans/today", async (req: Request, res: Response) => {
 
       if (input.bandwidth > currentPageCount) {
         const plannedItems = [...existingPlanned];
-        await fillFromDueAndFresh(plannedItems, existingPages, input.bandwidth, currentPageCount);
+        const candidatePages = await collectCandidatePages(existingPages);
+        let i = 0;
+        while (currentPageCount < input.bandwidth && i < candidatePages.length) {
+          const batchEnd = Math.min(i + (input.bandwidth - currentPageCount), candidatePages.length);
+          const batch = candidatePages.slice(i, batchEnd);
+          const refs = groupConsecutivePages(batch);
+          for (const ref of refs) {
+            const count = getPageEquivalent(ref);
+            if (currentPageCount + count > input.bandwidth && plannedItems.length > 0) break;
+            plannedItems.push(ref);
+            currentPageCount += count;
+            for (const p of getPagesForReference(ref)) existingPages.add(p);
+          }
+          i = batchEnd;
+        }
         plan = await storage.updateDailyPlan(plan.id, { bandwidth: input.bandwidth, plannedItems });
       } else if (input.bandwidth < currentPageCount) {
         const plannedItems: string[] = [];
