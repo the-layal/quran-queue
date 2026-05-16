@@ -493,7 +493,7 @@ export default function Dashboard() {
   ];
 
   const percentage =
-    TOTAL_PAGES > 0 ? Math.floor((memorizedPages / TOTAL_PAGES) * 100) : 0;
+    TOTAL_PAGES > 0 ? parseFloat(((memorizedPages / TOTAL_PAGES) * 100).toFixed(1)) : 0;
   const plannedItems = todayPlan?.plannedItems || [];
   const completedItems = todayPlan?.completedItems || [];
 
