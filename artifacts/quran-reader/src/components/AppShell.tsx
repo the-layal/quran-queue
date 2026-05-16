@@ -12,8 +12,13 @@ import {
   LogIn,
   LogOut,
   User,
+  Moon,
+  Sun,
+  Bookmark,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
+import { useQuranStore } from "../store/quranStore";
+import BookmarksPanel from "./BookmarksPanel";
 
 interface NavItem {
   label: string;
@@ -119,6 +124,11 @@ export default function AppShell({ children, rightActions, centerContent }: AppS
   const isDesktop = useIsDesktop();
   const isQuranPage = location === "/";
   const { user, isLoading, isAuthenticated, login, logout } = useAuth();
+
+  const darkMode = useQuranStore((s) => s.darkMode);
+  const setDarkMode = useQuranStore((s) => s.setDarkMode);
+  const bookmarksPanelOpen = useQuranStore((s) => s.bookmarksPanelOpen);
+  const setBookmarksPanelOpen = useQuranStore((s) => s.setBookmarksPanelOpen);
 
   const headerRef = useRef<HTMLElement>(null);
 
@@ -353,9 +363,31 @@ export default function AppShell({ children, rightActions, centerContent }: AppS
           </div>
 
           <div className="flex items-center gap-1">
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+              aria-label="Toggle dark mode"
+            >
+              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+            <button
+              onClick={() => setBookmarksPanelOpen(!bookmarksPanelOpen)}
+              className={`p-2 rounded-lg transition-colors ${
+                bookmarksPanelOpen
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+              aria-label="Saved verses"
+              aria-pressed={bookmarksPanelOpen}
+              title="Saved verses"
+            >
+              <Bookmark className="w-5 h-5" />
+            </button>
             {rightActions}
           </div>
         </header>
+
+        <BookmarksPanel open={bookmarksPanelOpen} onClose={() => setBookmarksPanelOpen(false)} />
 
         {children}
       </div>

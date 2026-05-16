@@ -3,8 +3,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ListMusic,
-  Moon,
-  Sun,
   Loader2,
   AlertCircle,
   BookOpen,
@@ -35,7 +33,7 @@ import BlindReviewToggle from "../components/BlindReviewToggle";
 import VersePreviewChip from "../components/VersePreviewChip";
 import AudioControlBar from "../components/AudioControlBar";
 import ReviewQueuePanel from "../components/ReviewQueuePanel";
-import BookmarksPanel from "../components/BookmarksPanel";
+
 import { useSmartBrush } from "../hooks/useSmartBrush";
 import { useQueuePlayback } from "../hooks/useQueuePlayback";
 
@@ -788,11 +786,7 @@ export default function QuranPage() {
   const hasSelection = selectedWordIds.length > 0;
 
 
-  const [darkMode, setDarkMode] = useState(() =>
-    document.documentElement.classList.contains("dark")
-  );
   const [surahPickerOpen, setSurahPickerOpen] = useState(false);
-  const [bookmarksPanelOpen, setBookmarksPanelOpen] = useState(false);
   const [chapters, setChapters] = useState<ChapterMap>({});
 
   const isMushaf = viewMode === "mushaf";
@@ -1023,12 +1017,6 @@ export default function QuranPage() {
     }
   }, [isMushaf, manuallyRevealedIds, revealWords]);
 
-  const toggleDark = () => {
-    const isDark = !darkMode;
-    setDarkMode(isDark);
-    document.documentElement.classList.toggle("dark", isDark);
-  };
-
   // Show the loading screen whenever we're in reading mode without data,
   // not just while a fetch is in flight. Closes the brief blank frame
   // between switching to Reading mode and the loadSurah effect setting
@@ -1048,29 +1036,6 @@ export default function QuranPage() {
         ) : (
           <BookOpen className="w-5 h-5" />
         )}
-      </button>
-
-      <button
-        onClick={toggleDark}
-        className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-        aria-label="Toggle dark mode"
-      >
-        {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-      </button>
-
-      <button
-        data-tour="bookmarks"
-        onClick={() => setBookmarksPanelOpen((o) => !o)}
-        className={`p-2 rounded-lg transition-colors ${
-          bookmarksPanelOpen
-            ? "bg-primary/15 text-primary"
-            : "text-muted-foreground hover:bg-muted hover:text-foreground"
-        }`}
-        aria-label="Saved verses"
-        aria-pressed={bookmarksPanelOpen}
-        title="Saved verses"
-      >
-        <Bookmark className="w-5 h-5" />
       </button>
 
       <button
@@ -1105,7 +1070,6 @@ export default function QuranPage() {
       rightActions={rightActions}
       centerContent={centerContent}
     >
-      <BookmarksPanel open={bookmarksPanelOpen} onClose={() => setBookmarksPanelOpen(false)} />
       <div
         className="flex flex-col flex-1"
         style={isMushaf ? { height: "calc(100dvh - var(--app-header-h, 57px))", overflow: "hidden" } : undefined}

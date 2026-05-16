@@ -40,6 +40,12 @@ interface QuranStore {
   isLoading: boolean;
   error: string | null;
 
+  darkMode: boolean;
+  setDarkMode: (dark: boolean) => void;
+
+  bookmarksPanelOpen: boolean;
+  setBookmarksPanelOpen: (open: boolean) => void;
+
   selectedWordIds: string[];
   brushFineness: BrushFineness;
 
@@ -158,6 +164,15 @@ export const useQuranStore = create<QuranStore>()(
       },
       isLoading: false,
       error: null,
+
+      darkMode: typeof window !== "undefined" && document.documentElement.classList.contains("dark"),
+      setDarkMode: (dark) => {
+        document.documentElement.classList.toggle("dark", dark);
+        set({ darkMode: dark });
+      },
+
+      bookmarksPanelOpen: false,
+      setBookmarksPanelOpen: (open) => set({ bookmarksPanelOpen: open }),
 
       selectedWordIds: [],
       brushFineness: "word",
@@ -537,12 +552,14 @@ export const useQuranStore = create<QuranStore>()(
         isSharedQueue: state.isSharedQueue,
         playbackRate: state.playbackRate,
         selectedReciterId: state.selectedReciterId,
+        darkMode: state.darkMode,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         state.queueRepeatAll = clampRepeat(state.queueRepeatAll);
         state.reviewQueue = state.reviewQueue.map((entry) => clampEntry(entry as QueueEntry));
         state.selectedReciterId = getReciter(state.selectedReciterId).id;
+        document.documentElement.classList.toggle("dark", !!state.darkMode);
       },
     }
   )
