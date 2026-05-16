@@ -1,6 +1,96 @@
+import { useState } from "react";
 import { BookOpen, BarChart3, Brain, CalendarDays, Trophy, Flame, CheckCircle2, Play } from "lucide-react";
 
 export const LANDING_SEEN_KEY = "hafith_landing_seen";
+
+const AYAH_201_WORDS = [
+  { id: "w0",  text: "وَمِنْهُم",   line: 0 },
+  { id: "w1",  text: "مَّن",        line: 0 },
+  { id: "w2",  text: "يَقُولُ",     line: 0 },
+  { id: "w3",  text: "رَبَّنَا",    line: 0 },
+  { id: "w4",  text: "آتِنَا",      line: 0 },
+  { id: "w5",  text: "فِي",         line: 1 },
+  { id: "w6",  text: "الدُّنْيَا",  line: 1 },
+  { id: "w7",  text: "حَسَنَةً",    line: 1 },
+  { id: "w8",  text: "وَفِي",       line: 1 },
+  { id: "w9",  text: "الْآخِرَةِ", line: 1 },
+  { id: "w10", text: "حَسَنَةً",    line: 1 },
+  { id: "w11", text: "وَقِنَا",     line: 2 },
+  { id: "w12", text: "عَذَابَ",     line: 2 },
+  { id: "w13", text: "النَّارِ",    line: 2 },
+];
+
+function HighlightCard() {
+  const [selected, setSelected] = useState<Set<string>>(new Set(["w0", "w1", "w2"]));
+  const [fineness, setFineness] = useState<"word" | "line" | "ayah">("word");
+
+  function toggle(wordId: string, line: number) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      let ids: string[];
+      if (fineness === "word") {
+        ids = [wordId];
+      } else if (fineness === "line") {
+        ids = AYAH_201_WORDS.filter((w) => w.line === line).map((w) => w.id);
+      } else {
+        ids = AYAH_201_WORDS.map((w) => w.id);
+      }
+      const allSelected = ids.every((id) => next.has(id));
+      if (allSelected) {
+        ids.forEach((id) => next.delete(id));
+      } else {
+        ids.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }
+
+  return (
+    <div className="bg-card rounded-2xl border border-border/50 shadow-md shadow-primary/5 p-6 flex flex-col gap-5">
+      <div className="bg-background rounded-xl border border-border/50 px-4 py-3 space-y-2.5">
+        {[0, 1, 2].map((lineIdx) => (
+          <div key={lineIdx} className="flex flex-wrap justify-end gap-x-1 gap-y-1" dir="rtl">
+            {AYAH_201_WORDS.filter((w) => w.line === lineIdx).map((w) => (
+              <span
+                key={w.id}
+                onClick={() => toggle(w.id, w.line)}
+                className={`font-quran text-[1.05rem] leading-relaxed cursor-pointer rounded px-0.5 transition-colors select-none ${
+                  selected.has(w.id)
+                    ? "bg-primary/20 text-primary"
+                    : "text-foreground hover:bg-muted"
+                }`}
+              >
+                {w.text}
+              </span>
+            ))}
+            {lineIdx === 2 && (
+              <span className="font-quran text-sm text-muted-foreground/70 select-none">۝٢٠١</span>
+            )}
+          </div>
+        ))}
+        <div className="flex gap-1.5 pt-1.5 border-t border-border/40">
+          {(["word", "line", "ayah"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFineness(f)}
+              className={`text-[9px] font-semibold rounded-full px-2.5 py-0.5 transition-colors ${
+                fineness === f
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <h4 className="font-serif font-bold text-foreground mb-1">Highlight</h4>
+        <p className="text-sm text-muted-foreground leading-relaxed">Select words, lines, or a whole ayah to review.</p>
+      </div>
+    </div>
+  );
+}
 
 interface LandingPageProps {
   onEnter: () => void;
@@ -160,9 +250,11 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
         </div>
       </section>
 
-      {/* Listen · Queue · Memorize pillar strip */}
+      {/* Highlight · Listen · Queue pillar strip */}
       <section className="py-16 px-6">
         <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-6">
+
+          <HighlightCard />
 
           {/* Listen */}
           <div className="bg-card rounded-2xl border border-border/50 shadow-md shadow-primary/5 p-6 flex flex-col gap-5">
@@ -252,40 +344,6 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
             <div>
               <h4 className="font-serif font-bold text-foreground mb-1">Queue</h4>
               <p className="text-sm text-muted-foreground leading-relaxed">Build custom playlists of any verses to loop and review.</p>
-            </div>
-          </div>
-
-          {/* Memorize */}
-          <div className="bg-card rounded-2xl border border-border/50 shadow-md shadow-primary/5 p-6 flex flex-col gap-5">
-            {/* Mini memorization tracker mock */}
-            <div className="bg-background rounded-xl border border-border/50 px-4 py-3 flex flex-col items-center gap-2">
-              {/* Circular progress arc */}
-              <div className="relative w-16 h-16">
-                <svg viewBox="0 0 64 64" className="w-full h-full -rotate-90">
-                  <circle cx="32" cy="32" r="26" fill="none" stroke="currentColor" strokeWidth="6" className="text-border/50" />
-                  <circle
-                    cx="32" cy="32" r="26"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="6"
-                    strokeLinecap="round"
-                    strokeDasharray={`${Math.PI * 52 * 0.21} ${Math.PI * 52 * 0.79}`}
-                    className="text-primary"
-                  />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-xs font-bold text-foreground">21%</span>
-                </div>
-              </div>
-              <p className="text-[11px] font-semibold text-foreground">127 / 604 pages</p>
-              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                <span className="text-sm">🔥</span>
-                <span className="font-medium">14 day streak</span>
-              </div>
-            </div>
-            <div>
-              <h4 className="font-serif font-bold text-foreground mb-1">Memorize</h4>
-              <p className="text-sm text-muted-foreground leading-relaxed">Track every page with spaced repetition scheduling.</p>
             </div>
           </div>
 
