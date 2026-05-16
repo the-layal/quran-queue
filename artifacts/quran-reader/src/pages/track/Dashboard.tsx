@@ -260,7 +260,7 @@ function GoalCard({
             style={{ width: `${progressPct}%` }}
           />
         </div>
-        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span className="tabular-nums">
             {completedCount}/{totalAyahs} ayahs
           </span>
@@ -278,7 +278,7 @@ function GoalCard({
 
       {/* Daily target + today's contribution */}
       {!isComplete && (
-        <div className="flex items-center justify-between text-[11px]">
+        <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">
             Pace:{" "}
             <span className="font-medium text-foreground">
@@ -296,7 +296,7 @@ function GoalCard({
       {/* Expandable per-ayah mastery grid */}
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         {expanded ? (
           <ChevronUp className="w-3 h-3" />
@@ -331,7 +331,7 @@ function GoalCard({
             </div>
           ) : (
             <div className="space-y-1.5">
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {completedCount} of {totalAyahs} ayahs memorized ({progressPct}
                 %)
               </p>
@@ -359,7 +359,7 @@ function GoalCard({
       {/* Schedule toggle */}
       <button
         onClick={() => setScheduleExpanded((v) => !v)}
-        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <CalendarDays className="w-3 h-3" />
         {scheduleExpanded ? "Hide" : "Show"} schedule
@@ -383,7 +383,7 @@ function GoalCard({
                 <div
                   key={chunk.day}
                   className={cn(
-                    "flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] transition-colors",
+                    "flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors",
                     chunk.completed
                       ? "bg-primary/8 text-muted-foreground"
                       : today
@@ -660,7 +660,7 @@ export default function Dashboard() {
                             {formatReference(ref)}
                           </p>
                           {refMeta && (
-                            <p className="text-[11px] text-muted-foreground leading-tight">{refMeta}</p>
+                            <p className="text-xs text-muted-foreground leading-tight">{refMeta}</p>
                           )}
                         </div>
                         {retiredPlanRefs.has(ref) && (
