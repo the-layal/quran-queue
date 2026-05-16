@@ -26,25 +26,13 @@ Disallow: /
 User-agent: Google-Extended
 Disallow: /
 
-User-agent: Googlebot-Image
-Disallow: /
-
 User-agent: meta-externalagent
-Disallow: /
-
-User-agent: FacebookBot
 Disallow: /
 
 User-agent: Bytespider
 Disallow: /
 
-User-agent: TikTokBot
-Disallow: /
-
 User-agent: PerplexityBot
-Disallow: /
-
-User-agent: YouBot
 Disallow: /
 
 User-agent: cohere-ai
