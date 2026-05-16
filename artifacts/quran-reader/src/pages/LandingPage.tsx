@@ -1,4 +1,4 @@
-import { BookOpen, BarChart3, Brain, CalendarDays } from "lucide-react";
+import { BookOpen, BarChart3, Brain, CalendarDays, Trophy, Flame, CheckCircle2, Play } from "lucide-react";
 
 export const LANDING_SEEN_KEY = "hafith_landing_seen";
 
@@ -63,81 +63,97 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
             </div>
           </div>
 
-          {/* Hero right-side visual: Mushaf reader + audio bar */}
+          {/* Hero right-side visual: Dashboard replica */}
           <div className="relative hidden lg:block">
             {/* Decorative background shadow */}
             <div className="absolute -bottom-4 -right-4 w-full h-full bg-primary/5 rounded-3xl -z-0" />
 
-            {/* Parchment Mushaf card */}
-            <div
-              className="rounded-3xl p-6 border border-border/50 shadow-2xl shadow-primary/5 relative z-10"
-              style={{ backgroundColor: "#FAF5E8" }}
-            >
-              {/* Surah header label */}
-              <div className="text-center mb-5">
-                <div
-                  className="inline-block px-5 py-1.5 rounded-full text-xs font-semibold tracking-widest"
-                  style={{ backgroundColor: "#EDE4CC", color: "#5C4A1E" }}
-                >
-                  سُورَةُ الْبَقَرَة
-                </div>
-                <p className="text-[10px] mt-1.5 tracking-wider uppercase" style={{ color: "#8C7A56" }}>
-                  Al-Baqarah · Juz 1
-                </p>
-              </div>
+            {/* Scaled dashboard mockup */}
+            <div className="relative z-10 overflow-hidden" style={{ height: "420px" }}>
+              <div className="absolute inset-0 origin-top-left scale-[0.72] w-[138%] space-y-3">
 
-              {/* Decorative Arabic-like line bars (RTL, varying widths) */}
-              <div className="space-y-3 pb-5 border-b" style={{ borderColor: "#DDD0B0" }} dir="rtl">
-                {[
-                  ["w-full", "w-[85%]", "w-[70%]"],
-                  ["w-full", "w-[90%]", "w-[58%]"],
-                  ["w-full", "w-[82%]", "w-[75%]"],
-                  ["w-full", "w-[88%]", "w-[48%]"],
-                ].map((row, i) => (
-                  <div key={i} className="flex flex-col items-end gap-1.5">
-                    {row.map((w, j) => (
+                {/* Total Progress card */}
+                <div className="bg-card rounded-3xl p-6 border border-border/50 shadow-2xl shadow-primary/5 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-48 h-48 bg-primary/5 rounded-full blur-3xl -mr-12 -mt-12 pointer-events-none" />
+                  <div className="flex items-center justify-between gap-6 relative z-10">
+                    {/* Left: text + stat tiles */}
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-xs font-bold tracking-widest text-accent uppercase mb-1">Total Progress</h3>
+                      <p className="text-4xl font-serif text-foreground leading-none mb-0.5">
+                        127 <span className="text-xl text-muted-foreground">/ 604 pages</span>
+                      </p>
+                      <p className="text-sm text-muted-foreground mb-4 leading-snug">
+                        MashaAllah, you've memorized 21% of the Quran.
+                      </p>
+                      <div className="flex gap-3">
+                        <div className="bg-background rounded-2xl px-4 py-3 flex-1 border border-border/50 text-center">
+                          <Trophy className="w-5 h-5 text-accent mx-auto mb-1" />
+                          <p className="text-xl font-bold text-foreground">8</p>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Due Today</p>
+                        </div>
+                        <div className="bg-background rounded-2xl px-4 py-3 flex-1 border border-border/50 text-center">
+                          <Flame className="w-5 h-5 text-primary mx-auto mb-1" />
+                          <p className="text-xl font-bold text-foreground">14</p>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Day Streak</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: donut chart */}
+                    <div className="w-40 h-40 relative flex-shrink-0">
+                      <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
+                        <circle cx="60" cy="60" r="48" fill="none" stroke="currentColor" strokeWidth="10" className="text-border/40" />
+                        <circle
+                          cx="60" cy="60" r="48"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="10"
+                          strokeLinecap="round"
+                          strokeDasharray={`${Math.PI * 96 * 0.21} ${Math.PI * 96 * 0.79}`}
+                          className="text-primary"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center flex-col">
+                        <span className="text-2xl font-serif font-bold text-foreground">21%</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Daily Plan card */}
+                <div className="bg-card rounded-2xl p-5 border border-border/50 shadow-md shadow-primary/5">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-serif font-bold text-lg text-foreground">Daily Plan</h3>
+                    <span className="text-xs text-muted-foreground font-medium">3 / 5 completed</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {[
+                      { label: "Al-Fatiha", done: true },
+                      { label: "Al-Baqarah — Ayah 255", done: true },
+                      { label: "Al-Mulk", done: false },
+                      { label: "Al-Kahf — Ayahs 1–10", done: false },
+                    ].map((item) => (
                       <div
-                        key={j}
-                        className={`${w} h-2 rounded-full`}
-                        style={{ backgroundColor: "#C8B98A", opacity: 0.55 - j * 0.1 }}
-                      />
+                        key={item.label}
+                        className={`flex items-center gap-3 p-2.5 rounded-xl border border-transparent${item.done ? " opacity-50" : ""}`}
+                      >
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${item.done ? "bg-primary/15 text-primary" : "bg-primary/10 text-primary"}`}>
+                          {item.done ? <CheckCircle2 size={14} /> : <Play size={12} className="ml-0.5" />}
+                        </div>
+                        <p className={`text-sm font-semibold flex-1 truncate ${item.done ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                          {item.label}
+                        </p>
+                        {item.done && (
+                          <span className="text-[9px] uppercase tracking-wider font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">Done</span>
+                        )}
+                      </div>
                     ))}
                   </div>
-                ))}
-              </div>
-
-              {/* Floating mini audio bar */}
-              <div className="mt-4 bg-white/70 rounded-2xl border px-4 py-3 flex items-center gap-3 shadow-sm" style={{ borderColor: "#DDD0B0" }}>
-                {/* Reciter name */}
-                <span
-                  className="text-[10px] font-semibold rounded-full px-2.5 py-0.5 whitespace-nowrap"
-                  style={{ backgroundColor: "#EDE4CC", color: "#5C4A1E" }}
-                >
-                  Husary
-                </span>
-
-                {/* Play button */}
-                <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0 shadow shadow-primary/30">
-                  <svg viewBox="0 0 10 12" className="w-3 h-3 fill-current text-primary-foreground ml-0.5">
-                    <path d="M1 1l8 5-8 5V1z" />
-                  </svg>
-                </div>
-
-                {/* Progress track */}
-                <div className="flex-1 relative">
-                  <div className="h-1.5 rounded-full w-full" style={{ backgroundColor: "#DDD0B0" }}>
-                    <div className="h-1.5 rounded-full bg-primary w-[38%]" />
-                    <div
-                      className="absolute top-1/2 left-[38%] -translate-y-1/2 w-3 h-3 rounded-full bg-primary border-2 border-white shadow"
-                      style={{ marginLeft: -6 }}
-                    />
+                  <div className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-secondary/50 text-foreground text-sm font-medium border border-border/50">
+                    Continue Session
                   </div>
                 </div>
 
-                {/* Reciter label */}
-                <span className="text-[10px] font-medium whitespace-nowrap" style={{ color: "#8C7A56" }}>
-                  2:255
-                </span>
               </div>
             </div>
           </div>
