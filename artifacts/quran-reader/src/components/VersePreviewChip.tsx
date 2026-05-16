@@ -1,3 +1,4 @@
+/*
 import { X } from "lucide-react";
 import { useQuranStore } from "../store/quranStore";
 
@@ -63,7 +64,6 @@ export default function VersePreviewChip() {
       }}
     >
       <div className="mx-3 my-2 flex items-center gap-2 rounded-xl border border-border bg-card shadow-sm px-2 py-1.5">
-        {/* X button — prominent, left edge */}
         <button
           onClick={clearSelection}
           aria-label="Clear selection"
@@ -71,11 +71,7 @@ export default function VersePreviewChip() {
         >
           <X className="w-4 h-4" />
         </button>
-
-        {/* Divider */}
         <div className="w-px self-stretch bg-border flex-shrink-0" />
-
-        {/* Arabic text — RTL, Uthmanic font, capped at 2 lines */}
         <div
           dir="rtl"
           lang="ar"
@@ -100,3 +96,6 @@ export default function VersePreviewChip() {
     </div>
   );
 }
+*/
+
+export {};
