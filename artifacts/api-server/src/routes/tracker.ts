@@ -210,6 +210,7 @@ router.post("/srs/seed", async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const items = seedSchema.parse(req.body);
     const now = new Date();
+    let seeded = 0;
     for (const { reference, vibe } of items) {
       const existing = await storage.getSrsItemByReference(userId, reference);
       if (existing) continue;
@@ -225,8 +226,11 @@ router.post("/srs/seed", async (req: Request, res: Response) => {
         repetitions: seed.repetitions,
         nextReviewDate,
       });
+      // Write a log entry so the Library shows the surah immediately with the right vibe colour.
+      await storage.createLog({ userId, type: "surah", reference, vibeScale: vibe });
+      seeded++;
     }
-    res.json({ seeded: items.length });
+    res.json({ seeded });
   } catch (err) {
     if (err instanceof z.ZodError) { res.status(400).json({ error: err.issues }); return; }
     throw err;
@@ -336,6 +340,9 @@ router.post("/plans/today", async (req: Request, res: Response) => {
       }
       // Then fresh pages 1..604 in order, excluding pages already covered
       // (either by the plan or by any known SRS item).
+      // Only introduce fresh pages when the user has no SRS data at all (full-Quran / skipped onboarding).
+      // Once any surah is registered, the plan must stay bounded to what the user has logged.
+      if (allItems.length > 0) return { plannedItems, currentPageCount };
       const freshPages: number[] = [];
       for (let p = 1; p <= TOTAL_QURAN_PAGES; p++) {
         if (!existingPages.has(p) && !knownPages.has(p)) freshPages.push(p);

@@ -351,8 +351,12 @@ export class LocalTrackerStorage implements ITrackerStorage {
   async createOrUpdatePlan({ bandwidth }: { bandwidth: number }): Promise<DailyPlan> {
     // Defined inline so it can close over readSrs() — mirrors server fillFromDueAndFresh.
     function fillFreshPages(planned: string[], usedPages: number): { planned: string[]; usedPages: number } {
+      const srsItems = readSrs();
+      // Only introduce unseen pages when the user has no SRS data (full-Quran / skipped onboarding).
+      // Once any surah is registered, the plan must stay bounded to what the user has logged.
+      if (srsItems.length > 0) return { planned, usedPages };
       const knownPages = new Set<number>();
-      for (const item of readSrs()) {
+      for (const item of srsItems) {
         for (const p of getPagesForReference(item.reference)) knownPages.add(p);
       }
       const coveredPages = new Set<number>();
@@ -638,7 +642,9 @@ export class LocalTrackerStorage implements ITrackerStorage {
       5: { interval: 60, repetitions: 5, easeFactor: 280 },
     };
     const srsItems = readSrs();
+    const logs = readLogs();
     const now = new Date();
+    let seeded = 0;
     for (const { reference, vibe } of items) {
       if (srsItems.find((s) => s.reference === reference)) continue;
       const seed = SEED[vibe] ?? SEED[3];
@@ -653,9 +659,20 @@ export class LocalTrackerStorage implements ITrackerStorage {
         repetitions: seed.repetitions,
         nextReviewDate: next.toISOString(),
       });
+      // Also write a log entry so the Library shows the surah immediately with the right vibe colour.
+      // We write directly (not via createLog) to avoid applyVibe overwriting the calibrated SRS params.
+      logs.unshift({
+        id: nextId(),
+        type: "surah",
+        reference,
+        vibeScale: vibe,
+        createdAt: now.toISOString(),
+      });
+      seeded++;
     }
     writeSrs(srsItems);
-    if (items.length > 0) recordAction();
+    writeLogs(logs);
+    if (seeded > 0) recordAction();
   }
 
   async isEmpty(): Promise<boolean> {
