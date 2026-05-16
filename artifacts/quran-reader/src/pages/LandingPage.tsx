@@ -296,7 +296,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
                   </svg>
                 </div>
                 {/* Ayah label */}
-                <span className="text-[10px] font-medium text-foreground truncate flex-1 min-w-0">Al-Baqarah · 2:202</span>
+                <span className="text-[10px] font-medium text-foreground truncate flex-1 min-w-0">Al-Baqarah · 2:</span>
               </div>
 
               {/* Progress bar with tick marks and timestamps */}
@@ -391,7 +391,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
             </div>
             <div>
               <h4 className="font-serif font-bold text-foreground mb-1">Queue</h4>
-              <p className="text-sm text-muted-foreground leading-relaxed">Build custom playlists of any verses to loop and review. Share your queues with anyone.</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">Build custom playlists of lines or verses to loop and review. Share your queues with anyone.</p>
             </div>
           </div>
 
