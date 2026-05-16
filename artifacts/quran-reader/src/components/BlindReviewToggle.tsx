@@ -11,7 +11,7 @@ interface ModeConfig {
   active: boolean;
 }
 
-const MODES: BlindReviewMode[] = ["default", "word-by-word", "blind", "context-only"];
+const MODES: BlindReviewMode[] = ["default", "word-by-word", "context-only", "blind"];
 
 function getModeConfig(mode: BlindReviewMode): ModeConfig {
   switch (mode) {
