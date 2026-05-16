@@ -2,7 +2,6 @@ import { useEffect, useCallback, useState, useRef, type RefObject } from "react"
 import {
   ChevronLeft,
   ChevronRight,
-  ListMusic,
   Loader2,
   AlertCircle,
   BookOpen,
@@ -1036,21 +1035,6 @@ export default function QuranPage() {
         ) : (
           <BookOpen className="w-5 h-5" />
         )}
-      </button>
-
-      <button
-        onClick={() => setQueuePanelOpen(!queuePanelOpen)}
-        data-tour="queue-button"
-        className={`p-2 rounded-lg transition-colors ${
-          queuePanelOpen
-            ? "bg-primary/15 text-primary"
-            : "text-muted-foreground hover:bg-muted hover:text-foreground"
-        }`}
-        aria-label={queuePanelOpen ? "Close review queue" : "Open review queue"}
-        aria-pressed={queuePanelOpen}
-        title="Review queue"
-      >
-        <ListMusic className="w-5 h-5" />
       </button>
     </>
   );

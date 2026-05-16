@@ -15,6 +15,7 @@ import {
   Moon,
   Sun,
   Bookmark,
+  ListMusic,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useQuranStore } from "../store/quranStore";
@@ -129,6 +130,19 @@ export default function AppShell({ children, rightActions, centerContent }: AppS
   const setDarkMode = useQuranStore((s) => s.setDarkMode);
   const bookmarksPanelOpen = useQuranStore((s) => s.bookmarksPanelOpen);
   const setBookmarksPanelOpen = useQuranStore((s) => s.setBookmarksPanelOpen);
+  const queuePanelOpen = useQuranStore((s) => s.queuePanelOpen);
+  const setQueuePanelOpen = useQuranStore((s) => s.setQueuePanelOpen);
+
+  const [, navigate] = useLocation();
+
+  function handleQueueButton() {
+    if (location === "/") {
+      setQueuePanelOpen(!queuePanelOpen);
+    } else {
+      navigate("/");
+      setQueuePanelOpen(true);
+    }
+  }
 
   const headerRef = useRef<HTMLElement>(null);
 
@@ -382,6 +396,20 @@ export default function AppShell({ children, rightActions, centerContent }: AppS
               title="Saved verses"
             >
               <Bookmark className="w-5 h-5" />
+            </button>
+            <button
+              onClick={handleQueueButton}
+              data-tour="queue-button"
+              className={`p-2 rounded-lg transition-colors ${
+                queuePanelOpen && location === "/"
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+              aria-label={queuePanelOpen ? "Close review queue" : "Open review queue"}
+              aria-pressed={queuePanelOpen && location === "/"}
+              title="Review queue"
+            >
+              <ListMusic className="w-5 h-5" />
             </button>
             {rightActions}
           </div>
