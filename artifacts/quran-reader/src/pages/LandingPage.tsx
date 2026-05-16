@@ -123,7 +123,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
             data-testid="button-login"
             className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold shadow-md shadow-primary/20 hover:shadow-lg hover:-translate-y-0.5 transition-all"
           >
-            Sign In
+            Get Started
           </button>
         </div>
       </nav>
