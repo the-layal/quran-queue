@@ -418,22 +418,6 @@ function VerseBlock({
               </span>
             );
           })}
-          {ayah.endMarkerCodeV2 && !usingFallback ? (
-            <span
-              className="ayah-end-marker select-none"
-              style={{ fontFamily: `QCFv2p${ayah.endMarkerPageNumber}, serif` }}
-              aria-label={`Ayah ${ayah.numberInSurah}`}
-            >
-              {ayah.endMarkerCodeV2}
-            </span>
-          ) : (
-            <span
-              className="ayah-end-marker select-none"
-              aria-label={`Ayah ${ayah.numberInSurah}`}
-            >
-              {toEasternArabic(ayah.numberInSurah)}
-            </span>
-          )}
         </div>
 
         {translation !== undefined && (
