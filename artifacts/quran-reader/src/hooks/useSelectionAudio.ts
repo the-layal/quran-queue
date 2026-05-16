@@ -18,6 +18,7 @@ export interface SelectionAudioState {
   hasAudio: boolean;
   isAudioLoading: boolean;
   regions: PlaybackRegion[];
+  audioData: AudioDataMap | null;
   play: () => void;
   pause: () => void;
   seekTo: (fraction: number) => void;
@@ -552,6 +553,7 @@ export function useSelectionAudio(): SelectionAudioState {
     hasAudio,
     isAudioLoading,
     regions,
+    audioData,
     play,
     pause,
     seekTo,

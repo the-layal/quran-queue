@@ -30,6 +30,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
     hasAudio,
     isAudioLoading,
     regions: selRegions,
+    audioData: selAudioData,
     play: selPlay,
     pause: selPause,
     seekTo: selSeekTo,
@@ -59,6 +60,7 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
   const selectedWordIds = useQuranStore((s) => s.selectedWordIds);
   const brushFineness = useQuranStore((s) => s.brushFineness);
   const addToQueue = useQuranStore((s) => s.addToQueue);
+  const svgToJsonWordMap = useQuranStore((s) => s.svgToJsonWordMap);
   const queuePanelOpen = useQuranStore((s) => s.queuePanelOpen);
   const setQueuePanelOpen = useQuranStore((s) => s.setQueuePanelOpen);
   const reviewQueue = useQuranStore((s) => s.reviewQueue);
@@ -95,6 +97,69 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
     }
     return fracs;
   }, [activeRegions, activeTotalDurationSec]);
+
+  const activeLineBoundaryFractions = useMemo(() => {
+    if (queueActive || !selAudioData || selRegions.length === 0 || activeTotalDurationSec <= 0) return [];
+    const TOLERANCE = 0.005;
+    const fracs: number[] = [];
+    let cumDurSec = 0;
+
+    for (let i = 0; i < selRegions.length; i++) {
+      const region = selRegions[i];
+      const { surahNumber, ayahNumber, ayahKey, startMs, durationMs } = region;
+      const ayahData = selAudioData[ayahKey];
+      if (!ayahData) { cumDurSec += durationMs / 1000; continue; }
+
+      const surahPad = String(surahNumber).padStart(3, "0");
+      const ayahPad = String(ayahNumber).padStart(3, "0");
+      const wordEls = Array.from(document.querySelectorAll<Element>(
+        `g[data-surah="${surahPad}"][data-aya="${ayahPad}"][data-type="text"]`
+      ));
+
+      if (wordEls.length > 0) {
+        const lineFirstWord = new Map<number, number>();
+        for (const el of wordEls) {
+          const ln = el.getAttribute("data-line-number");
+          const wi = el.getAttribute("data-word-index-in-ayah");
+          if (ln === null || wi === null) continue;
+          const lineNum = parseInt(ln, 10);
+          const wordIdx = parseInt(wi, 10);
+          if (!lineFirstWord.has(lineNum) || wordIdx < lineFirstWord.get(lineNum)!) {
+            lineFirstWord.set(lineNum, wordIdx);
+          }
+        }
+
+        const sortedLines = Array.from(lineFirstWord.keys()).sort((a, b) => a - b);
+        const svgMap = svgToJsonWordMap?.[ayahKey];
+
+        for (let li = 0; li < sortedLines.length; li++) {
+          if (i === 0 && li === 0) continue;
+
+          const svgWordIdx = lineFirstWord.get(sortedLines[li])!;
+          const jsonWordIdx = svgMap ? (svgMap[svgWordIdx] ?? svgWordIdx) : svgWordIdx;
+          const seg = ayahData.segments.find((s) => s[0] === jsonWordIdx);
+          if (!seg) continue;
+
+          const wordOffsetMs = seg[1] - startMs;
+          if (wordOffsetMs < 0) continue;
+
+          const frac = (cumDurSec + wordOffsetMs / 1000) / activeTotalDurationSec;
+          if (frac <= 0 || frac >= 1) continue;
+
+          const isNearAyahBoundary = activeBoundaryFractions.some(
+            (af) => Math.abs(af - frac) < TOLERANCE
+          );
+          if (!isNearAyahBoundary) {
+            fracs.push(frac);
+          }
+        }
+      }
+
+      cumDurSec += durationMs / 1000;
+    }
+
+    return fracs;
+  }, [queueActive, selAudioData, selRegions, activeTotalDurationSec, activeBoundaryFractions, svgToJsonWordMap]);
 
   const progressBarRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
@@ -488,6 +553,13 @@ export default function AudioControlBar({ chapters, queuePlayback }: AudioContro
                 style={{ width: `${Math.round(activeProgress * 100)}%` }}
               />
             </div>
+            {activeLineBoundaryFractions.map((frac) => (
+              <div
+                key={frac}
+                className="absolute top-1/2 -translate-y-1/2 w-px h-1.5 bg-black opacity-40 pointer-events-none"
+                style={{ left: `${frac * 100}%` }}
+              />
+            ))}
             {activeBoundaryFractions.map((frac) => (
               <div
                 key={frac}
