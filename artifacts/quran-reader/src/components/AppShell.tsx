@@ -35,7 +35,6 @@ const LG_BREAKPOINT_PX = 1024;
 
 interface VerseEntry {
   arabic: string;
-  transliteration?: string;
   translation: string;
   reference: string;
 }
@@ -69,79 +68,18 @@ function getDailyVerse(): VerseEntry {
 
 const FIXED_VERSE: VerseEntry = {
   arabic: "وَلَقَدْ يَسَّرْنَا الْقُرْآنَ لِلذِّكْرِ فَهَلْ مِن مُّدَّكِرٍ",
-  transliteration: "Wa laqad yassarnal-Qur'āna lil-dhikri fahal min muddakir",
   translation: "And We have certainly made the Quran easy for remembrance, so is there any who will remember?",
   reference: "Quran 54:17",
 };
 
-const VERSE_PANEL_TRANSLATION_KEY = "hafith_verse_panel_translation";
-const VERSE_PANEL_TRANSLITERATION_KEY = "hafith_verse_panel_transliteration";
-
 function VersePanel() {
   const verse = FIXED_VERSE;
-
-  const [showTranslation, setShowTranslation] = useState<boolean>(() => {
-    try { return localStorage.getItem(VERSE_PANEL_TRANSLATION_KEY) !== "false"; } catch { return true; }
-  });
-  const [showTransliteration, setShowTransliteration] = useState<boolean>(() => {
-    try { return localStorage.getItem(VERSE_PANEL_TRANSLITERATION_KEY) === "true"; } catch { return false; }
-  });
-
-  const toggleTranslation = () => {
-    setShowTranslation((v) => {
-      const next = !v;
-      try { localStorage.setItem(VERSE_PANEL_TRANSLATION_KEY, String(next)); } catch {}
-      return next;
-    });
-  };
-
-  const toggleTransliteration = () => {
-    setShowTransliteration((v) => {
-      const next = !v;
-      try { localStorage.setItem(VERSE_PANEL_TRANSLITERATION_KEY, String(next)); } catch {}
-      return next;
-    });
-  };
 
   return (
     <div
       className="mx-3 mb-3 p-3 rounded-xl bg-primary/5 border border-primary/15"
       data-testid="sidebar-verse-panel"
     >
-      {/* Header row: reference + toggles */}
-      <div className="flex items-center justify-between mb-1.5">
-        <p className="text-[10px] text-primary/80 font-semibold">{verse.reference}</p>
-        <div className="flex items-center rounded-lg border border-border bg-muted/50 p-0.5 gap-0.5">
-          <button
-            onClick={toggleTransliteration}
-            title={showTransliteration ? "Hide transliteration" : "Show transliteration"}
-            aria-label="Toggle transliteration"
-            aria-pressed={showTransliteration}
-            className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition-all ${
-              showTransliteration
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Tr
-          </button>
-          <button
-            onClick={toggleTranslation}
-            title={showTranslation ? "Hide translation" : "Show translation"}
-            aria-label="Toggle translation"
-            aria-pressed={showTranslation}
-            className={`px-2 py-0.5 rounded-md text-[10px] font-medium transition-all ${
-              showTranslation
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            En
-          </button>
-        </div>
-      </div>
-
-      {/* Arabic */}
       <p
         className="text-right text-base leading-relaxed text-foreground"
         dir="rtl"
@@ -149,18 +87,8 @@ function VersePanel() {
       >
         {verse.arabic}
       </p>
-
-      {/* Transliteration */}
-      {showTransliteration && verse.transliteration && (
-        <p className="text-[10px] text-muted-foreground/80 italic leading-snug mt-1">
-          {verse.transliteration}
-        </p>
-      )}
-
-      {/* Translation */}
-      {showTranslation && (
-        <p className="text-xs text-muted-foreground leading-snug mt-1">{verse.translation}</p>
-      )}
+      <p className="text-xs text-muted-foreground leading-snug mt-1">{verse.translation}</p>
+      <p className="text-[10px] text-primary/80 font-semibold mt-1.5">{verse.reference}</p>
     </div>
   );
 }

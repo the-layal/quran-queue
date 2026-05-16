@@ -12,25 +12,26 @@ const HERO_PILLS = [
 
 
 const AYAH_201_WORDS = [
-  { id: "w0",  text: "وَمِنْهُم",   line: 0 },
-  { id: "w1",  text: "مَّن",        line: 0 },
-  { id: "w2",  text: "يَقُولُ",     line: 0 },
-  { id: "w3",  text: "رَبَّنَا",    line: 0 },
-  { id: "w4",  text: "آتِنَا",      line: 0 },
-  { id: "w5",  text: "فِي",         line: 1 },
-  { id: "w6",  text: "الدُّنْيَا",  line: 1 },
-  { id: "w7",  text: "حَسَنَةً",    line: 1 },
-  { id: "w8",  text: "وَفِي",       line: 1 },
-  { id: "w9",  text: "الْآخِرَةِ", line: 1 },
-  { id: "w10", text: "حَسَنَةً",    line: 1 },
-  { id: "w11", text: "وَقِنَا",     line: 2 },
-  { id: "w12", text: "عَذَابَ",     line: 2 },
-  { id: "w13", text: "النَّارِ",    line: 2 },
+  { id: "w0",  text: "وَمِنْهُم",   tr: "wa min-hum",    line: 0 },
+  { id: "w1",  text: "مَّن",        tr: "man",            line: 0 },
+  { id: "w2",  text: "يَقُولُ",     tr: "yaqūlu",         line: 0 },
+  { id: "w3",  text: "رَبَّنَا",    tr: "Rabbanā",        line: 0 },
+  { id: "w4",  text: "آتِنَا",      tr: "ātinā",          line: 0 },
+  { id: "w5",  text: "فِي",         tr: "fī",             line: 1 },
+  { id: "w6",  text: "الدُّنْيَا",  tr: "l-dunyā",        line: 1 },
+  { id: "w7",  text: "حَسَنَةً",    tr: "ḥasanatan",      line: 1 },
+  { id: "w8",  text: "وَفِي",       tr: "wa fī",          line: 1 },
+  { id: "w9",  text: "الْآخِرَةِ", tr: "l-ākhirati",     line: 1 },
+  { id: "w10", text: "حَسَنَةً",    tr: "ḥasanatan",      line: 1 },
+  { id: "w11", text: "وَقِنَا",     tr: "wa qinā",        line: 2 },
+  { id: "w12", text: "عَذَابَ",     tr: "'adhāba",        line: 2 },
+  { id: "w13", text: "النَّارِ",    tr: "l-nāri",         line: 2 },
 ];
 
 function HighlightCard() {
   const [selected, setSelected] = useState<Set<string>>(new Set(["w0", "w1", "w2"]));
   const [fineness, setFineness] = useState<"word" | "line" | "ayah">("word");
+  const [showTranslit, setShowTranslit] = useState(false);
 
   function toggle(wordId: string, line: number) {
     setSelected((prev) => {
@@ -62,34 +63,51 @@ function HighlightCard() {
               <span
                 key={w.id}
                 onClick={() => toggle(w.id, w.line)}
-                className={`font-quran text-[1.05rem] leading-relaxed cursor-pointer rounded px-0.5 transition-colors select-none ${
+                className={`inline-flex flex-col items-center cursor-pointer rounded px-0.5 transition-colors select-none ${
                   selected.has(w.id)
                     ? "bg-primary/20 text-primary"
                     : "text-foreground hover:bg-muted"
                 }`}
               >
-                {w.text}
+                <span className="font-quran text-[1.05rem] leading-relaxed">{w.text}</span>
+                {showTranslit && (
+                  <span className="font-sans text-[8px] leading-tight text-muted-foreground italic" dir="ltr">
+                    {w.tr}
+                  </span>
+                )}
               </span>
             ))}
             {lineIdx === 2 && (
-              <span className="font-quran text-sm text-muted-foreground/70 select-none">٢٠١</span>
+              <span className="font-quran text-sm text-muted-foreground/70 select-none self-start">٢٠١</span>
             )}
           </div>
         ))}
-        <div className="flex gap-1.5 pt-1.5 border-t border-border/40">
-          {(["word", "line", "ayah"] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFineness(f)}
-              className={`text-[9px] font-semibold rounded-full px-2.5 py-0.5 transition-colors ${
-                fineness === f
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              {f}
-            </button>
-          ))}
+        <div className="flex items-center justify-between pt-1.5 border-t border-border/40">
+          <div className="flex gap-1.5">
+            {(["word", "line", "ayah"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFineness(f)}
+                className={`text-[9px] font-semibold rounded-full px-2.5 py-0.5 transition-colors ${
+                  fineness === f
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setShowTranslit((v) => !v)}
+            className={`text-[9px] font-semibold rounded-full px-2.5 py-0.5 transition-colors ${
+              showTranslit
+                ? "bg-primary text-primary-foreground"
+                : "bg-secondary text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            Tr
+          </button>
         </div>
       </div>
       <div>
