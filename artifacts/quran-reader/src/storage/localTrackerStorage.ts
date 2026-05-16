@@ -9,7 +9,7 @@ import type {
   CompleteAdvancedInput,
 } from "./trackerStorage";
 import { getAyahsForReference } from "./referenceFanOut";
-import { getPageEquivalent, getPagesForReference } from "../lib/page-utils";
+import { getPageEquivalent, getPagesForReference, groupConsecutivePages, TOTAL_PAGES } from "../lib/page-utils";
 
 
 const DATA_VERSION = "2";
@@ -349,6 +349,36 @@ export class LocalTrackerStorage implements ITrackerStorage {
   }
 
   async createOrUpdatePlan({ bandwidth }: { bandwidth: number }): Promise<DailyPlan> {
+    // Defined inline so it can close over readSrs() — mirrors server fillFromDueAndFresh.
+    function fillFreshPages(planned: string[], usedPages: number): { planned: string[]; usedPages: number } {
+      const knownPages = new Set<number>();
+      for (const item of readSrs()) {
+        for (const p of getPagesForReference(item.reference)) knownPages.add(p);
+      }
+      const coveredPages = new Set<number>();
+      for (const ref of planned) {
+        for (const p of getPagesForReference(ref)) coveredPages.add(p);
+      }
+      const freshPages: number[] = [];
+      for (let p = 1; p <= TOTAL_PAGES; p++) {
+        if (!coveredPages.has(p) && !knownPages.has(p)) freshPages.push(p);
+      }
+      let i = 0;
+      while (usedPages < bandwidth && i < freshPages.length) {
+        const batchEnd = Math.min(i + (bandwidth - usedPages), freshPages.length);
+        const batch = freshPages.slice(i, batchEnd);
+        for (const ref of groupConsecutivePages(batch)) {
+          const weight = getPageEquivalent(ref);
+          if (usedPages + weight > bandwidth && planned.length > 0) break;
+          planned.push(ref);
+          usedPages += weight;
+          for (const p of getPagesForReference(ref)) coveredPages.add(p);
+        }
+        i = batchEnd;
+      }
+      return { planned, usedPages };
+    }
+
     const t = todayStr();
     const plans = readPlans();
     const existingIdx = plans.findIndex((p) => p.date === t);
@@ -362,7 +392,7 @@ export class LocalTrackerStorage implements ITrackerStorage {
         for (const ref of yPlan.plannedItems || [])
           if (!completed.includes(ref) && !retiredRefSet.has(ref)) carryover.push(ref);
       }
-      const planned: string[] = [...carryover];
+      let planned: string[] = [...carryover];
       let usedPages = planned.reduce((s, r) => s + getPageEquivalent(r), 0);
       const due = await this.getDueSrsItems();
       for (const item of due) {
@@ -371,6 +401,9 @@ export class LocalTrackerStorage implements ITrackerStorage {
           planned.push(item.reference);
           usedPages += getPageEquivalent(item.reference);
         }
+      }
+      if (usedPages < bandwidth) {
+        ({ planned, usedPages } = fillFreshPages(planned, usedPages));
       }
       const plan: DailyPlan = {
         id: nextId(),
@@ -390,19 +423,20 @@ export class LocalTrackerStorage implements ITrackerStorage {
     const srsRefs = new Set(allSrs.map((i) => i.reference));
     const retiredRefsUpdate = new Set(allSrs.filter((i) => i.retired).map((i) => i.reference));
     const completedExisting = existing.completedItems || [];
-    const planned = (existing.plannedItems || []).filter(
+    let planned = (existing.plannedItems || []).filter(
       (r) => srsRefs.has(r) && (!retiredRefsUpdate.has(r) || completedExisting.includes(r)),
     );
     let usedPages = planned.reduce((s, r) => s + getPageEquivalent(r), 0);
-    if (usedPages < bandwidth) {
-      const due = await this.getDueSrsItems();
-      for (const item of due) {
-        if (usedPages >= bandwidth) break;
-        if (!planned.includes(item.reference)) {
-          planned.push(item.reference);
-          usedPages += getPageEquivalent(item.reference);
-        }
+    const due = await this.getDueSrsItems();
+    for (const item of due) {
+      if (usedPages >= bandwidth) break;
+      if (!planned.includes(item.reference)) {
+        planned.push(item.reference);
+        usedPages += getPageEquivalent(item.reference);
       }
+    }
+    if (usedPages < bandwidth) {
+      ({ planned, usedPages } = fillFreshPages(planned, usedPages));
     }
     const updated: DailyPlan = { ...existing, bandwidth, plannedItems: planned };
     plans[existingIdx] = updated;
