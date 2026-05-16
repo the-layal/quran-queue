@@ -1,7 +1,37 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { BookOpen, BarChart3, Brain, CalendarDays, Trophy, Flame, CheckCircle2, Play, ListMusic, Layers, ChevronDown, GripVertical } from "lucide-react";
 
 export const LANDING_SEEN_KEY = "hafith_landing_seen";
+
+const HERO_PILLS = [
+  "Spaced Repetition Revision Planner",
+  "Visual Memorization Tracker",
+  "Fine-Tuned Word Level Quranic Audio Selection",
+  "Queue Creation For Automated Playback",
+];
+
+function CyclingPill() {
+  const [idx, setIdx] = useState(0);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setIdx((i) => (i + 1) % HERO_PILLS.length);
+        setVisible(true);
+      }, 300);
+    }, 2500);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="inline-block mb-6 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-semibold transition-opacity duration-300"
+      style={{ opacity: visible ? 1 : 0 }}>
+      {HERO_PILLS[idx]}
+    </div>
+  );
+}
 
 const AYAH_201_WORDS = [
   { id: "w0",  text: "وَمِنْهُم",   line: 0 },
@@ -107,7 +137,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
             </div>
             <div>
               <h1 className="font-serif font-bold text-lg text-foreground leading-none">Hafith</h1>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Dynamic Tracker</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Memorization Companion</p>
             </div>
           </div>
           <button
@@ -124,9 +154,7 @@ export default function LandingPage({ onEnter }: LandingPageProps) {
       <section className="pt-32 pb-20 px-6">
         <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
           <div>
-            <div className="inline-block mb-6 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-semibold">
-              Spaced Repetition for Quran
-            </div>
+            <CyclingPill />
             <h2 className="text-4xl md:text-5xl lg:text-6xl font-serif text-foreground leading-[1.0] mb-6">
               Your Quran memorization,{" "}
               <span className="text-primary">beautifully tracked</span>
