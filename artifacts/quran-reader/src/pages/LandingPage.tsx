@@ -15,14 +15,18 @@ function CyclingPill() {
   const [visible, setVisible] = useState(true);
 
   useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const interval = setInterval(() => {
       setVisible(false);
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         setIdx((i) => (i + 1) % HERO_PILLS.length);
         setVisible(true);
       }, 300);
     }, 2500);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    };
   }, []);
 
   return (
