@@ -332,7 +332,7 @@ router.post("/plans/today", async (req: Request, res: Response) => {
     const collectCandidatePages = async (existingPages: Set<number>): Promise<number[]> => {
       const candidatePages: number[] = [];
       const allItems = (await storage.getSrsItems(userId))
-        .filter((i) => !i.retired)
+        .filter((i) => !i.retired && i.reference.startsWith("ayah:"))
         .sort((a, b) => new Date(a.nextReviewDate).getTime() - new Date(b.nextReviewDate).getTime());
       for (const item of allItems) {
         for (const p of getPagesForReference(item.reference)) {
@@ -608,18 +608,40 @@ router.post("/plans/today/complete", async (req: Request, res: Response) => {
     plan = await storage.updateDailyPlan(plan.id, { completedItems });
 
     const type = input.reference.split(":")[0] || "page";
-    await applyVibeToReference(userId, type, input.reference, input.vibeScale);
+    await storage.createLog({ userId, type, reference: input.reference, vibeScale: input.vibeScale });
 
     const ayahGroups = getAyahsForReference(input.reference);
-    const ayahPairsComplete: Array<{ surah: number; ayah: number }> = [];
-    for (const group of ayahGroups) {
-      for (const ayah of group.ayahs) {
-        const ayahRef = `ayah:${group.surah}:${ayah}`;
-        await applyVibeToReference(userId, "ayah", ayahRef, input.vibeScale);
-        ayahPairsComplete.push({ surah: group.surah, ayah });
-      }
+    const ayahPairs = ayahGroups.flatMap((g) => g.ayahs.map((a) => ({ surah: g.surah, ayah: a })));
+    const ayahRefs = ayahPairs.map(({ surah, ayah }) => `ayah:${surah}:${ayah}`);
+
+    if (ayahRefs.length > 0) {
+      const existingItems = await storage.getSrsItemsByReferences(userId, ayahRefs);
+      const existingMap = new Map(existingItems.map((it) => [it.reference, it]));
+      const now = new Date();
+      const upsertItems = ayahRefs.map((ref) => {
+        const existing = existingMap.get(ref);
+        const ef = existing?.easeFactor ?? 250;
+        const iv = existing?.interval ?? 0;
+        const rp = existing?.repetitions ?? 0;
+        const sm2 = calculateNextReview(ef, iv, rp, input.vibeScale);
+        return {
+          userId,
+          type: "ayah" as const,
+          reference: ref,
+          easeFactor: sm2.easeFactor,
+          interval: sm2.interval,
+          repetitions: sm2.repetitions,
+          nextReviewDate: sm2.nextReviewDate,
+          retired: existing?.retired ?? false,
+          retiredAt: existing?.retiredAt ?? null,
+          lastVibeScale: input.vibeScale,
+          lastReviewedAt: now,
+        };
+      });
+      await storage.batchUpsertAyahSrsItems(upsertItems);
     }
-    void updateGoalProgressForAyahs(userId, ayahPairsComplete);
+
+    void updateGoalProgressForAyahs(userId, ayahPairs);
 
     res.json(plan);
   } catch (err) {
@@ -653,15 +675,38 @@ router.post("/plans/today/complete-advanced", async (req: Request, res: Response
     if (!completedItems.includes(input.reference)) completedItems.push(input.reference);
     plan = await storage.updateDailyPlan(plan.id, { completedItems });
 
-    for (const av of input.ayahVibes) {
-      const ayahRef = `ayah:${av.surah}:${av.ayah}`;
-      await applyVibeToReference(userId, "ayah", ayahRef, av.vibe);
-    }
-    void updateGoalProgressForAyahs(userId, input.ayahVibes.map((av) => ({ surah: av.surah, ayah: av.ayah })));
-
     const overallVibe = Math.round(input.ayahVibes.reduce((s, a) => s + a.vibe, 0) / input.ayahVibes.length);
     const refType = input.reference.split(":")[0] || "page";
-    await applyVibeToReference(userId, refType, input.reference, overallVibe);
+    await storage.createLog({ userId, type: refType, reference: input.reference, vibeScale: overallVibe });
+
+    const ayahRefs = input.ayahVibes.map((av) => `ayah:${av.surah}:${av.ayah}`);
+    const existingItems = await storage.getSrsItemsByReferences(userId, ayahRefs);
+    const existingMap = new Map(existingItems.map((it) => [it.reference, it]));
+    const now = new Date();
+    const upsertItems = input.ayahVibes.map((av) => {
+      const ref = `ayah:${av.surah}:${av.ayah}`;
+      const existing = existingMap.get(ref);
+      const ef = existing?.easeFactor ?? 250;
+      const iv = existing?.interval ?? 0;
+      const rp = existing?.repetitions ?? 0;
+      const sm2 = calculateNextReview(ef, iv, rp, av.vibe);
+      return {
+        userId,
+        type: "ayah" as const,
+        reference: ref,
+        easeFactor: sm2.easeFactor,
+        interval: sm2.interval,
+        repetitions: sm2.repetitions,
+        nextReviewDate: sm2.nextReviewDate,
+        retired: existing?.retired ?? false,
+        retiredAt: existing?.retiredAt ?? null,
+        lastVibeScale: av.vibe,
+        lastReviewedAt: now,
+      };
+    });
+    await storage.batchUpsertAyahSrsItems(upsertItems);
+
+    void updateGoalProgressForAyahs(userId, input.ayahVibes.map((av) => ({ surah: av.surah, ayah: av.ayah })));
 
     res.json(plan);
   } catch (err) {
