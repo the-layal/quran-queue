@@ -346,7 +346,15 @@ router.post("/plans/today", async (req: Request, res: Response) => {
 
     const allSrsFull = await storage.getSrsItems(userId);
     const retiredSet = new Set(allSrsFull.filter((s) => s.retired).map((s) => s.reference));
-    const srsRefSet = new Set(allSrsFull.map((s) => s.reference));
+
+    // Build page coverage from all non-retired SRS items (now predominantly ayah-level).
+    // Plan refs are page-level (page:N), so we check coverage via page-overlap rather than
+    // exact ref match, which would always miss with ayah:S:N SRS items.
+    const coveredPages = new Set<number>();
+    for (const srs of allSrsFull) {
+      if (!srs.retired) for (const p of getPagesForReference(srs.reference)) coveredPages.add(p);
+    }
+    const isCovered = (ref: string) => getPagesForReference(ref).some((p) => coveredPages.has(p));
 
     if (!plan) {
       const carryoverRefs: string[] = [];
@@ -355,7 +363,7 @@ router.post("/plans/today", async (req: Request, res: Response) => {
         const completed = yesterdayPlan.completedItems || [];
         const planned = yesterdayPlan.plannedItems || [];
         for (const ref of planned)
-          if (!completed.includes(ref) && !retiredSet.has(ref) && srsRefSet.has(ref)) carryoverRefs.push(ref);
+          if (!completed.includes(ref) && !retiredSet.has(ref) && isCovered(ref)) carryoverRefs.push(ref);
       }
 
       let currentPageCount = 0;
@@ -401,7 +409,7 @@ router.post("/plans/today", async (req: Request, res: Response) => {
     } else {
       const completedItems = plan.completedItems || [];
       const existingPlanned = (plan.plannedItems || []).filter(
-        (r) => (srsRefSet.has(r) || completedItems.includes(r)) && (!retiredSet.has(r) || completedItems.includes(r)),
+        (r) => (isCovered(r) || completedItems.includes(r)) && (!retiredSet.has(r) || completedItems.includes(r)),
       );
       let currentPageCount = 0;
       const existingPages = new Set<number>();
@@ -474,45 +482,44 @@ router.post("/plans/today/add-more", async (req: Request, res: Response) => {
     const existingPages = new Set<number>();
     for (const ref of currentItems) for (const p of getPagesForReference(ref)) existingPages.add(p);
 
-    const allItems = await storage.getSrsItems(userId);
-
     // Build a set of page numbers the user explicitly dismissed today
     const dismissedPages = new Set<number>();
     for (const ref of (plan.removedItems || [])) {
       for (const p of getPagesForReference(ref)) dismissedPages.add(p);
     }
 
-    const newRefs: string[] = [];
-    let added = 0;
-    // Due SRS refs first, preserving original references
-    const dueItems = await storage.getDueSrsItems(userId);
-    const dueRefSet = new Set(dueItems.map((i) => i.reference));
-    for (const item of dueItems) {
-      if (added >= input.count) break;
-      if (currentItems.includes(item.reference) || newRefs.includes(item.reference)) continue;
-      const pages = getPagesForReference(item.reference);
-      if (pages.every((p) => existingPages.has(p))) continue;
-      if (pages.some((p) => dismissedPages.has(p))) continue;
-      newRefs.push(item.reference);
-      added += getPageEquivalent(item.reference);
-      for (const p of pages) existingPages.add(p);
-    }
-    // Then non-due, non-retired SRS items (soonest nextReviewDate first) — never go outside user's SRS
-    if (added < input.count) {
-      const nonDueItems = allItems
-        .filter((item) => !item.retired && !dueRefSet.has(item.reference))
-        .sort((a, b) => a.nextReviewDate.localeCompare(b.nextReviewDate));
-      for (const item of nonDueItems) {
-        if (added >= input.count) break;
-        if (currentItems.includes(item.reference) || newRefs.includes(item.reference)) continue;
-        const pages = getPagesForReference(item.reference);
-        if (pages.every((p) => existingPages.has(p))) continue;
-        if (pages.some((p) => dismissedPages.has(p))) continue;
-        newRefs.push(item.reference);
-        added += getPageEquivalent(item.reference);
-        for (const p of pages) existingPages.add(p);
+    // Collect candidate pages from ayah SRS items ordered by urgency (soonest due first).
+    // Due items naturally sort earlier since their nextReviewDate is in the past.
+    const allItems = await storage.getSrsItems(userId);
+    const candidatePages: number[] = [];
+    const ayahItems = allItems
+      .filter((item) => !item.retired && item.reference.startsWith("ayah:"))
+      .sort((a, b) => new Date(a.nextReviewDate).getTime() - new Date(b.nextReviewDate).getTime());
+    for (const item of ayahItems) {
+      for (const p of getPagesForReference(item.reference)) {
+        if (!existingPages.has(p) && !dismissedPages.has(p) && !candidatePages.includes(p)) {
+          candidatePages.push(p);
+        }
       }
     }
+
+    // Group consecutive candidate pages into page-range refs and pick enough to fill count pages.
+    const newRefs: string[] = [];
+    let added = 0;
+    let i = 0;
+    while (added < input.count && i < candidatePages.length) {
+      const batchEnd = Math.min(i + (input.count - added), candidatePages.length);
+      const batch = candidatePages.slice(i, batchEnd);
+      const refs = groupConsecutivePages(batch);
+      for (const ref of refs) {
+        const count = getPageEquivalent(ref);
+        newRefs.push(ref);
+        added += count;
+        for (const p of getPagesForReference(ref)) existingPages.add(p);
+      }
+      i = batchEnd;
+    }
+
     if (newRefs.length > 0) {
       plan = await storage.updateDailyPlan(plan.id, { plannedItems: [...currentItems, ...newRefs] });
     }
