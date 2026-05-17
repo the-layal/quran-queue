@@ -85,27 +85,41 @@ router.post("/logs", async (req: Request, res: Response) => {
     const input = logInputSchema.parse(req.body);
     const log = await storage.createLog({ userId, ...input });
 
-    const srsRefs = expandSurahRange(input.reference);
-    for (const ref of srsRefs) {
-      let srsItem = await storage.getSrsItemByReference(userId, ref);
-      if (!srsItem) {
-        srsItem = await storage.createSrsItem({
-          userId,
-          type: input.type,
-          reference: ref,
-          easeFactor: 250,
-          interval: 0,
-          repetitions: 0,
-          nextReviewDate: new Date(),
-        });
-      }
-      const update = calculateNextReview(srsItem.easeFactor, srsItem.interval, srsItem.repetitions, input.vibeScale);
-      await storage.updateSrsItem(srsItem.id, update);
-    }
-
-    // Expand any reference type (ayah, ayah range, page, surah) and batch-update all matching goals
+    // Fan out the reference into individual ayah-level SRS items.
     const ayahGroups = getAyahsForReference(input.reference);
     const ayahPairs = ayahGroups.flatMap((g) => g.ayahs.map((a) => ({ surah: g.surah, ayah: a })));
+    const ayahRefs = ayahPairs.map(({ surah, ayah }) => `ayah:${surah}:${ayah}`);
+
+    if (ayahRefs.length > 0) {
+      const existingItems = await storage.getSrsItemsByReferences(userId, ayahRefs);
+      const existingMap = new Map(existingItems.map((it) => [it.reference, it]));
+      const now = new Date();
+
+      const upsertItems = ayahRefs.map((ref) => {
+        const existing = existingMap.get(ref);
+        const ef = existing?.easeFactor ?? 250;
+        const iv = existing?.interval ?? 0;
+        const rp = existing?.repetitions ?? 0;
+        const sm2 = calculateNextReview(ef, iv, rp, input.vibeScale);
+        return {
+          userId,
+          type: "ayah" as const,
+          reference: ref,
+          easeFactor: sm2.easeFactor,
+          interval: sm2.interval,
+          repetitions: sm2.repetitions,
+          nextReviewDate: sm2.nextReviewDate,
+          retired: existing?.retired ?? false,
+          retiredAt: existing?.retiredAt ?? null,
+          lastVibeScale: input.vibeScale,
+          lastReviewedAt: now,
+        };
+      });
+
+      await storage.batchUpsertAyahSrsItems(upsertItems);
+    }
+
+    // Batch-update all matching goals
     void updateGoalProgressForAyahs(userId, ayahPairs);
 
     res.status(201).json(log);
@@ -311,20 +325,15 @@ router.post("/plans/today", async (req: Request, res: Response) => {
     const todayStr = getTodayStr();
     let plan = await storage.getDailyPlan(userId, todayStr);
 
-    // Direct port of the original collectCandidatePages from quran-review-SRS/server/routes.ts.
-    // Collects page numbers from due SRS items first, then all SRS items — naturally
-    // bounded to what the user has registered. Never touches pages outside SRS.
+    // Collect candidate pages ordered by SRS urgency.
+    // Sorts all non-retired SRS items by nextReviewDate ascending so the most
+    // urgent ayahs come first. Maps each ayah to its Mushaf page — a page is
+    // added the first time any of its ayahs appears, naturally padding the rest.
     const collectCandidatePages = async (existingPages: Set<number>): Promise<number[]> => {
       const candidatePages: number[] = [];
-      const dueItems = await storage.getDueSrsItems(userId);
-      for (const item of dueItems) {
-        for (const p of getPagesForReference(item.reference)) {
-          if (!existingPages.has(p) && !candidatePages.includes(p)) {
-            candidatePages.push(p);
-          }
-        }
-      }
-      const allItems = (await storage.getSrsItems(userId)).filter((i) => !i.retired);
+      const allItems = (await storage.getSrsItems(userId))
+        .filter((i) => !i.retired)
+        .sort((a, b) => new Date(a.nextReviewDate).getTime() - new Date(b.nextReviewDate).getTime());
       for (const item of allItems) {
         for (const p of getPagesForReference(item.reference)) {
           if (!existingPages.has(p) && !candidatePages.includes(p)) {

@@ -22,6 +22,8 @@ export const srsItemsTable = pgTable("srs_items", {
   nextReviewDate: timestamp("next_review_date", { withTimezone: true }).notNull().defaultNow(),
   retired: boolean("retired").notNull().default(false),
   retiredAt: timestamp("retired_at", { withTimezone: true }),
+  lastVibeScale: integer("last_vibe_scale"),
+  lastReviewedAt: timestamp("last_reviewed_at", { withTimezone: true }),
 }, (t) => ({
   userReferenceUnique: uniqueIndex("srs_items_user_reference_unique").on(t.userId, t.reference),
 }));

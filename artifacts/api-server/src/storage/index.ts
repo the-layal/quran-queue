@@ -1,5 +1,5 @@
 import { db, logsTable, srsItemsTable, dailyPlansTable, goalsTable, bookmarksTable } from "@workspace/db";
-import { eq, and, lte, desc } from "drizzle-orm";
+import { eq, and, lte, desc, inArray, sql } from "drizzle-orm";
 import type { Log, SrsItem, DailyPlan, InsertLog, InsertSrsItem, InsertDailyPlan, Goal, Bookmark, InsertBookmark } from "@workspace/db";
 
 export type { Log, SrsItem, DailyPlan, InsertLog, InsertSrsItem, InsertDailyPlan, Goal, Bookmark, InsertBookmark };
@@ -16,8 +16,10 @@ export interface IStorage {
   getAllSrsItems(): Promise<SrsItem[]>;
   getDueSrsItems(userId: string): Promise<SrsItem[]>;
   getSrsItemByReference(userId: string, reference: string): Promise<SrsItem | undefined>;
+  getSrsItemsByReferences(userId: string, references: string[]): Promise<SrsItem[]>;
   createSrsItem(item: InsertSrsItem): Promise<SrsItem>;
   bulkCreateSrsItems(items: InsertSrsItem[]): Promise<void>;
+  batchUpsertAyahSrsItems(items: Array<InsertSrsItem & { lastVibeScale: number; lastReviewedAt: Date }>): Promise<void>;
   updateSrsItem(id: number, item: Partial<SrsItem>): Promise<SrsItem>;
   deleteSrsItem(id: number): Promise<void>;
 
@@ -95,6 +97,12 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
+  async getSrsItemsByReferences(userId: string, references: string[]): Promise<SrsItem[]> {
+    if (references.length === 0) return [];
+    return db.select().from(srsItemsTable)
+      .where(and(eq(srsItemsTable.userId, userId), inArray(srsItemsTable.reference, references)));
+  }
+
   async createSrsItem(item: InsertSrsItem): Promise<SrsItem> {
     const [row] = await db.insert(srsItemsTable).values(item).returning();
     return row;
@@ -103,6 +111,23 @@ export class DatabaseStorage implements IStorage {
   async bulkCreateSrsItems(items: InsertSrsItem[]): Promise<void> {
     if (items.length === 0) return;
     await db.insert(srsItemsTable).values(items);
+  }
+
+  async batchUpsertAyahSrsItems(items: Array<InsertSrsItem & { lastVibeScale: number; lastReviewedAt: Date }>): Promise<void> {
+    if (items.length === 0) return;
+    await db.insert(srsItemsTable)
+      .values(items)
+      .onConflictDoUpdate({
+        target: [srsItemsTable.userId, srsItemsTable.reference],
+        set: {
+          easeFactor: sql`excluded.ease_factor`,
+          interval: sql`excluded.interval`,
+          repetitions: sql`excluded.repetitions`,
+          nextReviewDate: sql`excluded.next_review_date`,
+          lastVibeScale: sql`excluded.last_vibe_scale`,
+          lastReviewedAt: sql`excluded.last_reviewed_at`,
+        },
+      });
   }
 
   async updateSrsItem(id: number, item: Partial<SrsItem>): Promise<SrsItem> {

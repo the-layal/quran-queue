@@ -22,6 +22,8 @@ export interface SrsItem {
   nextReviewDate: string;
   retired?: boolean;
   retiredAt?: string | null;
+  lastVibeScale?: number | null;
+  lastReviewedAt?: string | null;
 }
 
 export interface DailyPlan {

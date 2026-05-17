@@ -5,8 +5,7 @@ import { SURAHS } from "@/lib/quran-data";
 import { Search, CalendarClock, PenLine, LayoutGrid, List, Star } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
-import { useLogs, useSrsItems } from "@/hooks/useTracker";
-import { getAyahsForReference } from "@/storage/referenceFanOut";
+import { useSrsItems } from "@/hooks/useTracker";
 import { LogModal } from "@/components/LogModal";
 
 type StatusFilter = "all" | "not_started" | "in_progress" | "completed";
@@ -31,7 +30,6 @@ export default function LibraryPage() {
   const [dateFilter, setDateFilter] = useState<string>("");
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [view, setView] = useState<LibraryView>(getInitialView);
-  const { data: logs } = useLogs();
   const { data: srsItems } = useSrsItems();
 
   useEffect(() => {
@@ -48,48 +46,33 @@ export default function LibraryPage() {
     const vibeMap: Record<number, Set<number>> = {};
     const oldestDateMap: Record<number, Date> = {};
     const avgVibeMap: Record<number, number> = {};
-    if (!logs) {
-      SURAHS.forEach((s) => { statusMap[s.id] = "not_started"; });
-      return { surahStatus: statusMap, surahVibes: vibeMap, surahOldestDate: oldestDateMap, surahAvgVibe: avgVibeMap };
-    }
 
-    const loggedAyahs: Record<number, Set<number>> = {};
-    const ayahVibes: Record<string, number> = {};
-    const ayahDates: Record<string, Date> = {};
+    const ayahItems = (srsItems ?? []).filter((it) => it.reference.startsWith("ayah:"));
+    const surahData: Record<number, { ayahCount: number; vibes: number[]; dates: Date[] }> = {};
 
-    const sorted = [...logs].reverse();
-    for (const log of sorted) {
-      const logDate = new Date(log.createdAt);
-      let groups: ReturnType<typeof getAyahsForReference> = [];
-      try { groups = getAyahsForReference(log.reference); } catch { continue; }
-      for (const g of groups) {
-        for (const a of g.ayahs) {
-          if (!loggedAyahs[g.surah]) loggedAyahs[g.surah] = new Set();
-          loggedAyahs[g.surah].add(a);
-          ayahVibes[`${g.surah}:${a}`] = log.vibeScale;
-          const key = `${g.surah}:${a}`;
-          if (!ayahDates[key] || logDate > ayahDates[key]) ayahDates[key] = logDate;
-        }
-      }
+    for (const item of ayahItems) {
+      const parts = item.reference.split(":");
+      const sid = parseInt(parts[1], 10);
+      if (isNaN(sid)) continue;
+      if (!surahData[sid]) surahData[sid] = { ayahCount: 0, vibes: [], dates: [] };
+      surahData[sid].ayahCount++;
+      if (item.lastVibeScale != null) surahData[sid].vibes.push(item.lastVibeScale);
+      if (item.lastReviewedAt) surahData[sid].dates.push(new Date(item.lastReviewedAt));
     }
 
     SURAHS.forEach((s) => {
-      const logged = loggedAyahs[s.id];
-      if (!logged || logged.size === 0) statusMap[s.id] = "not_started";
-      else if (logged.size >= s.ayahCount) statusMap[s.id] = "completed";
+      const data = surahData[s.id];
+      if (!data || data.ayahCount === 0) statusMap[s.id] = "not_started";
+      else if (data.ayahCount >= s.ayahCount) statusMap[s.id] = "completed";
       else statusMap[s.id] = "in_progress";
 
       const vibes = new Set<number>();
       let oldest: Date | null = null;
       let vibeSum = 0;
       let vibeCount = 0;
-      if (logged) {
-        Array.from(logged).forEach((a) => {
-          const v = ayahVibes[`${s.id}:${a}`];
-          if (v) { vibes.add(v); vibeSum += v; vibeCount += 1; }
-          const d = ayahDates[`${s.id}:${a}`];
-          if (d && (!oldest || d < oldest)) oldest = d;
-        });
+      if (data) {
+        data.vibes.forEach((v) => { vibes.add(v); vibeSum += v; vibeCount++; });
+        data.dates.forEach((d) => { if (!oldest || d < oldest) oldest = d; });
       }
       if (vibes.size > 0) vibeMap[s.id] = vibes;
       if (oldest) oldestDateMap[s.id] = oldest;
@@ -97,7 +80,7 @@ export default function LibraryPage() {
     });
 
     return { surahStatus: statusMap, surahVibes: vibeMap, surahOldestDate: oldestDateMap, surahAvgVibe: avgVibeMap };
-  }, [logs]);
+  }, [srsItems]);
 
   const getHeatmapColor = (sid: number): string => {
     const status = surahStatus[sid];

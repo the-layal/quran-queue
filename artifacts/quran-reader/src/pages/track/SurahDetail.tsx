@@ -2,11 +2,11 @@ import { useParams, Link } from "wouter";
 import AppShell from "@/components/AppShell";
 import GuestBanner from "@/components/GuestBanner";
 import { SURAHS } from "@/lib/quran-data";
-import { ArrowLeft, BookOpen, Calendar, LayoutGrid, Star } from "lucide-react";
+import { ArrowLeft, BookOpen, Calendar, ChevronDown, LayoutGrid, Star } from "lucide-react";
 import { useState, useMemo } from "react";
 import { LogModal } from "@/components/LogModal";
-import { useLogs, useSrsItems, useRetireSurah, useUnretireSurah } from "@/hooks/useTracker";
-import { getAyahsForReference } from "@/storage/referenceFanOut";
+import { useSrsItems, useRetireSurah, useUnretireSurah } from "@/hooks/useTracker";
+import { getAyahPage } from "@/storage/referenceFanOut";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -21,23 +21,20 @@ export default function SurahDetail() {
   const [selectedAyah, setSelectedAyah] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("standard");
   const [confirmRetire, setConfirmRetire] = useState(false);
-  const { data: logs } = useLogs();
+  const [segmentsExpanded, setSegmentsExpanded] = useState(false);
   const { data: srsItems } = useSrsItems();
   const retireMutation = useRetireSurah();
   const unretireMutation = useUnretireSurah();
 
-  const surahSrsItems = useMemo(() => {
+  const ayahSrsItems = useMemo(() => {
     if (!srsItems) return [];
     return srsItems
-      .filter((it) => {
-        try {
-          const groups = getAyahsForReference(it.reference);
-          return groups.some((g) => g.surah === surahId);
-        } catch {
-          return false;
-        }
-      })
-      .sort((a, b) => a.nextReviewDate.localeCompare(b.nextReviewDate));
+      .filter((it) => it.reference.startsWith(`ayah:${surahId}:`))
+      .sort((a, b) => {
+        const aNum = parseInt(a.reference.split(":")[2], 10);
+        const bNum = parseInt(b.reference.split(":")[2], 10);
+        return aNum - bNum;
+      });
   }, [srsItems, surahId]);
 
   const surahRef = `surah:${surahId}`;
@@ -45,52 +42,37 @@ export default function SurahDetail() {
   const isRetired = surahSrsItem?.retired ?? false;
   const isRetiring = retireMutation.isPending || unretireMutation.isPending;
 
-  function formatSegmentLabel(ref: string): string {
-    const parts = ref.split(":");
-    const type = parts[0];
-    if (type === "ayah") return `Ayahs ${parts[2] ?? ""}`;
-    if (type === "surah") {
-      if (parts[2]) return `Ayahs ${parts[2]}`;
-      return parts[1]?.includes("-") ? `Surahs ${parts[1]}` : `Whole surah`;
-    }
-    if (type === "page") return `Page ${parts[1] ?? ""}`;
-    return ref;
-  }
-
-  function formatRelativeDate(dateStr: string): string {
-    if (!dateStr) return "";
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const target = new Date(d);
-    target.setHours(0, 0, 0, 0);
-    const diffDays = Math.round((target.getTime() - today.getTime()) / 86400000);
-    if (diffDays === 0) return "Today";
-    if (diffDays === 1) return "Tomorrow";
-    if (diffDays === -1) return "Yesterday";
-    if (diffDays < 0) return `${-diffDays}d overdue`;
-    return `In ${diffDays}d`;
-  }
-
   const { masteryMap, dateMap } = useMemo(() => {
     const mMap: Record<number, number> = {};
     const dMap: Record<number, Date> = {};
-    if (!logs) return { masteryMap: mMap, dateMap: dMap };
-    const sorted = [...logs].reverse();
-    for (const log of sorted) {
-      const logDate = new Date(log.createdAt);
-      const groups = getAyahsForReference(log.reference);
-      for (const g of groups) {
-        if (g.surah !== surahId) continue;
-        for (const a of g.ayahs) {
-          mMap[a] = log.vibeScale;
-          if (!dMap[a] || logDate > dMap[a]) dMap[a] = logDate;
-        }
-      }
+    for (const item of ayahSrsItems) {
+      const parts = item.reference.split(":");
+      const ayahNum = parseInt(parts[2], 10);
+      if (isNaN(ayahNum)) continue;
+      if (item.lastVibeScale != null) mMap[ayahNum] = item.lastVibeScale;
+      if (item.lastReviewedAt) dMap[ayahNum] = new Date(item.lastReviewedAt);
     }
     return { masteryMap: mMap, dateMap: dMap };
-  }, [logs, surahId]);
+  }, [ayahSrsItems]);
+
+  const ayahsByPage = useMemo(() => {
+    const pageMap = new Map<number, Array<{ ayahNum: number; item: typeof ayahSrsItems[0] }>>();
+    for (const item of ayahSrsItems) {
+      const ayahNum = parseInt(item.reference.split(":")[2], 10);
+      if (isNaN(ayahNum)) continue;
+      const page = getAyahPage(surahId, ayahNum) ?? 0;
+      if (!pageMap.has(page)) pageMap.set(page, []);
+      pageMap.get(page)!.push({ ayahNum, item });
+    }
+    return Array.from(pageMap.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([page, items]) => ({ page, items }));
+  }, [ayahSrsItems, surahId]);
+
+  const totalTracked = ayahSrsItems.length;
+  const avgReps = totalTracked > 0
+    ? Math.round((ayahSrsItems.reduce((s, it) => s + it.repetitions, 0) / totalTracked) * 10) / 10
+    : 0;
 
   const oldestReviewDate = useMemo(() => {
     const dates = Object.values(dateMap);
@@ -303,49 +285,73 @@ export default function SurahDetail() {
       </div>
 
       <div className="mt-8">
-        <h3 className="font-serif font-bold text-lg text-foreground mb-4">Tracked Segments</h3>
-        {surahSrsItems.length === 0 ? (
+        <div className="flex flex-wrap items-center gap-4 mb-4">
+          <h3 className="font-serif font-bold text-lg text-foreground">Tracked Ayahs</h3>
+          {totalTracked > 0 && (
+            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+              <span>
+                <span className="font-semibold text-foreground">{totalTracked}</span>
+                {" / "}{surah.ayahCount} tracked
+              </span>
+              <span>
+                avg <span className="font-semibold text-foreground">{avgReps}</span> reps
+              </span>
+            </div>
+          )}
+        </div>
+        {totalTracked === 0 ? (
           <div className="bg-card p-6 rounded-3xl border border-border/50 text-sm text-muted-foreground text-center">
-            No tracked segments yet. Log a review to start spaced repetition for this surah.
+            No ayahs tracked yet. Log a review to start spaced repetition for this surah.
           </div>
         ) : (
-          <div className="bg-card rounded-3xl border border-border/50 divide-y divide-border/50">
-            {surahSrsItems.map((it) => (
-              <div
-                key={it.id}
-                data-testid={`srs-item-${it.id}`}
-                className="flex flex-wrap items-center gap-3 p-4"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-foreground truncate">{formatSegmentLabel(it.reference)}</p>
-                    {it.retired && (
-                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 flex-shrink-0" aria-label="Retired — Perfectly Known" />
-                    )}
+          <div className="bg-card rounded-3xl border border-border/50 overflow-hidden">
+            <button
+              data-testid="button-toggle-segments"
+              onClick={() => setSegmentsExpanded((v) => !v)}
+              className="w-full flex items-center justify-between px-5 py-4 text-sm font-medium text-foreground hover:bg-secondary/20 transition-colors"
+            >
+              <span>
+                {segmentsExpanded
+                  ? "Hide ayah details"
+                  : `${totalTracked} ayah${totalTracked !== 1 ? "s" : ""} tracked`}
+              </span>
+              <ChevronDown
+                size={16}
+                className={cn("text-muted-foreground transition-transform duration-200", segmentsExpanded && "rotate-180")}
+              />
+            </button>
+            {segmentsExpanded && (
+              <div className="border-t border-border/50">
+                {ayahsByPage.map(({ page, items }) => (
+                  <div key={page}>
+                    <div className="px-5 py-2 bg-secondary/10 border-b border-border/30">
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        Page {page}
+                      </span>
+                    </div>
+                    {items.map(({ ayahNum, item }) => (
+                      <div
+                        key={ayahNum}
+                        data-testid={`srs-ayah-${surahId}-${ayahNum}`}
+                        className="flex items-center justify-between px-5 py-2.5 text-sm border-b border-border/20 last:border-0"
+                      >
+                        <span className="text-foreground font-medium">Ayah {ayahNum}</span>
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                          <span>
+                            {item.lastReviewedAt
+                              ? format(new Date(item.lastReviewedAt), "MMM d, yyyy")
+                              : "Not reviewed"}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md bg-secondary/40 text-foreground font-semibold">
+                            {item.repetitions} rep{item.repetitions === 1 ? "" : "s"}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <p className="text-xs text-muted-foreground">{it.reference}</p>
-                </div>
-                <div className="flex items-center gap-2 text-xs">
-                  {it.retired ? (
-                    <span className="px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 font-semibold border border-amber-200 dark:border-amber-800">
-                      Retired
-                    </span>
-                  ) : (
-                    <>
-                      <span className="px-2 py-1 rounded-md bg-primary/10 text-primary font-semibold" title="Ease factor">
-                        EF {(it.easeFactor / 100).toFixed(2)}
-                      </span>
-                      <span className="px-2 py-1 rounded-md bg-secondary/40 text-foreground font-semibold" title="Repetitions">
-                        {it.repetitions} rep{it.repetitions === 1 ? "" : "s"}
-                      </span>
-                      <span className="px-2 py-1 rounded-md bg-accent/10 text-accent font-semibold" title={`Next review: ${it.nextReviewDate}`}>
-                        {formatRelativeDate(it.nextReviewDate)}
-                      </span>
-                    </>
-                  )}
-                </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>

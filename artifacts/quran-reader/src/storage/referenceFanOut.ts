@@ -41,6 +41,10 @@ function pushAyah(groups: PageAyahGroup[], surah: number, ayah: number) {
   else groups.push({ surah, page, ayahs: [ayah] });
 }
 
+export function getAyahPage(surah: number, ayah: number): number | null {
+  return pageOf(surah, ayah);
+}
+
 export function getAyahsForReference(reference: string): PageAyahGroup[] {
   const parts = reference.split(":");
   const type = parts[0];
