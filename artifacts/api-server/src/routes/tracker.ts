@@ -491,16 +491,20 @@ router.post("/plans/today/add-more", async (req: Request, res: Response) => {
       added += getPageEquivalent(item.reference);
       for (const p of pages) existingPages.add(p);
     }
-    // Then fresh pages 1..604 in order
+    // Then non-due SRS items (soonest nextReviewDate first) — never go outside user's SRS
     if (added < input.count) {
-      const freshPages: number[] = [];
-      for (let p = 1; p <= TOTAL_QURAN_PAGES; p++) {
-        if (!existingPages.has(p) && !knownPages.has(p) && !dismissedPages.has(p)) freshPages.push(p);
-      }
-      const remaining = Math.max(0, Math.ceil(input.count - added));
-      const pagesToAdd = freshPages.slice(0, remaining);
-      if (pagesToAdd.length > 0) {
-        for (const ref of groupConsecutivePages(pagesToAdd)) newRefs.push(ref);
+      const nonDueItems = allItems
+        .filter((item) => !item.retired)
+        .sort((a, b) => a.nextReviewDate.localeCompare(b.nextReviewDate));
+      for (const item of nonDueItems) {
+        if (added >= input.count) break;
+        if (currentItems.includes(item.reference) || newRefs.includes(item.reference)) continue;
+        const pages = getPagesForReference(item.reference);
+        if (pages.every((p) => existingPages.has(p))) continue;
+        if (pages.some((p) => dismissedPages.has(p))) continue;
+        newRefs.push(item.reference);
+        added += getPageEquivalent(item.reference);
+        for (const p of pages) existingPages.add(p);
       }
     }
     if (newRefs.length > 0) {
