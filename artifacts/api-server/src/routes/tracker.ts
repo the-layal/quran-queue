@@ -466,10 +466,6 @@ router.post("/plans/today/add-more", async (req: Request, res: Response) => {
     for (const ref of currentItems) for (const p of getPagesForReference(ref)) existingPages.add(p);
 
     const allItems = await storage.getSrsItems(userId);
-    const knownPages = new Set<number>();
-    for (const item of allItems) {
-      for (const p of getPagesForReference(item.reference)) knownPages.add(p);
-    }
 
     // Build a set of page numbers the user explicitly dismissed today
     const dismissedPages = new Set<number>();
@@ -481,6 +477,7 @@ router.post("/plans/today/add-more", async (req: Request, res: Response) => {
     let added = 0;
     // Due SRS refs first, preserving original references
     const dueItems = await storage.getDueSrsItems(userId);
+    const dueRefSet = new Set(dueItems.map((i) => i.reference));
     for (const item of dueItems) {
       if (added >= input.count) break;
       if (currentItems.includes(item.reference) || newRefs.includes(item.reference)) continue;
@@ -491,10 +488,10 @@ router.post("/plans/today/add-more", async (req: Request, res: Response) => {
       added += getPageEquivalent(item.reference);
       for (const p of pages) existingPages.add(p);
     }
-    // Then non-due SRS items (soonest nextReviewDate first) — never go outside user's SRS
+    // Then non-due, non-retired SRS items (soonest nextReviewDate first) — never go outside user's SRS
     if (added < input.count) {
       const nonDueItems = allItems
-        .filter((item) => !item.retired)
+        .filter((item) => !item.retired && !dueRefSet.has(item.reference))
         .sort((a, b) => a.nextReviewDate.localeCompare(b.nextReviewDate));
       for (const item of nonDueItems) {
         if (added >= input.count) break;
