@@ -56,6 +56,9 @@ export function LogModal({
 
   if (!isOpen) return null;
 
+  const selectedSurah = SURAHS.find((s) => s.id === surahId);
+  const ayahCount = selectedSurah?.ayahCount ?? 286;
+
   const buildReference = (): string => {
     switch (type) {
       case "page": {
@@ -87,9 +90,11 @@ export function LogModal({
     if (!from.trim()) return false;
     const fromNum = parseInt(from, 10);
     if (isNaN(fromNum) || fromNum < 1) return false;
+    if (type === "ayah_range" && fromNum > ayahCount) return false;
     if (to.trim()) {
       const toNum = parseInt(to, 10);
       if (isNaN(toNum) || toNum < fromNum) return false;
+      if (type === "ayah_range" && toNum > ayahCount) return false;
     }
     return true;
   };
@@ -286,6 +291,7 @@ export function LogModal({
                   <input
                     type="number"
                     min="1"
+                    max={type === "ayah_range" ? ayahCount : undefined}
                     data-testid="input-from"
                     placeholder={getPlaceholder()}
                     value={from}
@@ -299,6 +305,7 @@ export function LogModal({
                   <input
                     type="number"
                     min="1"
+                    max={type === "ayah_range" ? ayahCount : undefined}
                     data-testid="input-to"
                     placeholder="optional"
                     value={to}
@@ -308,7 +315,9 @@ export function LogModal({
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Leave "To" empty to log a single {getFromLabel()?.toLowerCase()}
+                {type === "ayah_range"
+                  ? `${selectedSurah?.englishName ?? "This surah"} has ${ayahCount} ayahs (1–${ayahCount})`
+                  : `Leave "To" empty to log a single ${getFromLabel()?.toLowerCase()}`}
               </p>
             </div>
           )}
