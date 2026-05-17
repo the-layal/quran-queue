@@ -54,7 +54,8 @@ function readQFPkceCookie(req: Request): PkceSessionData | null {
       typeof parsed.state === "string" &&
       typeof parsed.nonce === "string" &&
       typeof parsed.codeVerifier === "string" &&
-      typeof parsed.redirectUri === "string"
+      typeof parsed.redirectUri === "string" &&
+      typeof parsed.userId === "string"
     ) {
       return parsed as PkceSessionData;
     }
@@ -89,11 +90,14 @@ router.get("/auth/qf/connect", (req: Request, res: Response) => {
 
   // Persist the full PKCE session server-side before the redirect.
   // codeVerifier is never sent to the client — stored only in an httpOnly cookie.
+  // userId is stored here so the callback can complete the flow even if the
+  // Replit session cookie is not forwarded by the OAuth redirect.
   setQFPkceCookie(res, {
     state: session.state,
     nonce: session.nonce,
     codeVerifier: session.codeVerifier,
     redirectUri: session.redirectUri,
+    userId: req.user!.id,
   });
 
   res.redirect(session.url);
@@ -107,20 +111,22 @@ router.get("/auth/qf/connect", (req: Request, res: Response) => {
  * Requires the user to be signed in with Replit Auth.
  */
 router.get("/auth/qf/callback", async (req: Request, res: Response) => {
-  if (!req.isAuthenticated()) {
-    clearQFPkceCookie(res);
-    res.redirect("/api/login?returnTo=/track/settings");
-    return;
-  }
-
   const { code, state, nonce, error } = req.query as Record<string, string>;
 
   // Read and immediately clear the PKCE cookie to prevent replay attacks.
+  // The PKCE cookie carries userId so we don't depend on the Replit session
+  // cookie being forwarded through the cross-site OAuth redirect.
   const pkceSession = readQFPkceCookie(req);
   clearQFPkceCookie(res);
 
   if (!pkceSession) {
-    res.redirect("/track/settings?qf=error");
+    // PKCE cookie missing — session may have been cleared or cookie not forwarded.
+    // If the user is still authenticated, send them back to connect; otherwise login.
+    if (req.isAuthenticated()) {
+      res.redirect("/api/auth/qf/connect");
+    } else {
+      res.redirect("/api/login?returnTo=/track/settings");
+    }
     return;
   }
 
@@ -129,6 +135,7 @@ router.get("/auth/qf/callback", async (req: Request, res: Response) => {
     nonce: expectedNonce,
     codeVerifier,
     redirectUri: storedRedirectUri,
+    userId,
   } = pkceSession;
 
   const stateMatches =
@@ -206,7 +213,7 @@ router.get("/auth/qf/callback", async (req: Request, res: Response) => {
       qfEmail,
       qfSyncError: null, // clear any stale sync error on reconnect
     })
-    .where(eq(usersTable.id, req.user!.id));
+    .where(eq(usersTable.id, userId));
 
   res.redirect("/track/settings?qf=connected");
 });

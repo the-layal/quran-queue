@@ -20,6 +20,7 @@ export interface PkceSessionData {
   nonce: string;
   codeVerifier: string;
   redirectUri: string;
+  userId: string;
 }
 
 /**
