@@ -41,7 +41,7 @@ const STEPS: TourStep[] = [
     selector: '[data-tour="bookmarks"]',
     title: "Save your favourite ayahs",
     description:
-      "Tap the bookmark icon on any verse to save it for later. Access all your saved verses in the sidebar.",
+      "Tap the bookmark icon on any verse to save it for later. Access all your saved verses in the upper toolbar.",
   },
   {
     selector: '[data-tour="queue-button"]',
@@ -301,7 +301,7 @@ export default function FeatureTour() {
 
       <button
         onClick={dismiss}
-        style={{ position: "fixed", top: 16, right: 16, zIndex: 9200 }}
+        style={{ position: "fixed", bottom: 16, right: 16, zIndex: 9200 }}
         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card border border-border text-xs text-muted-foreground hover:text-foreground transition-colors shadow-sm"
       >
         <X className="w-3.5 h-3.5" />
