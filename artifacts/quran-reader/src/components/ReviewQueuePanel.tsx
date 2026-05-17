@@ -750,16 +750,13 @@ export default function ReviewQueuePanel({ chapters, queuePlayback }: ReviewQueu
   // ── Share ─────────────────────────────────────────────────────────────────
 
   const handleShare = async () => {
-    const flatItems = reviewQueue.flatMap((entry) =>
-      isSubQueue(entry) ? entry.items : [entry as ReviewQueueItem]
-    );
-    if (flatItems.length === 0 || isSharing) return;
+    if (reviewQueue.length === 0 || isSharing) return;
     setIsSharing(true);
     try {
       const res = await fetch("/api/queues", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: flatItems }),
+        body: JSON.stringify({ entries: reviewQueue }),
       });
       if (!res.ok) throw new Error("Failed to save queue");
       const { id } = await res.json() as { id: string };

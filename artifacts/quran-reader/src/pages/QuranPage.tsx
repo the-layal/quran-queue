@@ -771,6 +771,7 @@ export default function QuranPage() {
   } = useQuranStore();
 
   const setReviewQueue = useQuranStore((s) => s.setReviewQueue);
+  const setQueueEntries = useQuranStore((s) => s.setQueueEntries);
   const setIsSharedQueue = useQuranStore((s) => s.setIsSharedQueue);
   const queuePanelOpen = useQuranStore((s) => s.queuePanelOpen);
   const setQueuePanelOpen = useQuranStore((s) => s.setQueuePanelOpen);
@@ -813,11 +814,19 @@ export default function QuranPage() {
     fetch(`/api/queues/${encodeURIComponent(queueId)}`)
       .then((res) => {
         if (!res.ok) throw new Error("Queue not found");
-        return res.json() as Promise<{ id: string; items: unknown[] }>;
+        return res.json() as Promise<{ id: string; entries?: unknown[]; items: unknown[] }>;
       })
-      .then(({ items }) => {
-        if (!Array.isArray(items) || items.length === 0) return;
-        setReviewQueue(items as Parameters<typeof setReviewQueue>[0]);
+      .then(({ entries, items }) => {
+        const source = entries ?? items;
+        if (!Array.isArray(source) || source.length === 0) return;
+        const hasGroups = source.some(
+          (e) => (e as Record<string, unknown>).isSubQueue === true
+        );
+        if (hasGroups) {
+          setQueueEntries(source as Parameters<typeof setQueueEntries>[0]);
+        } else {
+          setReviewQueue(source as Parameters<typeof setReviewQueue>[0]);
+        }
         setIsSharedQueue(true);
         setQueuePanelOpen(true);
       })

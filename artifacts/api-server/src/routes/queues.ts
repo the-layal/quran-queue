@@ -25,9 +25,21 @@ const QueueItemSchema = z.object({
   repeatCount: z.number().int().min(0),
 });
 
-const CreateQueueBodySchema = z.object({
-  items: z.array(QueueItemSchema).min(1),
+const SubQueueEntrySchema = z.object({
+  isSubQueue: z.literal(true),
+  id: z.string(),
+  label: z.string(),
+  repeatCount: z.number().int().min(0),
+  items: z.array(QueueItemSchema),
+  collapsed: z.boolean().optional(),
 });
+
+const QueueEntrySchema = z.union([SubQueueEntrySchema, QueueItemSchema]);
+
+const CreateQueueBodySchema = z.union([
+  z.object({ entries: z.array(QueueEntrySchema).min(1) }),
+  z.object({ items: z.array(QueueItemSchema).min(1) }),
+]);
 
 router.post("/queues", async (req, res) => {
   const parsed = CreateQueueBodySchema.safeParse(req.body);
@@ -36,6 +48,9 @@ router.post("/queues", async (req, res) => {
     return;
   }
 
+  const entries =
+    "entries" in parsed.data ? parsed.data.entries : parsed.data.items;
+
   // Retry up to 5 times to handle the rare case of an ID collision
   let id: string | null = null;
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -43,7 +58,7 @@ router.post("/queues", async (req, res) => {
     try {
       await db.insert(sharedQueuesTable).values({
         id: candidate,
-        items: parsed.data.items,
+        items: entries,
       });
       id = candidate;
       break;
@@ -83,7 +98,14 @@ router.get("/queues/:id", async (req, res) => {
     return;
   }
 
-  res.json({ id: rows[0].id, items: rows[0].items });
+  const stored = rows[0].items as unknown[];
+  const flatItems = stored.flatMap((e: unknown) => {
+    const entry = e as Record<string, unknown>;
+    return entry.isSubQueue === true
+      ? (entry.items as unknown[])
+      : [e];
+  });
+  res.json({ id: rows[0].id, entries: stored, items: flatItems });
 });
 
 export default router;
