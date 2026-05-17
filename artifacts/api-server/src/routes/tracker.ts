@@ -535,17 +535,6 @@ router.post("/plans/today/add-more", async (req: Request, res: Response) => {
 
 const completeSchema = z.object({ reference: z.string(), vibeScale: z.number().int().min(1).max(5) });
 
-async function applyVibeToReference(userId: string, type: string, reference: string, vibe: number) {
-  await storage.createLog({ userId, type, reference, vibeScale: vibe });
-  const srs = await storage.getSrsItemByReference(userId, reference);
-  if (srs) {
-    const u = calculateNextReview(srs.easeFactor, srs.interval, srs.repetitions, vibe);
-    await storage.updateSrsItem(srs.id, u);
-  } else {
-    const u = calculateNextReview(250, 0, 0, vibe);
-    await storage.createSrsItem({ userId, type, reference, ...u });
-  }
-}
 
 /**
  * Update all matching goals for a batch of (surah, ayah) pairs from a single
