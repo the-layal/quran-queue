@@ -836,16 +836,35 @@ router.post("/plans/today/extra", async (req: Request, res: Response) => {
 
     await storage.createLog({ userId, type: input.type, reference: input.reference, vibeScale: input.vibeScale });
 
-    const srsRefs = expandSurahRange(input.reference);
-    for (const ref of srsRefs) {
-      const srs = await storage.getSrsItemByReference(userId, ref);
-      if (srs) {
-        const u = calculateNextReview(srs.easeFactor, srs.interval, srs.repetitions, input.vibeScale);
-        await storage.updateSrsItem(srs.id, u);
-      } else {
-        const u = calculateNextReview(250, 0, 0, input.vibeScale);
-        await storage.createSrsItem({ userId, type: input.type, reference: ref, ...u });
-      }
+    const ayahGroups = getAyahsForReference(input.reference);
+    const ayahPairs = ayahGroups.flatMap((g) => g.ayahs.map((a) => ({ surah: g.surah, ayah: a })));
+    const ayahRefs = ayahPairs.map(({ surah, ayah }) => `ayah:${surah}:${ayah}`);
+
+    if (ayahRefs.length > 0) {
+      const existingItems = await storage.getSrsItemsByReferences(userId, ayahRefs);
+      const existingMap = new Map(existingItems.map((it) => [it.reference, it]));
+      const now = new Date();
+      const upsertItems = ayahRefs.map((ref) => {
+        const existing = existingMap.get(ref);
+        const ef = existing?.easeFactor ?? 250;
+        const iv = existing?.interval ?? 0;
+        const rp = existing?.repetitions ?? 0;
+        const sm2 = calculateNextReview(ef, iv, rp, input.vibeScale);
+        return {
+          userId,
+          type: "ayah" as const,
+          reference: ref,
+          easeFactor: sm2.easeFactor,
+          interval: sm2.interval,
+          repetitions: sm2.repetitions,
+          nextReviewDate: sm2.nextReviewDate,
+          retired: existing?.retired ?? false,
+          retiredAt: existing?.retiredAt ?? null,
+          lastVibeScale: input.vibeScale,
+          lastReviewedAt: now,
+        };
+      });
+      await storage.batchUpsertAyahSrsItems(upsertItems);
     }
 
     res.json(plan);
