@@ -72,7 +72,10 @@ function readQFPkceCookie(req: Request): PkceSessionData | null {
  * Requires the user to be signed in with Replit Auth.
  */
 router.get("/auth/qf/connect", (req: Request, res: Response) => {
-  if (!requireAuth(req, res)) return;
+  if (!req.isAuthenticated()) {
+    res.redirect("/api/login?returnTo=/api/auth/qf/connect");
+    return;
+  }
 
   const redirectUri = process.env.QF_REDIRECT_URI || getQFRedirectUri(req);
 
@@ -104,7 +107,11 @@ router.get("/auth/qf/connect", (req: Request, res: Response) => {
  * Requires the user to be signed in with Replit Auth.
  */
 router.get("/auth/qf/callback", async (req: Request, res: Response) => {
-  if (!requireAuth(req, res)) return;
+  if (!req.isAuthenticated()) {
+    clearQFPkceCookie(res);
+    res.redirect("/api/login?returnTo=/track/settings");
+    return;
+  }
 
   const { code, state, nonce, error } = req.query as Record<string, string>;
 
